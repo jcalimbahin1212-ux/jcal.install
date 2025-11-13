@@ -411,46 +411,8 @@ function pruneCache() {
   if (cacheStore.size <= 150) break;
 }
 
-function buildSearchUrl(term) {
-  const base = process.env.POWERTHROUGH_SEARCH_URL || "https://duckduckgo.com/?q=";
-  const encoded = encodeURIComponent(term);
-  const url = new URL(`${base}${encoded}`);
-  url.searchParams.set("safetynet_term", term);
-  return url;
-}
-
-function getFallbackSearchUrl(originalUrl) {
-  const term = originalUrl.searchParams?.get("safetynet_term");
-  if (!term) return null;
-  const fallbackBase = process.env.POWERTHROUGH_SEARCH_FALLBACK_URL || "https://lite.bing.com/search?q=";
-  try {
-    const encoded = encodeURIComponent(term);
-    const url = new URL(`${fallbackBase}${encoded}`);
-    url.searchParams.set("safetynet_term", term);
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchWithFallbackInline(targetUrl, req, attemptedFallback = false) {
-  try {
-    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
-    if (upstream.status >= 500 && !attemptedFallback) {
-      const fallbackUrl = getFallbackSearchUrl(targetUrl);
-      if (fallbackUrl) {
-        return fetchWithFallbackInline(fallbackUrl, req, true);
-      }
-    }
-    return { upstream, resolvedUrl: targetUrl };
-  } catch (error) {
-    const fallbackUrl = !attemptedFallback ? getFallbackSearchUrl(targetUrl) : null;
-    if (fallbackUrl) {
-      return fetchWithFallbackInline(fallbackUrl, req, true);
-    }
-    throw error;
-  }
-}
+function buildCacheKey(url) {
+  return url.toString();
 }
 
 function shouldUseHeadless(req) {
