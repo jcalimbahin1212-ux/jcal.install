@@ -4,28 +4,12 @@
  */
 
 const services = {
-  powerthrough: {
-    name: "Powerthrough",
+  safetynet: {
+    name: "SafetyNet Relay",
     description: "Balanced rewrite mode for everyday browsing.",
-    mode: "powerthrough",
+    mode: "safetynet",
     compose(targetUrl) {
-      return buildPowerthroughLink(targetUrl, this.mode);
-    },
-  },
-  prism: {
-    name: "Prism Shift",
-    description: "Aggressive asset rewriting for script-heavy sites.",
-    mode: "prism",
-    compose(targetUrl) {
-      return buildPowerthroughLink(targetUrl, this.mode);
-    },
-  },
-  phantom: {
-    name: "Phantom Trace",
-    description: "Legacy-friendly path with minimal transforms.",
-    mode: "phantom",
-    compose(targetUrl) {
-      return buildPowerthroughLink(targetUrl, this.mode);
+      return buildSafetyNetLink(targetUrl, this.mode);
     },
   },
 };
@@ -65,7 +49,7 @@ const realFaviconHref = faviconLink?.href || "";
 
 const isCloakedContext = window.name === "unidentified-cloak";
 
-let activeService = "powerthrough";
+let activeService = "safetynet";
 let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
@@ -137,7 +121,7 @@ function registerEventHandlers() {
 
   selectors.frame?.addEventListener("load", () => {
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Page loaded inside Powerthrough.");
+    setStatus("Page loaded inside SafetyNet.");
   });
 
   selectors.frame?.addEventListener("error", () => {
@@ -319,9 +303,9 @@ function watchMissionBox() {
   observer.observe(selectors.missionBox);
 }
 
-function buildPowerthroughLink(targetUrl, mode) {
+function buildSafetyNetLink(targetUrl, mode) {
   const params = new URLSearchParams({ url: targetUrl });
-  if (mode && mode !== "powerthrough") {
+  if (mode && mode !== "safetynet") {
     params.set("mode", mode);
   }
   return `/powerthrough?${params.toString()}`;
