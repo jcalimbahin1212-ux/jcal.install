@@ -63,13 +63,15 @@ const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow
 const faviconLink = ensureFaviconLink();
 const realFaviconHref = faviconLink?.href || "";
 
+const isCloakedContext = window.name === "unidentified-cloak";
+
 let activeService = "powerthrough";
 let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
 let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
-let autoBlankEnabled = localStorage.getItem(autoBlankPref) === "on";
-let cloakLaunched = false;
+let autoBlankEnabled = !isCloakedContext && localStorage.getItem(autoBlankPref) === "on";
+let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 const isAboutBlankContext = window.location.protocol === "about:";
@@ -82,7 +84,6 @@ if (selectors.panicKeySelect) {
 }
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
-  selectors.autoBlankToggle.disabled = isAboutBlankContext;
 }
 
 hydrateHistoryPreference();
@@ -363,6 +364,7 @@ async function launchAboutBlankCloak(options = {}) {
     }
     return false;
   }
+  cloakWin.name = "unidentified-cloak";
 
   try {
     const response = await fetch(window.location.href, { credentials: "include" });
