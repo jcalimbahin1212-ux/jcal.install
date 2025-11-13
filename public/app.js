@@ -70,6 +70,7 @@ let persistHistory = false;
 let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
 let autoBlankEnabled = localStorage.getItem(autoBlankPref) === "on";
 let cloakLaunched = false;
+let autoBlankArmHandler = null;
 if (selectors.panicKeySelect) {
   selectors.panicKeySelect.value = panicKey;
 }
@@ -158,7 +159,7 @@ function registerEventHandlers() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== panicKey || !selectors.panicToggle?.checked) return;
+    if (event.code !== panicKey || !selectors.panicToggle?.checked) return;
     if (panicPrimed) {
       setStatus("Panic shortcut engaged.");
       window.location.href = "https://www.wikipedia.org";
@@ -198,9 +199,12 @@ function registerEventHandlers() {
   selectors.autoBlankToggle?.addEventListener("change", (event) => {
     autoBlankEnabled = event.target.checked;
     localStorage.setItem(autoBlankPref, autoBlankEnabled ? "on" : "off");
-    setStatus(autoBlankEnabled ? "Auto about:blank enabled." : "Auto about:blank disabled.");
-    if (autoBlankEnabled && !cloakLaunched) {
-      setTimeout(() => launchAboutBlankCloak({ silent: true }), 400);
+    if (autoBlankEnabled) {
+      setStatus("Auto about:blank armed. Interact once to launch.");
+      armAutoBlank();
+    } else {
+      disarmAutoBlank();
+      setStatus("Auto about:blank disabled.");
     }
   });
 
@@ -211,7 +215,8 @@ function registerEventHandlers() {
   updateFullscreenButton();
 
   if (autoBlankEnabled && !cloakLaunched) {
-    setTimeout(() => launchAboutBlankCloak({ silent: true }), 800);
+    setStatus("Auto about:blank armed. Interact once to launch.");
+    armAutoBlank();
   }
 }
 
@@ -328,6 +333,7 @@ function ensureFaviconLink() {
 async function launchAboutBlankCloak(options = {}) {
   if (cloakLaunched) return;
   cloakLaunched = true;
+  disarmAutoBlank();
   const { silent = false } = options;
   if (!silent) {
     setStatus("Preparing about:blank cloak...");
@@ -336,6 +342,9 @@ async function launchAboutBlankCloak(options = {}) {
   if (!cloakWin) {
     setStatus("Allow pop-ups to open the about:blank cloak.", true);
     cloakLaunched = false;
+    if (autoBlankEnabled) {
+      setTimeout(armAutoBlank, 1000);
+    }
     return;
   }
 
@@ -391,3 +400,20 @@ function updateFullscreenButton() {
 }
 
 document.addEventListener("fullscreenchange", updateFullscreenButton);
+
+function armAutoBlank() {
+  if (!autoBlankEnabled || autoBlankArmHandler || cloakLaunched) return;
+  autoBlankArmHandler = () => {
+    autoBlankArmHandler = null;
+    setTimeout(() => launchAboutBlankCloak({ silent: true }), 10);
+  };
+  document.addEventListener("pointerdown", autoBlankArmHandler, { once: true });
+  document.addEventListener("keydown", autoBlankArmHandler, { once: true });
+}
+
+function disarmAutoBlank() {
+  if (!autoBlankArmHandler) return;
+  document.removeEventListener("pointerdown", autoBlankArmHandler);
+  document.removeEventListener("keydown", autoBlankArmHandler);
+  autoBlankArmHandler = null;
+}
