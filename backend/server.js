@@ -220,6 +220,11 @@ function buildFetchOptions(clientRequest, targetUrl) {
   headers.host = targetUrl.host;
   headers.origin = targetUrl.origin;
   headers.referer = targetUrl.href;
+  if (!headers["user-agent"]) {
+    headers["user-agent"] =
+      process.env.POWERTHROUGH_FALLBACK_UA ||
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
+  }
 
   const options = {
     method: clientRequest.method,
