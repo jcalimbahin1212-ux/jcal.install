@@ -70,6 +70,7 @@ let persistHistory = false;
 let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
 let autoBlankEnabled = localStorage.getItem(autoBlankPref) === "on";
 let cloakLaunched = false;
+let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 if (selectors.panicKeySelect) {
   selectors.panicKeySelect.value = panicKey;
@@ -209,8 +210,7 @@ function registerEventHandlers() {
     autoBlankEnabled = event.target.checked;
     localStorage.setItem(autoBlankPref, autoBlankEnabled ? "on" : "off");
     if (autoBlankEnabled) {
-      setStatus("Auto about:blank armed. Interact once to launch.");
-      armAutoBlank();
+      attemptAutoBlank();
     } else {
       disarmAutoBlank();
       setStatus("Auto about:blank disabled.");
@@ -224,8 +224,7 @@ function registerEventHandlers() {
   updateFullscreenButton();
 
   if (autoBlankEnabled && !cloakLaunched) {
-    setStatus("Auto about:blank armed. Interact once to launch.");
-    armAutoBlank();
+    attemptAutoBlank();
   }
 }
 
@@ -340,7 +339,7 @@ function ensureFaviconLink() {
 }
 
 async function launchAboutBlankCloak(options = {}) {
-  if (cloakLaunched) return;
+  if (cloakLaunched) return true;
   cloakLaunched = true;
   disarmAutoBlank();
   const { silent = false } = options;
@@ -349,12 +348,14 @@ async function launchAboutBlankCloak(options = {}) {
   }
   const cloakWin = window.open("about:blank", "_blank");
   if (!cloakWin) {
-    setStatus("Allow pop-ups to open the about:blank cloak.", true);
+    if (!silent) {
+      setStatus("Allow pop-ups to open the about:blank cloak.", true);
+    }
     cloakLaunched = false;
     if (autoBlankEnabled) {
-      setTimeout(armAutoBlank, 1000);
+      setTimeout(() => attemptAutoBlank(true), 800);
     }
-    return;
+    return false;
   }
 
   try {
@@ -382,6 +383,7 @@ async function launchAboutBlankCloak(options = {}) {
     setStatus("Session moved to about:blank.");
   }
   setTimeout(closeOriginalWindow, 400);
+  return true;
 }
 
 function closeOriginalWindow() {
@@ -409,6 +411,47 @@ function updateFullscreenButton() {
 }
 
 document.addEventListener("fullscreenchange", updateFullscreenButton);
+
+function attemptAutoBlank(delayFallback = false) {
+  if (!autoBlankEnabled || cloakLaunched) return;
+  setStatus("Auto about:blank active.");
+  const launch = () =>
+    launchAboutBlankCloak({ silent: true }).then((success) => {
+      if (!success) {
+        setStatus("Auto about:blank waiting for first interaction (allow pop-ups).");
+        armAutoBlank();
+      }
+    });
+
+  if (delayFallback) {
+    setTimeout(() => {
+      if (!cloakLaunched) {
+        launch();
+      }
+    }, 500);
+  } else {
+    launch();
+  }
+}
+
+function armAutoBlank() {
+  if (!autoBlankEnabled || cloakLaunched || autoBlankArmed) return;
+  autoBlankArmed = true;
+  autoBlankArmHandler = () => {
+    disarmAutoBlank();
+    setTimeout(() => launchAboutBlankCloak({ silent: true }), 10);
+  };
+  document.addEventListener("pointerdown", autoBlankArmHandler, { once: true });
+  document.addEventListener("keydown", autoBlankArmHandler, { once: true });
+}
+
+function disarmAutoBlank() {
+  if (!autoBlankArmed) return;
+  document.removeEventListener("pointerdown", autoBlankArmHandler);
+  document.removeEventListener("keydown", autoBlankArmHandler);
+  autoBlankArmHandler = null;
+  autoBlankArmed = false;
+}
 
 function armAutoBlank() {
   if (!autoBlankEnabled || autoBlankArmHandler || cloakLaunched) return;
