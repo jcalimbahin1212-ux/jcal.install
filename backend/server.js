@@ -95,6 +95,16 @@ app.all("/powerthrough", async (req, res) => {
   if (wantsHeadless && metrics.headlessActive >= HEADLESS_MAX_CONCURRENCY) {
     return res.status(429).json({ error: "Headless renderer is busy. Try again shortly." });
   }
+  const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
+  if (cacheKey) {
+    const cached = cacheStore.get(cacheKey);
+    if (cached && Date.now() - cached.added < CACHE_TTL) {
+      metrics.cacheHits += 1;
+      return respondFromCache(res, cached);
+    }
+    metrics.cacheMisses += 1;
+  }
+
   try {
     if (wantsHeadless) {
       metrics.headlessRequests += 1;
@@ -103,7 +113,6 @@ app.all("/powerthrough", async (req, res) => {
       headlessResult.headers.forEach(([key, value]) => res.set(key, value));
       res.set("x-renderer", "headless");
       const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl);
-      const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
       if (cacheKey) {
         pruneCache();
         cacheStore.set(cacheKey, {
@@ -127,7 +136,6 @@ app.all("/powerthrough", async (req, res) => {
       const rewritten = rewriteHtmlDocument(html, targetUrl);
       res.set("content-type", "text/html; charset=utf-8");
       res.set("x-frame-options", "ALLOWALL");
-      const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
       if (cacheKey) {
         pruneCache();
         cacheStore.set(cacheKey, {
@@ -144,7 +152,6 @@ app.all("/powerthrough", async (req, res) => {
       const css = await upstream.text();
       const rewritten = rewriteCssUrls(css, targetUrl);
       res.set("content-type", contentType);
-      const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
       if (cacheKey) {
         pruneCache();
         cacheStore.set(cacheKey, {
@@ -360,7 +367,7 @@ function normalizeTargetUrl(input) {
     if (looksLikeDomain(input)) {
       return new URL(`https://${input}`);
     }
-    return buildSearchUrl(input);
+    return new URL(`https://duckduckgo.com/?q=${encodeURIComponent(input)}`);
   }
 }
 
@@ -408,49 +415,8 @@ function pruneCache() {
     if (now - value.added > CACHE_TTL || cacheStore.size > 150) {
       cacheStore.delete(key);
     }
-  if (cacheStore.size <= 150) break;
-}
-
-function buildSearchUrl(term) {
-  const base = process.env.POWERTHROUGH_SEARCH_URL || "https://duckduckgo.com/?q=";
-  const encoded = encodeURIComponent(term);
-  const url = new URL(`${base}${encoded}`);
-  url.searchParams.set("safetynet_term", term);
-  return url;
-}
-
-function getFallbackSearchUrl(originalUrl) {
-  const term = originalUrl.searchParams?.get("safetynet_term");
-  if (!term) return null;
-  const fallbackBase = process.env.POWERTHROUGH_SEARCH_FALLBACK_URL || "https://lite.bing.com/search?q=";
-  try {
-    const encoded = encodeURIComponent(term);
-    const url = new URL(`${fallbackBase}${encoded}`);
-    url.searchParams.set("safetynet_term", term);
-    return url;
-  } catch {
-    return null;
+    if (cacheStore.size <= 150) break;
   }
-}
-
-async function fetchWithFallbackInline(targetUrl, req, attemptedFallback = false) {
-  try {
-    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
-    if (upstream.status >= 500 && !attemptedFallback) {
-      const fallbackUrl = getFallbackSearchUrl(targetUrl);
-      if (fallbackUrl) {
-        return fetchWithFallbackInline(fallbackUrl, req, true);
-      }
-    }
-    return { upstream, resolvedUrl: targetUrl };
-  } catch (error) {
-    const fallbackUrl = !attemptedFallback ? getFallbackSearchUrl(targetUrl) : null;
-    if (fallbackUrl) {
-      return fetchWithFallbackInline(fallbackUrl, req, true);
-    }
-    throw error;
-  }
-}
 }
 
 function shouldUseHeadless(req) {
@@ -514,7 +480,3 @@ async function loadChromium() {
   }
   return chromiumLoader;
 }
-function buildCacheKey(url) {
-  return url.toString();
-}
-
