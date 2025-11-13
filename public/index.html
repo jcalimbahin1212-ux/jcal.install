@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Unidentified - a comfort-first incognito browser portal powered by the Powerthrough relay backend."
+    />
+    <title>Unidentified | Incognito Proxy Portal</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app-shell">
+      <header class="hero">
+        <div class="hero__content">
+        <img src="assets/logo.svg" class="hero__logo" alt="Unidentified Powerthrough logo" width="120" height="120" />
+        <p class="hero__eyebrow">Stealth-grade comfort</p>
+        <h1 class="hero__title">Unidentified</h1>
+        <p class="hero__lead">
+          A purple-shaded sanctuary that keeps you off the radar while our self-hosted Powerthrough relay handles the web traffic shaping.
+        </p>
+
+        <form id="portal-form" class="portal" autocomplete="off">
+          <label for="destination" class="sr-only">Enter a URL or search query</label>
+          <input
+            id="destination"
+            name="destination"
+            type="text"
+            inputmode="url"
+            placeholder="Type a URL or search anything..."
+            required
+          />
+          <button type="submit">Launch secure tab</button>
+        </form>
+
+        <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
+
+          <div class="comfort">
+            <span>Comfort toggles:</span>
+            <label class="toggle">
+              <input type="checkbox" id="focus-mode" />
+              <span>Focus mode</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="panic-shortcut" checked />
+              <span>Panic shortcut</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="history-off" checked />
+              <span>History off</span>
+            </label>
+          </div>
+
+          <div class="cloak" aria-label="Tab cloaking options">
+            <span>Tab cloak:</span>
+            <label class="toggle">
+              <input type="checkbox" id="tab-cloak" />
+              <span>Disguise as homework doc</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="page-blank" />
+              <span>Mask site as about:blank</span>
+            </label>
+            <input type="text" id="cloak-title" placeholder="Custom tab title (optional)" />
+            <button type="button" id="cloak-blank">Open about:blank cloak</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="relay-panel" aria-live="polite">
+        <p class="relay-panel__label">Active relay</p>
+        <p id="active-service-name" class="relay-panel__name">Powerthrough Core</p>
+        <p id="active-service-desc" class="relay-panel__desc">
+          Native Node tunnel that rewrites traffic on the fly with zero third-party dependencies.
+        </p>
+
+        <div class="relay-panel__choices" role="group" aria-label="Relay personality choice">
+          <button class="relay-chip is-active" data-service="powerthrough">Powerthrough</button>
+          <button class="relay-chip" data-service="prism">Prism</button>
+          <button class="relay-chip" data-service="phantom">Phantom</button>
+        </div>
+
+        <div class="relay-panel__status">
+          <p class="relay-panel__status-title">Quick status</p>
+          <dl>
+            <div>
+              <dt>Encryption</dt>
+              <dd>Auto-select</dd>
+            </div>
+            <div>
+              <dt>Trace logging</dt>
+              <dd>Disabled</dd>
+            </div>
+            <div>
+              <dt>Comfort rating</dt>
+              <dd>Ultra plush</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      </header>
+
+      <section class="workspace" aria-label="Powerthrough workspace">
+        <div class="workspace__chrome">
+          <p id="workspace-status">Awaiting secure session.</p>
+          <button type="button" id="workspace-reset">Reset view</button>
+        </div>
+        <div class="workspace__frame">
+          <div id="frame-placeholder" class="workspace__placeholder">
+            Your secure session will render here once you launch a destination.
+          </div>
+          <iframe
+            id="proxy-frame"
+            title="Powerthrough session"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            loading="lazy"
+          ></iframe>
+        </div>
+      </section>
+
+      <main>
+        <section class="features">
+          <article>
+            <h2>No account trail</h2>
+            <p>Browser-grade privacy without the sign-in baggage. Everything is ephemeral unless you say otherwise.</p>
+          </article>
+          <article>
+            <h2>Proxy trifecta</h2>
+            <p>Powerthrough, Prism, and Phantom are three personalities of the same backend-each tweaking rewrite rules to fit your mood.</p>
+          </article>
+          <article>
+            <h2>Comfort-first UX</h2>
+            <p>A centered search bar, generous spacing, and purple gradients keep things calm even when traffic spikes.</p>
+          </article>
+        </section>
+
+        <section class="mission" id="mission">
+          <p>The goal of Unidentified is to ensure safety, and this proxy site was created by @1d3nt1ty!</p>
+        </section>
+
+        <section class="how-it-works">
+          <h2>How Unidentified works</h2>
+          <ol>
+            <li>Pick a relay personality (Powerthrough, Prism, or Phantom).</li>
+            <li>Paste a URL or type anything to search privately.</li>
+            <li>Unidentified launches a cloaked tab through our native Powerthrough rewrite backend.</li>
+          </ol>
+          <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
+        </section>
+      </main>
+    </div>
+
+    <button id="blank-overlay" class="blank-overlay" title="Click or press Esc to restore view" aria-label="Restore Unidentified"></button>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
