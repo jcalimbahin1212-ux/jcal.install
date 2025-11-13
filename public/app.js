@@ -132,11 +132,20 @@ function registerEventHandlers() {
     setStatus("Page loaded inside Powerthrough.");
   });
 
+  selectors.frame?.addEventListener("error", () => {
+    selectors.framePlaceholder?.classList.remove("is-hidden");
+    setWorkspaceStatus("Could not load that page.");
+    setStatus("Unable to load the requested page.", true);
+  });
+
   selectors.frameReset?.addEventListener("click", () => {
     if (selectors.frame) {
-      selectors.frame.removeAttribute("src");
+      selectors.frame.src = "about:blank";
       selectors.framePlaceholder?.classList.remove("is-hidden");
       setWorkspaceStatus("Workspace cleared.");
+      if (!autoBlankEnabled) {
+        cloakLaunched = false;
+      }
     }
   });
 

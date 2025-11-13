@@ -50,7 +50,7 @@ app.all("/powerthrough", async (req, res) => {
 
   let targetUrl;
   try {
-    targetUrl = new URL(targetParam);
+    targetUrl = normalizeTargetUrl(targetParam);
   } catch (error) {
     return res.status(400).json({ error: "Invalid URL provided.", details: error.message });
   }
@@ -240,6 +240,21 @@ function rewriteSrcset($, element, baseUrl) {
 
 function buildPowerthroughUrl(target) {
   return `/powerthrough?url=${encodeURIComponent(target)}`;
+}
+
+function normalizeTargetUrl(input) {
+  try {
+    return new URL(input);
+  } catch {
+    if (looksLikeDomain(input)) {
+      return new URL(`https://${input}`);
+    }
+    return new URL(`https://duckduckgo.com/?q=${encodeURIComponent(input)}`);
+  }
+}
+
+function looksLikeDomain(value) {
+  return /^[^\s]+\.[a-z]{2,}$/i.test(value);
 }
 
 function isBlockedHost(hostname) {
