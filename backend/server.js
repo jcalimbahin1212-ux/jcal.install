@@ -116,7 +116,7 @@ app.all("/powerthrough", async (req, res) => {
       return res.send(rewritten);
     }
 
-    const { upstream, resolvedUrl } = await fetchWithFallback(targetUrl, req);
+    const { upstream, resolvedUrl } = await fetchWithFallbackInline(targetUrl, req);
     const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(resolvedUrl) : null;
     if (cacheKey) {
       const cached = cacheStore.get(cacheKey);
@@ -418,28 +418,6 @@ function pruneCache() {
   if (cacheStore.size <= 150) break;
 }
 
-async function fetchWithFallback(targetUrl, req, attemptedFallback = false) {
-  try {
-    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
-    if (
-      upstream.status >= 500 &&
-      !attemptedFallback
-    ) {
-      const fallbackUrl = getFallbackSearchUrl(targetUrl);
-      if (fallbackUrl) {
-        return fetchWithFallback(fallbackUrl, req, true);
-      }
-    }
-    return { upstream, resolvedUrl: targetUrl };
-  } catch (error) {
-    const fallbackUrl = !attemptedFallback ? getFallbackSearchUrl(targetUrl) : null;
-    if (fallbackUrl) {
-      return fetchWithFallback(fallbackUrl, req, true);
-    }
-    throw error;
-  }
-}
-
 function buildSearchUrl(term) {
   const base = process.env.POWERTHROUGH_SEARCH_URL || "https://duckduckgo.com/?q=";
   const encoded = encodeURIComponent(term);
@@ -459,6 +437,25 @@ function getFallbackSearchUrl(originalUrl) {
     return url;
   } catch {
     return null;
+  }
+}
+
+async function fetchWithFallbackInline(targetUrl, req, attemptedFallback = false) {
+  try {
+    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
+    if (upstream.status >= 500 && !attemptedFallback) {
+      const fallbackUrl = getFallbackSearchUrl(targetUrl);
+      if (fallbackUrl) {
+        return fetchWithFallbackInline(fallbackUrl, req, true);
+      }
+    }
+    return { upstream, resolvedUrl: targetUrl };
+  } catch (error) {
+    const fallbackUrl = !attemptedFallback ? getFallbackSearchUrl(targetUrl) : null;
+    if (fallbackUrl) {
+      return fetchWithFallbackInline(fallbackUrl, req, true);
+    }
+    throw error;
   }
 }
 }
