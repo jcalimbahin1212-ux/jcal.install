@@ -142,9 +142,7 @@ function copyResponseHeaders(upstreamHeaders, response) {
     if (
       hopByHopHeaders.has(lower) ||
       lower === "access-control-allow-origin" ||
-      lower === "access-control-allow-credentials" ||
-      lower === "content-length" ||
-      lower === "content-encoding"
+      lower === "access-control-allow-credentials"
     ) {
       return;
     }
