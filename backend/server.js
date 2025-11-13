@@ -514,3 +514,7 @@ async function loadChromium() {
   }
   return chromiumLoader;
 }
+function buildCacheKey(url) {
+  return url.toString();
+}
+
