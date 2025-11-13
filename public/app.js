@@ -5,14 +5,32 @@
 
 const services = {
   safetynet: {
-    name: "SafetyNet Relay",
+    name: "SafetyNet Balanced",
     description: "Balanced rewrite mode for everyday browsing.",
-    mode: "safetynet",
+    mode: "standard",
+    compose(targetUrl) {
+      return buildSafetyNetLink(targetUrl, this.mode);
+    },
+  },
+  safetynet_headless: {
+    name: "SafetyNet Headless",
+    description: "Routes through the headless renderer for complex sites.",
+    mode: "headless",
+    render: "headless",
+    compose(targetUrl) {
+      return buildSafetyNetLink(targetUrl, this.mode, this.render);
+    },
+  },
+  safetynet_lite: {
+    name: "SafetyNet Lite",
+    description: "Lightweight mode optimized for speed.",
+    mode: "lite",
     compose(targetUrl) {
       return buildSafetyNetLink(targetUrl, this.mode);
     },
   },
 };
+const SERVICE_KEYS = Object.keys(services);
 
 const selectors = {
   form: document.querySelector("#portal-form"),
@@ -56,6 +74,7 @@ const realFaviconHref = faviconLink?.href || "";
 const isCloakedContext = window.name === "unidentified-cloak";
 
 let activeService = "safetynet";
+let userSelectedService = activeService;
 let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
@@ -68,6 +87,7 @@ const isAboutBlankContext = window.location.protocol === "about:";
 const EDU_RESTART_THRESHOLD = 3;
 let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
 let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
+let lastNavigation = null;
 if (eduUnlocked) {
   document.body.classList.remove("edu-locked");
 }
@@ -93,10 +113,9 @@ function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
     chip.addEventListener("click", () => {
       const next = chip.dataset.service;
-      if (!next || next === activeService) return;
-      activeService = next;
-      updateActiveService(activeService);
-      selectors.chips.forEach((btn) => btn.classList.toggle("is-active", btn === chip));
+      if (!next || !services[next]) return;
+      userSelectedService = next;
+      setActiveService(next, { userInitiated: true });
     });
   });
 
@@ -110,18 +129,13 @@ function registerEventHandlers() {
 
     try {
       const targetUrl = normalizeQuery(rawValue);
-      const outboundUrl = composeProxyUrl(targetUrl);
-
-      if (selectors.frame) {
-        selectors.framePlaceholder?.classList.add("is-hidden");
-        selectors.frame.src = outboundUrl;
-        setWorkspaceStatus(`Routing via ${services[activeService].name}.`);
-      } else {
-        const newTab = window.open(outboundUrl, "_blank", "noopener,noreferrer");
-        if (!newTab) {
-          setStatus("Allow pop-ups or enable the embedded workspace to view pages.", true);
-        }
-      }
+      const order = buildServiceOrder(userSelectedService);
+      lastNavigation = {
+        targetUrl,
+        order,
+        index: 0,
+      };
+      launchWithService(order[0], targetUrl);
 
       if (persistHistory) {
         localStorage.setItem(historyKey, rawValue);
@@ -136,12 +150,16 @@ function registerEventHandlers() {
   selectors.frame?.addEventListener("load", () => {
     setWorkspaceStatus("Secure session ready.");
     setStatus("Page loaded inside SafetyNet.");
+    lastNavigation = null;
+    userSelectedService = activeService;
   });
 
   selectors.frame?.addEventListener("error", () => {
     selectors.framePlaceholder?.classList.remove("is-hidden");
     setWorkspaceStatus("Could not load that page.");
-    setStatus("Unable to load the requested page.", true);
+    if (!tryServiceFallback()) {
+      setStatus("Unable to load the requested page.", true);
+    }
   });
 
   selectors.frameReset?.addEventListener("click", () => {
@@ -152,6 +170,7 @@ function registerEventHandlers() {
       if (!autoBlankEnabled) {
         cloakLaunched = false;
       }
+      lastNavigation = null;
     }
   });
 
@@ -231,8 +250,8 @@ function registerEventHandlers() {
   prepareEducationGate();
 }
 
-function composeProxyUrl(targetUrl) {
-  const service = services[activeService];
+function composeProxyUrl(targetUrl, serviceKey = activeService) {
+  const service = services[serviceKey];
   if (!service) {
     throw new Error("Pick a relay personality to continue.");
   }
@@ -255,12 +274,17 @@ function normalizeQuery(input) {
   return searchUrl;
 }
 
-function updateActiveService(key) {
+function updateActiveService(key, announce = true) {
   const service = services[key];
   if (!service) return;
   selectors.serviceName.textContent = service.name;
   selectors.serviceDesc.textContent = service.description;
-  setStatus(`Ready on ${service.name}.`);
+  selectors.chips.forEach((chip) => {
+    chip.classList.toggle("is-active", chip.dataset.service === key);
+  });
+  if (announce) {
+    setStatus(`Ready on ${service.name}.`);
+  }
 }
 
 function setStatus(message, isError = false) {
@@ -315,13 +339,17 @@ function watchMissionBox() {
   observer.observe(selectors.missionBox);
 }
 
-function buildSafetyNetLink(targetUrl, mode) {
+function buildSafetyNetLink(targetUrl, mode, render) {
   const encoded = encodeURIComponent(targetUrl);
-  const path = `/proxy/${encoded}`;
-  if (mode && mode !== "safetynet") {
-    return `${path}?mode=${encodeURIComponent(mode)}`;
+  const params = new URLSearchParams();
+  if (mode && mode !== "standard") {
+    params.set("mode", mode);
   }
-  return path;
+  if (render) {
+    params.set("render", render);
+  }
+  const query = params.toString();
+  return query ? `/proxy/${encoded}?${query}` : `/proxy/${encoded}`;
 }
 
 function applyTabCloak(enabled) {
@@ -544,4 +572,50 @@ function listenForSwMessages() {
       setStatus("Loaded offline copy from cache.", false);
     }
   });
+}
+
+function setActiveService(key, { userInitiated = false } = {}) {
+  if (!services[key]) return;
+  activeService = key;
+  updateActiveService(key, userInitiated);
+  if (userInitiated) {
+    userSelectedService = key;
+    lastNavigation = null;
+  }
+}
+
+function buildServiceOrder(primaryKey) {
+  const base = services[primaryKey] ? primaryKey : SERVICE_KEYS[0];
+  const others = SERVICE_KEYS.filter((key) => key !== base);
+  return [base, ...others];
+}
+
+function launchWithService(serviceKey, targetUrl, { fallback = false } = {}) {
+  setActiveService(serviceKey, { userInitiated: !fallback && serviceKey === userSelectedService });
+  const outboundUrl = composeProxyUrl(targetUrl, serviceKey);
+  if (selectors.frame) {
+    selectors.framePlaceholder?.classList.add("is-hidden");
+    selectors.frame.src = outboundUrl;
+    setWorkspaceStatus(`Routing via ${services[serviceKey].name}.`);
+  } else {
+    const newTab = window.open(outboundUrl, "_blank", "noopener,noreferrer");
+    if (!newTab) {
+      setStatus("Allow pop-ups or enable the embedded workspace to view pages.", true);
+    }
+  }
+}
+
+function tryServiceFallback() {
+  if (!lastNavigation) {
+    return false;
+  }
+  lastNavigation.index += 1;
+  const nextKey = lastNavigation.order[lastNavigation.index];
+  if (!nextKey) {
+    lastNavigation = null;
+    return false;
+  }
+  setStatus(`Retrying via ${services[nextKey].name}...`, false);
+  launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true });
+  return true;
 }
