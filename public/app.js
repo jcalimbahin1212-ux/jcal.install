@@ -393,8 +393,9 @@ function closeOriginalWindow() {
 }
 
 function toggleFullscreen() {
+  const target = selectors.frame || document.documentElement;
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen?.();
+    target.requestFullscreen?.();
   } else {
     document.exitFullscreen?.();
   }
