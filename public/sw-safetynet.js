@@ -1,5 +1,7 @@
-const SHELL_CACHE = "safetynet-shell-v1";
-const SHELL_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/assets/logo.svg"];
+const SHELL_VERSION = "v2";
+const SHELL_CACHE = `safetynet-shell-${SHELL_VERSION}`;
+const DATA_CACHE = `safetynet-data-${SHELL_VERSION}`;
+const SHELL_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/assets/logo.svg", "/sw-safetynet.js"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -17,12 +19,12 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.map((key) => {
-            if (key !== SHELL_CACHE) {
-              return caches.delete(key);
-            }
-            return undefined;
-          })
+      keys.map((key) => {
+        if (key !== SHELL_CACHE && key !== DATA_CACHE) {
+          return caches.delete(key);
+        }
+        return undefined;
+      })
         )
       )
       .then(() => self.clients.claim())
@@ -44,6 +46,11 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin === self.location.origin && shouldCache(request, url)) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  if (request.destination === "") {
+    event.respondWith(networkFirst(request));
   }
 });
 
@@ -75,5 +82,37 @@ function proxyThroughSafetyNet(url) {
   const decodedTarget = decodeURIComponent(encodedTarget);
   const proxyUrl = new URL("/powerthrough", self.location.origin);
   proxyUrl.searchParams.set("url", decodedTarget);
-  return fetch(proxyUrl.toString(), { credentials: "same-origin" });
+  return fetch(proxyUrl.toString(), { credentials: "same-origin" }).catch((error) => {
+    sendTelemetry("proxy-fetch-error", { target: decodedTarget, message: error.message });
+    return new Response(
+      JSON.stringify({ error: "Proxy request failed.", details: error.message }),
+      {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      }
+    );
+  });
+}
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    const cache = await caches.open(DATA_CACHE);
+    cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cache = await caches.open(DATA_CACHE);
+    const cached = await cache.match(request);
+    if (cached) {
+      sendTelemetry("network-fallback-cache", { url: request.url });
+      return cached;
+    }
+    throw error;
+  }
+}
+
+function sendTelemetry(eventName, payload) {
+  clients.matchAll({ includeUncontrolled: true, type: "window" }).then((windows) => {
+    windows.forEach((client) => client.postMessage({ source: "safetynet-sw", event: eventName, payload }));
+  });
 }

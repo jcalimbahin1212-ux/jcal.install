@@ -86,6 +86,8 @@ hydrateHistoryPreference();
 registerEventHandlers();
 watchMissionBox();
 updateActiveService(activeService);
+registerServiceWorker();
+listenForSwMessages();
 
 function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
@@ -526,5 +528,20 @@ function registerServiceWorker() {
       .catch((error) => {
         console.warn("[SafetyNet] failed to register service worker", error);
       });
+  });
+}
+
+function listenForSwMessages() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.source !== "safetynet-sw") return;
+    const { event: eventName, payload } = event.data;
+    if (eventName === "proxy-fetch-error") {
+      setStatus(`SW proxy error: ${payload.message}`, true);
+    } else if (eventName === "network-fallback-cache") {
+      setStatus("Loaded offline copy from cache.", false);
+    }
   });
 }
