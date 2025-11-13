@@ -35,6 +35,9 @@ const selectors = {
   autoBlankToggle: document.querySelector("#auto-blank"),
   panicKeySelect: document.querySelector("#panic-key"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
+  eduOverlay: document.querySelector("#edu-overlay"),
+  eduScroll: document.querySelector("#edu-scroll"),
+  eduButton: document.querySelector("#edu-continue"),
 };
 
 const historyKey = "unidentified:last-query";
@@ -59,6 +62,7 @@ let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 const isAboutBlankContext = window.location.protocol === "about:";
+let eduUnlocked = !document.body.classList.contains("edu-locked");
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -214,9 +218,7 @@ function registerEventHandlers() {
 
   updateFullscreenButton();
 
-  if (autoBlankEnabled && !cloakLaunched) {
-    attemptAutoBlank();
-  }
+  prepareEducationGate();
 }
 
 function composeProxyUrl(targetUrl) {
@@ -443,4 +445,40 @@ function disarmAutoBlank() {
   document.removeEventListener("keydown", autoBlankArmHandler);
   autoBlankArmHandler = null;
   autoBlankArmed = false;
+}
+
+function prepareEducationGate() {
+  if (eduUnlocked || !selectors.eduOverlay) {
+    eduUnlocked = true;
+    if (autoBlankEnabled && !cloakLaunched) {
+      attemptAutoBlank(true);
+    }
+    return;
+  }
+  selectors.eduScroll?.addEventListener("scroll", handleEduScroll);
+  selectors.eduButton?.addEventListener("click", unlockSafetyNet);
+  handleEduScroll(); // check initial position
+}
+
+function handleEduScroll() {
+  if (!selectors.eduScroll || !selectors.eduButton) return;
+  const scroller = selectors.eduScroll;
+  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8;
+  if (atBottom) {
+    selectors.eduButton.disabled = false;
+    selectors.eduButton.textContent = "Google";
+  }
+}
+
+function unlockSafetyNet() {
+  if (eduUnlocked) return;
+  eduUnlocked = true;
+  selectors.eduScroll?.removeEventListener("scroll", handleEduScroll);
+  selectors.eduButton?.removeEventListener("click", unlockSafetyNet);
+  document.body.classList.remove("edu-locked");
+  selectors.eduOverlay?.classList.add("is-hidden");
+  if (autoBlankEnabled && !cloakLaunched) {
+    setTimeout(() => attemptAutoBlank(true), 250);
+  }
+  setStatus("SafetyNet ready. Stay safe.");
 }

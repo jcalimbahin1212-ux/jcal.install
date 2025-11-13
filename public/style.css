@@ -32,7 +32,17 @@ body {
 }
 
 #app-shell {
-  transition: opacity 150ms ease;
+  transition: opacity 200ms ease, filter 200ms ease;
+}
+
+body.edu-locked #app-shell {
+  opacity: 0.2;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+body:not(.edu-locked) .edu-overlay {
+  display: none;
 }
 
 img {
@@ -49,6 +59,77 @@ img {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+.edu-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.2), rgba(5, 0, 10, 0.95));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 2rem;
+  transition: opacity 220ms ease;
+}
+
+.edu-panel {
+  background: rgba(6, 2, 12, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+  max-width: 720px;
+  width: 100%;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.edu-panel header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+.edu-scroll {
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 1rem;
+  line-height: 1.45;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.edu-scroll p {
+  margin-bottom: 1rem;
+}
+
+#edu-continue {
+  align-self: flex-end;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  background: linear-gradient(120deg, var(--purple-500), var(--purple-300));
+  color: #1a032e;
+  cursor: pointer;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+#edu-continue:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#edu-continue:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.edu-overlay.is-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .hero {
