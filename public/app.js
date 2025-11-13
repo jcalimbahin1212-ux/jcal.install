@@ -48,6 +48,7 @@ const selectors = {
   tabCloakToggle: document.querySelector("#tab-cloak"),
   cloakTitle: document.querySelector("#cloak-title"),
   cloakBlank: document.querySelector("#cloak-blank"),
+  autoBlankToggle: document.querySelector("#auto-blank"),
   panicKeySelect: document.querySelector("#panic-key"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
 };
@@ -55,6 +56,7 @@ const selectors = {
 const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
+const autoBlankPref = "unidentified:auto-blank";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -66,8 +68,13 @@ let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
 let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
+let autoBlankEnabled = localStorage.getItem(autoBlankPref) === "on";
+let cloakLaunched = false;
 if (selectors.panicKeySelect) {
   selectors.panicKeySelect.value = panicKey;
+}
+if (selectors.autoBlankToggle) {
+  selectors.autoBlankToggle.checked = autoBlankEnabled;
 }
 
 hydrateHistoryPreference();
@@ -188,11 +195,24 @@ function registerEventHandlers() {
     setStatus(`Panic key set to ${panicKey}.`);
   });
 
+  selectors.autoBlankToggle?.addEventListener("change", (event) => {
+    autoBlankEnabled = event.target.checked;
+    localStorage.setItem(autoBlankPref, autoBlankEnabled ? "on" : "off");
+    setStatus(autoBlankEnabled ? "Auto about:blank enabled." : "Auto about:blank disabled.");
+    if (autoBlankEnabled && !cloakLaunched) {
+      setTimeout(() => launchAboutBlankCloak({ silent: true }), 400);
+    }
+  });
+
   selectors.fullscreenToggle?.addEventListener("click", () => {
     toggleFullscreen();
   });
 
   updateFullscreenButton();
+
+  if (autoBlankEnabled && !cloakLaunched) {
+    setTimeout(() => launchAboutBlankCloak({ silent: true }), 800);
+  }
 }
 
 function composeProxyUrl(targetUrl) {
@@ -305,11 +325,17 @@ function ensureFaviconLink() {
   return link;
 }
 
-async function launchAboutBlankCloak() {
-  setStatus("Preparing about:blank cloak...");
+async function launchAboutBlankCloak(options = {}) {
+  if (cloakLaunched) return;
+  cloakLaunched = true;
+  const { silent = false } = options;
+  if (!silent) {
+    setStatus("Preparing about:blank cloak...");
+  }
   const cloakWin = window.open("about:blank", "_blank");
   if (!cloakWin) {
     setStatus("Allow pop-ups to open the about:blank cloak.", true);
+    cloakLaunched = false;
     return;
   }
 
@@ -334,7 +360,9 @@ async function launchAboutBlankCloak() {
     cloakWin.document.close();
   }
 
-  setStatus("Session moved to about:blank.");
+  if (!silent) {
+    setStatus("Session moved to about:blank.");
+  }
   setTimeout(closeOriginalWindow, 400);
 }
 
