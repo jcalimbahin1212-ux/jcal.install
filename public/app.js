@@ -72,11 +72,17 @@ let autoBlankEnabled = localStorage.getItem(autoBlankPref) === "on";
 let cloakLaunched = false;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
+const isAboutBlankContext = window.location.protocol === "about:";
+if (isAboutBlankContext) {
+  autoBlankEnabled = false;
+  cloakLaunched = true;
+}
 if (selectors.panicKeySelect) {
   selectors.panicKeySelect.value = panicKey;
 }
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
+  selectors.autoBlankToggle.disabled = isAboutBlankContext;
 }
 
 hydrateHistoryPreference();
