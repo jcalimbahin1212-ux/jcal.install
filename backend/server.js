@@ -10,6 +10,8 @@ const PORT = process.env.PORT || 8787;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
+const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
+const ENABLE_CACHE = CACHE_TTL > 0;
 
 const app = express();
 
@@ -40,8 +42,17 @@ const hopByHopHeaders = new Set([
 ]);
 
 const blockedHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const cacheStore = new Map();
+const metrics = {
+  requests: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  upstreamErrors: 0,
+  totalLatencyMs: 0,
+};
 
 app.all("/powerthrough", async (req, res) => {
+  metrics.requests += 1;
   const targetParam = req.query.url;
 
   if (!targetParam) {
@@ -63,6 +74,17 @@ app.all("/powerthrough", async (req, res) => {
     return res.status(403).json({ error: "Target host is not allowed." });
   }
 
+  const start = Date.now();
+  const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
+  if (cacheKey) {
+    const cached = cacheStore.get(cacheKey);
+    if (cached && Date.now() - cached.added < CACHE_TTL) {
+      metrics.cacheHits += 1;
+      return respondFromCache(res, cached);
+    }
+    metrics.cacheMisses += 1;
+  }
+
   try {
     const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
     const contentType = upstream.headers.get("content-type") || "";
@@ -75,6 +97,15 @@ app.all("/powerthrough", async (req, res) => {
       const rewritten = rewriteHtmlDocument(html, targetUrl);
       res.set("content-type", "text/html; charset=utf-8");
       res.set("x-frame-options", "ALLOWALL");
+      if (cacheKey) {
+        pruneCache();
+        cacheStore.set(cacheKey, {
+          status: upstream.status,
+          headers: collectHeaders(res),
+          body: Buffer.from(rewritten),
+          added: Date.now(),
+        });
+      }
       return res.send(rewritten);
     }
 
@@ -82,6 +113,15 @@ app.all("/powerthrough", async (req, res) => {
       const css = await upstream.text();
       const rewritten = rewriteCssUrls(css, targetUrl);
       res.set("content-type", contentType);
+      if (cacheKey) {
+        pruneCache();
+        cacheStore.set(cacheKey, {
+          status: upstream.status,
+          headers: collectHeaders(res),
+          body: Buffer.from(rewritten),
+          added: Date.now(),
+        });
+      }
       return res.send(rewritten);
     }
 
@@ -92,16 +132,28 @@ app.all("/powerthrough", async (req, res) => {
     return res.end();
   } catch (error) {
     console.error("[powerthrough] proxy error", error);
+    metrics.upstreamErrors += 1;
     if (!res.headersSent) {
       res.status(502).json({ error: "Failed to reach target upstream.", details: error.message });
     } else {
       res.end();
     }
+  } finally {
+    metrics.totalLatencyMs += Date.now() - start;
   }
 });
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
+});
+
+app.get("/metrics", (req, res) => {
+  res.json({
+    ...metrics,
+    cacheSize: cacheStore.size,
+    cacheTtlMs: CACHE_TTL,
+    cacheEnabled: ENABLE_CACHE,
+  });
 });
 
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
@@ -299,4 +351,26 @@ function isPrivateIpv4(ip) {
   if (a === 172 && b >= 16 && b <= 31) return true;
   if (a === 192 && b === 168) return true;
   return false;
+}
+
+function respondFromCache(res, cached) {
+  res.status(cached.status);
+  cached.headers.forEach(([key, value]) => res.set(key, value));
+  res.set("x-cache", "HIT");
+  return res.send(Buffer.from(cached.body));
+}
+
+function collectHeaders(res) {
+  return Object.entries(res.getHeaders());
+}
+
+function pruneCache() {
+  if (cacheStore.size < 200) return;
+  const now = Date.now();
+  for (const [key, value] of cacheStore.entries()) {
+    if (now - value.added > CACHE_TTL || cacheStore.size > 150) {
+      cacheStore.delete(key);
+    }
+    if (cacheStore.size <= 150) break;
+  }
 }
