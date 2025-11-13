@@ -64,7 +64,7 @@ app.all("/powerthrough", async (req, res) => {
   }
 
   try {
-    const upstream = await fetch(targetUrl, buildFetchOptions(req, targetUrl));
+    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
     const contentType = upstream.headers.get("content-type") || "";
 
     res.status(upstream.status);
@@ -74,6 +74,14 @@ app.all("/powerthrough", async (req, res) => {
       const html = await upstream.text();
       const rewritten = rewriteHtmlDocument(html, targetUrl);
       res.set("content-type", "text/html; charset=utf-8");
+      res.set("x-frame-options", "ALLOWALL");
+      return res.send(rewritten);
+    }
+
+    if (contentType.includes("text/css")) {
+      const css = await upstream.text();
+      const rewritten = rewriteCssUrls(css, targetUrl);
+      res.set("content-type", contentType);
       return res.send(rewritten);
     }
 
@@ -142,13 +150,13 @@ function copyResponseHeaders(upstreamHeaders, response) {
     if (
       hopByHopHeaders.has(lower) ||
       lower === "access-control-allow-origin" ||
-      lower === "access-control-allow-credentials" ||
-      lower === "x-frame-options"
+      lower === "access-control-allow-credentials"
     ) {
       return;
     }
 
-    if (lower === "content-security-policy") {
+    // Strip headers that prevent iframe embedding
+    if (lower === "x-frame-options" || lower === "content-security-policy") {
       return;
     }
 
@@ -184,6 +192,21 @@ function rewriteHtmlDocument(html, baseUrl) {
   $("[srcset]").each((_, element) => rewriteSrcset($, element, baseUrl));
 
   return $.html();
+}
+
+function rewriteCssUrls(css, baseUrl) {
+  // Rewrite url(...) in CSS
+  return css.replace(/url\(['"]?([^'")]+)['"]?\)/gi, (match, url) => {
+    if (url.startsWith('data:') || url.startsWith('#')) {
+      return match;
+    }
+    try {
+      const resolved = new URL(url, baseUrl);
+      return `url(${buildPowerthroughUrl(resolved.toString())})`;
+    } catch {
+      return match;
+    }
+  });
 }
 
 function rewriteAttribute($, element, attribute, baseUrl) {

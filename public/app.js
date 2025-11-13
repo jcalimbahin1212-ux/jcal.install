@@ -121,7 +121,7 @@ function registerEventHandlers() {
       } else {
         const newTab = window.open(outboundUrl, "_blank", "noopener,noreferrer");
         if (!newTab) {
-          window.location.href = outboundUrl;
+          setStatus("Allow pop-ups or enable the embedded workspace to view pages.", true);
         }
       }
 
@@ -459,21 +459,4 @@ function disarmAutoBlank() {
   document.removeEventListener("keydown", autoBlankArmHandler);
   autoBlankArmHandler = null;
   autoBlankArmed = false;
-}
-
-function armAutoBlank() {
-  if (!autoBlankEnabled || autoBlankArmHandler || cloakLaunched) return;
-  autoBlankArmHandler = () => {
-    autoBlankArmHandler = null;
-    setTimeout(() => launchAboutBlankCloak({ silent: true }), 10);
-  };
-  document.addEventListener("pointerdown", autoBlankArmHandler, { once: true });
-  document.addEventListener("keydown", autoBlankArmHandler, { once: true });
-}
-
-function disarmAutoBlank() {
-  if (!autoBlankArmHandler) return;
-  document.removeEventListener("pointerdown", autoBlankArmHandler);
-  document.removeEventListener("keydown", autoBlankArmHandler);
-  autoBlankArmHandler = null;
 }
