@@ -12,45 +12,72 @@
   </head>
   <body class="edu-locked">
     <div class="edu-overlay" id="edu-overlay">
-      <div class="edu-panel">
-        <header>
+      <div class="edu-wiki">
+        <header class="edu-wiki__header">
           <div>
-            <p class="edu-eyebrow">Math Essentials &middot; Unit 7</p>
-            <h1>Arcadia Math Studio</h1>
-            <p>Interactive practice for algebra readiness and digital citizenship.</p>
+            <p class="edu-eyebrow">Arcadia Unified &middot; Math Commons</p>
+            <h1>Quadratic Readiness Portal</h1>
+            <p>Reference sheet &amp; device expectations for Algebra I students.</p>
           </div>
-          <img src="assets/logo.svg" alt="" width="64" height="64" />
+          <div class="edu-wiki__search">
+            <input type="search" placeholder="Search Arcadia Math" aria-label="Search Arcadia Math" />
+            <button>Search</button>
+          </div>
         </header>
-        <div class="edu-scroll" id="edu-scroll">
-          <p>
-            Welcome back, Arcadian! Today’s focus is <strong>Quadratic thinking + Safe browsing.</strong> Review each note
-            card carefully—when you reach the end, the “Google” practice set unlocks.
-          </p>
-          <p>
-            <strong>1.</strong> Remember the vertex form: <em>y = a(x - h)^2 + k</em>. Identify <em>h</em> and
-            <em>k</em> to find the parabola’s axis of symmetry. Sketch on scrap paper.
-          </p>
-          <p>
-            <strong>2.</strong> Discriminant check: <em>b^2 - 4ac</em>. &gt;0 means two solutions, 0 means one, &lt;0
-            means complex. Use this to sanity-check calculator results.
-          </p>
-          <p>
-            <strong>3.</strong> Keep your workspace on-task. Arcadia devices are monitored for academic integrity. Close
-            all recreational tabs before continuing.
-          </p>
-          <p>
-            <strong>4.</strong> When researching math topics online, rely on district-approved resources (Arcadia Math
-            Studio, Khan-style practice sets, Desmos classroom activities).
-          </p>
-          <p>
-            <strong>5.</strong> Protect your password, use two-factor authentication, and report any suspicious messages
-            to the digital safety team.
-          </p>
-          <p>
-            Scroll to the bottom of this module and choose the approved practice engine to continue.
-          </p>
+
+        <div class="edu-wiki__body" id="edu-scroll">
+          <aside class="edu-wiki__nav">
+            <h2>Contents</h2>
+            <ol>
+              <li>Quadratic basics</li>
+              <li>Digital study habits</li>
+              <li>Approved resources</li>
+              <li>Device expectations</li>
+              <li>Safety reminder</li>
+            </ol>
+          </aside>
+          <article class="edu-wiki__article">
+            <section>
+              <h3>Quadratic basics</h3>
+              <p>
+                Vertex form <em>y = a(x - h)^2 + k</em>. Adjust <em>a</em> for stretch/compress, translate with
+                <em>h</em> and <em>k</em>. Sketch intercepts before using Desmos.
+              </p>
+            </section>
+            <section>
+              <h3>Digital study habits</h3>
+              <p>Keep only math tabs open. Use split-screen notes. Plug in headphones when viewing tutorial clips.</p>
+            </section>
+            <section>
+              <h3>Approved resources</h3>
+              <ul>
+                <li>Arcadia Math Commons practice sets</li>
+                <li>Desmos classroom activities</li>
+                <li>Arcadia “Khan-style” video primers</li>
+                <li>District Google Workspace (Docs/Slides)</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Device expectations</h3>
+              <p>
+                Chromebooks are monitored. Report suspicious tabs. Stay signed in with your Arcadia email. Use strong
+                passwords and 2-step verification.
+              </p>
+            </section>
+            <section>
+              <h3>Safety reminder</h3>
+              <p>Complete the required restart cycle below to verify you reviewed today’s expectations.</p>
+            </section>
+          </article>
         </div>
-        <button id="edu-continue" disabled>Scroll to enable Google</button>
+
+        <footer class="edu-wiki__footer">
+          <div id="edu-progress" class="edu-progress">Reload the lesson 3 more times to unlock SafetyNet.</div>
+          <div class="edu-actions">
+            <button id="edu-restart">Reload lesson</button>
+            <button id="edu-continue" disabled>Google</button>
+          </div>
+        </footer>
       </div>
     </div>
 

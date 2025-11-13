@@ -38,12 +38,15 @@ const selectors = {
   eduOverlay: document.querySelector("#edu-overlay"),
   eduScroll: document.querySelector("#edu-scroll"),
   eduButton: document.querySelector("#edu-continue"),
+  eduRestart: document.querySelector("#edu-restart"),
+  eduProgress: document.querySelector("#edu-progress"),
 };
 
 const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
+const eduRestartKey = "safetynet:edu-restarts";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -62,7 +65,12 @@ let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 const isAboutBlankContext = window.location.protocol === "about:";
-let eduUnlocked = !document.body.classList.contains("edu-locked");
+const EDU_RESTART_THRESHOLD = 3;
+let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
+let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
+if (eduUnlocked) {
+  document.body.classList.remove("edu-locked");
+}
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -451,31 +459,25 @@ function disarmAutoBlank() {
 
 function prepareEducationGate() {
   if (eduUnlocked || !selectors.eduOverlay) {
-    eduUnlocked = true;
+    document.body.classList.remove("edu-locked");
     if (autoBlankEnabled && !cloakLaunched) {
       attemptAutoBlank(true);
     }
     return;
   }
-  selectors.eduScroll?.addEventListener("scroll", handleEduScroll);
+  updateEduProgress();
+  selectors.eduRestart?.addEventListener("click", handleEduRestart);
   selectors.eduButton?.addEventListener("click", unlockSafetyNet);
-  handleEduScroll(); // check initial position
-}
-
-function handleEduScroll() {
-  if (!selectors.eduScroll || !selectors.eduButton) return;
-  const scroller = selectors.eduScroll;
-  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8;
-  if (atBottom) {
-    selectors.eduButton.disabled = false;
-    selectors.eduButton.textContent = "Google";
-  }
 }
 
 function unlockSafetyNet() {
+  if (!eduUnlocked && eduRestarts < EDU_RESTART_THRESHOLD) {
+    setStatus(`Complete ${EDU_RESTART_THRESHOLD - eduRestarts} more restart(s).`, true);
+    return;
+  }
   if (eduUnlocked) return;
   eduUnlocked = true;
-  selectors.eduScroll?.removeEventListener("scroll", handleEduScroll);
+  localStorage.setItem(eduRestartKey, String(Math.max(eduRestarts, EDU_RESTART_THRESHOLD)));
   selectors.eduButton?.removeEventListener("click", unlockSafetyNet);
   document.body.classList.remove("edu-locked");
   selectors.eduOverlay?.classList.add("is-hidden");
@@ -483,6 +485,32 @@ function unlockSafetyNet() {
     setTimeout(() => attemptAutoBlank(true), 250);
   }
   setStatus("SafetyNet ready. Stay safe.");
+}
+
+function handleEduRestart() {
+  eduRestarts += 1;
+  localStorage.setItem(eduRestartKey, String(eduRestarts));
+  updateEduProgress();
+  selectors.eduOverlay?.classList.add("is-reloading");
+  setTimeout(() => selectors.eduOverlay?.classList.remove("is-reloading"), 350);
+  if (eduRestarts >= EDU_RESTART_THRESHOLD && selectors.eduButton) {
+    selectors.eduButton.disabled = false;
+    selectors.eduButton.textContent = "Google";
+  }
+}
+
+function updateEduProgress() {
+  if (!selectors.eduProgress) return;
+  const remaining = Math.max(0, EDU_RESTART_THRESHOLD - eduRestarts);
+  if (remaining > 0) {
+    selectors.eduProgress.textContent = `Reload the lesson ${remaining} more ${
+      remaining === 1 ? "time" : "times"
+    } to unlock SafetyNet.`;
+    selectors.eduButton && (selectors.eduButton.disabled = true);
+  } else {
+    selectors.eduProgress.textContent = "Lesson verified. Select Google to continue to SafetyNet.";
+    selectors.eduButton && (selectors.eduButton.disabled = false);
+  }
 }
 
 function registerServiceWorker() {
