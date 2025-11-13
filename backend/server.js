@@ -57,6 +57,16 @@ const metrics = {
 };
 let chromiumLoader = null;
 
+app.get("/proxy/:encoded", (req, res) => {
+  try {
+    const decoded = decodeURIComponent(req.params.encoded || "");
+    const redirectTarget = `/powerthrough?url=${encodeURIComponent(decoded)}`;
+    return res.redirect(302, redirectTarget);
+  } catch {
+    return res.status(400).json({ error: "Invalid proxy encoding." });
+  }
+});
+
 app.all("/powerthrough", async (req, res) => {
   metrics.requests += 1;
   const targetParam = req.query.url;

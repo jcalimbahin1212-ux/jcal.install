@@ -306,11 +306,12 @@ function watchMissionBox() {
 }
 
 function buildSafetyNetLink(targetUrl, mode) {
-  const params = new URLSearchParams({ url: targetUrl });
+  const encoded = encodeURIComponent(targetUrl);
+  const path = `/proxy/${encoded}`;
   if (mode && mode !== "safetynet") {
-    params.set("mode", mode);
+    return `${path}?mode=${encodeURIComponent(mode)}`;
   }
-  return `/powerthrough?${params.toString()}`;
+  return path;
 }
 
 function applyTabCloak(enabled) {
@@ -481,4 +482,20 @@ function unlockSafetyNet() {
     setTimeout(() => attemptAutoBlank(true), 250);
   }
   setStatus("SafetyNet ready. Stay safe.");
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw-safetynet.js", { scope: "/" })
+      .then(() => {
+        console.info("[SafetyNet] service worker registered");
+      })
+      .catch((error) => {
+        console.warn("[SafetyNet] failed to register service worker", error);
+      });
+  });
 }
