@@ -48,16 +48,16 @@ const selectors = {
   tabCloakToggle: document.querySelector("#tab-cloak"),
   cloakTitle: document.querySelector("#cloak-title"),
   cloakBlank: document.querySelector("#cloak-blank"),
-  pageBlankToggle: document.querySelector("#page-blank"),
-  blankOverlay: document.querySelector("#blank-overlay"),
+  panicKeySelect: document.querySelector("#panic-key"),
+  fullscreenToggle: document.querySelector("#fullscreen-toggle"),
 };
 
 const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
+const panicKeyPref = "unidentified:panic-key";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
-const blankFavicon = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 const faviconLink = ensureFaviconLink();
 const realFaviconHref = faviconLink?.href || "";
 
@@ -65,6 +65,10 @@ let activeService = "powerthrough";
 let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
+let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
+if (selectors.panicKeySelect) {
+  selectors.panicKeySelect.value = panicKey;
+}
 
 hydrateHistoryPreference();
 registerEventHandlers();
@@ -147,15 +151,7 @@ function registerEventHandlers() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && document.body.classList.contains("page-blank")) {
-      if (selectors.pageBlankToggle) {
-        selectors.pageBlankToggle.checked = false;
-      }
-      togglePageBlank(false);
-      event.preventDefault();
-      return;
-    }
-    if (event.key !== "Escape" || !selectors.panicToggle?.checked) return;
+    if (event.key !== panicKey || !selectors.panicToggle?.checked) return;
     if (panicPrimed) {
       setStatus("Panic shortcut engaged.");
       window.location.href = "https://www.wikipedia.org";
@@ -182,26 +178,21 @@ function registerEventHandlers() {
   });
 
   selectors.cloakBlank?.addEventListener("click", () => {
-    const cloakWin = window.open("about:blank", "_blank");
-    if (!cloakWin) {
-      setStatus("Allow pop-ups to open the about:blank cloak.", true);
-      return;
-    }
-    const cloakLabel = selectors.cloakTitle?.value.trim() || cloakTitleFallback;
-    cloakWin.document.write(`<title>${cloakLabel}</title><body style="font-family:Arial,sans-serif;background:#111;color:#f5f5f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><p>This tab is camouflaged. Keep it open alongside Unidentified.</p></body>`);
-    cloakWin.document.close();
+    launchAboutBlankCloak();
   });
 
-  selectors.pageBlankToggle?.addEventListener("change", (event) => {
-    togglePageBlank(event.target.checked);
+  selectors.panicKeySelect?.addEventListener("change", (event) => {
+    panicKey = event.target.value || "Escape";
+    localStorage.setItem(panicKeyPref, panicKey);
+    panicPrimed = false;
+    setStatus(`Panic key set to ${panicKey}.`);
   });
 
-  selectors.blankOverlay?.addEventListener("click", () => {
-    if (selectors.pageBlankToggle) {
-      selectors.pageBlankToggle.checked = false;
-    }
-    togglePageBlank(false);
+  selectors.fullscreenToggle?.addEventListener("click", () => {
+    toggleFullscreen();
   });
+
+  updateFullscreenButton();
 }
 
 function composeProxyUrl(targetUrl) {
@@ -297,29 +288,12 @@ function buildPowerthroughLink(targetUrl, mode) {
 }
 
 function applyTabCloak(enabled) {
-  if (document.body.classList.contains("page-blank")) {
-    document.title = "about:blank";
-    if (faviconLink) {
-      faviconLink.href = blankFavicon;
-    }
-    return;
-  }
   const active = typeof enabled === "boolean" ? enabled : !!selectors.tabCloakToggle?.checked;
   const targetTitle = selectors.cloakTitle?.value.trim() || cloakTitleFallback;
   document.title = active ? targetTitle : realTitle;
   if (faviconLink) {
     faviconLink.href = active ? cloakFavicon : realFaviconHref || cloakFavicon;
   }
-}
-
-function togglePageBlank(enabled) {
-  document.body.classList.toggle("page-blank", enabled);
-  if (enabled) {
-    setStatus("Cloaked as about:blank. Click anywhere or press Esc to restore.");
-  } else {
-    setStatus("Unidentified restored.");
-  }
-  applyTabCloak(selectors.tabCloakToggle?.checked ?? false);
 }
 
 function ensureFaviconLink() {
@@ -330,3 +304,62 @@ function ensureFaviconLink() {
   document.head.appendChild(link);
   return link;
 }
+
+async function launchAboutBlankCloak() {
+  setStatus("Preparing about:blank cloak...");
+  const cloakWin = window.open("about:blank", "_blank");
+  if (!cloakWin) {
+    setStatus("Allow pop-ups to open the about:blank cloak.", true);
+    return;
+  }
+
+  try {
+    const response = await fetch(window.location.href, { credentials: "include" });
+    const payload = await response.text();
+    const baseTag = `<base href="${window.location.href}">`;
+    const patched = payload.includes("<head>")
+      ? payload.replace("<head>", `<head>${baseTag}`)
+      : `<head>${baseTag}</head>` + payload;
+    cloakWin.document.open();
+    cloakWin.document.write(patched);
+    cloakWin.document.close();
+  } catch (error) {
+    cloakWin.document.open();
+    cloakWin.document.write(`
+      <!DOCTYPE html>
+      <title>about:blank</title>
+      <style>html,body{margin:0;height:100%;background:#fff;}iframe{border:0;width:100%;height:100%;}</style>
+      <iframe src="${window.location.href}" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
+    `);
+    cloakWin.document.close();
+  }
+
+  setStatus("Session moved to about:blank.");
+  setTimeout(closeOriginalWindow, 400);
+}
+
+function closeOriginalWindow() {
+  try {
+    window.open("", "_self");
+    window.close();
+  } catch (error) {
+    // ignore inability to close
+  }
+  document.body.innerHTML =
+    "<main style='display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Arial,sans-serif;background:#050505;color:#eee;'><p>Session transferred to cloaked tab.</p></main>";
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+}
+
+function updateFullscreenButton() {
+  if (!selectors.fullscreenToggle) return;
+  selectors.fullscreenToggle.textContent = document.fullscreenElement ? "Exit fullscreen" : "Enter fullscreen";
+}
+
+document.addEventListener("fullscreenchange", updateFullscreenButton);

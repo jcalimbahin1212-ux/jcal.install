@@ -176,7 +176,8 @@ img {
   color: var(--text-primary);
 }
 
-.cloak button {
+.cloak button,
+.panic-settings select {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.55rem 1.25rem;
@@ -186,9 +187,27 @@ img {
   transition: background 150ms ease, transform 150ms ease;
 }
 
+.cloak button {
+  white-space: nowrap;
+}
+
 .cloak button:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
+}
+
+.panic-settings {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.panic-settings small {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
 }
 
 .toggle {
@@ -350,35 +369,6 @@ main {
   background: transparent;
 }
 
-body.page-blank {
-  background: #fff;
-  color: #000;
-}
-
-body.page-blank #app-shell {
-  opacity: 0;
-  pointer-events: none;
-  user-select: none;
-}
-
-.blank-overlay {
-  position: fixed;
-  inset: 0;
-  border: none;
-  background: #fff;
-  display: none;
-  z-index: 1000;
-  cursor: default;
-}
-
-.blank-overlay:focus-visible {
-  outline: none;
-}
-
-body.page-blank .blank-overlay {
-  display: block;
-}
-
 .features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -437,6 +427,16 @@ body.page-blank .blank-overlay {
 .subtle {
   color: var(--text-muted);
   font-size: 0.95rem;
+}
+
+.credits {
+  margin-top: 2.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 code {

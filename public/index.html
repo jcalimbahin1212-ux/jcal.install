@@ -36,36 +36,44 @@
 
         <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
 
-          <div class="comfort">
-            <span>Comfort toggles:</span>
-            <label class="toggle">
-              <input type="checkbox" id="focus-mode" />
-              <span>Focus mode</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="panic-shortcut" checked />
-              <span>Panic shortcut</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="history-off" checked />
-              <span>History off</span>
-            </label>
-          </div>
-
-          <div class="cloak" aria-label="Tab cloaking options">
-            <span>Tab cloak:</span>
-            <label class="toggle">
-              <input type="checkbox" id="tab-cloak" />
-              <span>Disguise as homework doc</span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="page-blank" />
-              <span>Mask site as about:blank</span>
-            </label>
-            <input type="text" id="cloak-title" placeholder="Custom tab title (optional)" />
-            <button type="button" id="cloak-blank">Open about:blank cloak</button>
-          </div>
+        <div class="comfort">
+          <span>Comfort toggles:</span>
+          <label class="toggle">
+            <input type="checkbox" id="focus-mode" />
+            <span>Focus mode</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="panic-shortcut" checked />
+            <span>Double-press panic</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="history-off" checked />
+            <span>History off</span>
+          </label>
         </div>
+
+        <div class="cloak" aria-label="Tab cloaking & panic options">
+          <span>Tab cloak:</span>
+          <label class="toggle">
+            <input type="checkbox" id="tab-cloak" />
+            <span>Disguise as homework doc</span>
+          </label>
+          <input type="text" id="cloak-title" placeholder="Custom tab title (optional)" />
+          <button type="button" id="cloak-blank">Launch about:blank session</button>
+        </div>
+
+        <div class="panic-settings">
+          <label for="panic-key">Panic key:</label>
+          <select id="panic-key">
+            <option value="Escape">Escape</option>
+            <option value="F1">F1</option>
+            <option value="F2">F2</option>
+            <option value="Backquote">` (backtick)</option>
+            <option value="Backspace">Backspace</option>
+          </select>
+          <small>Press twice to trigger.</small>
+        </div>
+      </div>
 
       </div>
 
@@ -106,6 +114,7 @@
         <div class="workspace__chrome">
           <p id="workspace-status">Awaiting secure session.</p>
           <button type="button" id="workspace-reset">Reset view</button>
+          <button type="button" id="fullscreen-toggle">Enter fullscreen</button>
         </div>
         <div class="workspace__frame">
           <div id="frame-placeholder" class="workspace__placeholder">
@@ -149,10 +158,12 @@
           </ol>
           <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
         </section>
+
+        <section class="credits" aria-label="Project credits">
+          <p>James Calimbahin / @1d3nt1ty &mdash; Solo project, main coder and designer.</p>
+        </section>
       </main>
     </div>
-
-    <button id="blank-overlay" class="blank-overlay" title="Click or press Esc to restore view" aria-label="Restore Unidentified"></button>
 
     <script type="module" src="app.js"></script>
   </body>
