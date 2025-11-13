@@ -367,7 +367,8 @@ function normalizeTargetUrl(input) {
     if (looksLikeDomain(input)) {
       return new URL(`https://${input}`);
     }
-    return new URL(`https://duckduckgo.com/?q=${encodeURIComponent(input)}`);
+    const searchEngine = process.env.POWERTHROUGH_SEARCH_URL || "https://duckduckgo.com/?q=";
+    return new URL(`${searchEngine}${encodeURIComponent(input)}`);
   }
 }
 
