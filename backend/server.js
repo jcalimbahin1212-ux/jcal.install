@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const ENABLE_CACHE = CACHE_TTL > 0;
+const ENABLE_HEADLESS = process.env.POWERTHROUGH_HEADLESS === "true";
+const HEADLESS_MAX_CONCURRENCY = Number(process.env.POWERTHROUGH_HEADLESS_MAX ?? 2);
 
 const app = express();
 
@@ -49,7 +51,11 @@ const metrics = {
   cacheMisses: 0,
   upstreamErrors: 0,
   totalLatencyMs: 0,
+  headlessRequests: 0,
+  headlessFailures: 0,
+  headlessActive: 0,
 };
+let chromiumLoader = null;
 
 app.all("/powerthrough", async (req, res) => {
   metrics.requests += 1;
@@ -75,6 +81,10 @@ app.all("/powerthrough", async (req, res) => {
   }
 
   const start = Date.now();
+  const wantsHeadless = ENABLE_HEADLESS && req.method === "GET" && shouldUseHeadless(req);
+  if (wantsHeadless && metrics.headlessActive >= HEADLESS_MAX_CONCURRENCY) {
+    return res.status(429).json({ error: "Headless renderer is busy. Try again shortly." });
+  }
   const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
   if (cacheKey) {
     const cached = cacheStore.get(cacheKey);
@@ -86,6 +96,25 @@ app.all("/powerthrough", async (req, res) => {
   }
 
   try {
+    if (wantsHeadless) {
+      metrics.headlessRequests += 1;
+      const headlessResult = await renderWithHeadless(targetUrl);
+      res.status(headlessResult.status);
+      headlessResult.headers.forEach(([key, value]) => res.set(key, value));
+      res.set("x-renderer", "headless");
+      const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl);
+      if (cacheKey) {
+        pruneCache();
+        cacheStore.set(cacheKey, {
+          status: headlessResult.status,
+          headers: collectHeaders(res),
+          body: Buffer.from(rewritten),
+          added: Date.now(),
+        });
+      }
+      return res.send(rewritten);
+    }
+
     const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
     const contentType = upstream.headers.get("content-type") || "";
 
@@ -373,4 +402,66 @@ function pruneCache() {
     }
     if (cacheStore.size <= 150) break;
   }
+}
+
+function shouldUseHeadless(req) {
+  if (req.query.render === "headless") return true;
+  if (req.headers["x-powerthrough-render"] === "headless") return true;
+  return false;
+}
+
+async function renderWithHeadless(targetUrl) {
+  const chromium = await loadChromium();
+  if (!chromium) {
+    throw new Error("Headless rendering requested but Playwright is unavailable.");
+  }
+  metrics.headlessActive += 1;
+  let browser;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--disable-dev-shm-usage", "--no-sandbox"],
+    });
+    const context = await browser.newContext({
+      userAgent:
+        process.env.POWERTHROUGH_HEADLESS_UA ||
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+      viewport: { width: 1366, height: 768 },
+    });
+    const page = await context.newPage();
+    await page.goto(targetUrl.href, {
+      waitUntil: "networkidle",
+      timeout: Number(process.env.POWERTHROUGH_HEADLESS_TIMEOUT ?? 30_000),
+    });
+    const body = await page.content();
+    await browser.close();
+    metrics.headlessActive -= 1;
+    return {
+      status: 200,
+      headers: [["content-type", "text/html; charset=utf-8"]],
+      body,
+    };
+  } catch (error) {
+    metrics.headlessActive -= 1;
+    metrics.headlessFailures += 1;
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    throw error;
+  }
+}
+
+async function loadChromium() {
+  if (!chromiumLoader) {
+    chromiumLoader = import("playwright")
+      .then((mod) => mod.chromium)
+      .catch((error) => {
+        console.error(
+          "[powerthrough] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
+          error
+        );
+        return null;
+      });
+  }
+  return chromiumLoader;
 }
