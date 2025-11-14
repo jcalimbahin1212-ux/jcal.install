@@ -36,11 +36,38 @@ python -m http.server 3000
 3. Serve `public/` from the same origin as the backend to avoid CORS headaches. The provided Express server already does this when deployed together.
 4. For static hosting (GitHub Pages, Netlify), you must also deploy the backend somewhere public and update the URLs in `public/app.js` to point at it.
 
+## Configuration knobs
+
+Environment variable | Purpose | Default
+--- | --- | ---
+`PORT` | HTTP port for the combined UI + relay server | `8787`
+`POWERTHROUGH_CACHE_TTL` | Upper bound (ms) for cached GET responses | `15000`
+`POWERTHROUGH_CACHE_MAX` | Max in-memory cache entries before LRU eviction | `400`
+`POWERTHROUGH_CACHE_RESPECT` | When set to `false`, ignore upstream cache-control headers | `true`
+`POWERTHROUGH_BLOCKLIST` | Comma-separated hostnames to block in addition to localhost/private ranges | _empty_
+`POWERTHROUGH_DOMAIN_FAIL_THRESHOLD` | Number of consecutive upstream failures before a domain is cooled off | `3`
+`POWERTHROUGH_DOMAIN_FAIL_WINDOW` | Rolling window (ms) for counting failures | `30000`
+`POWERTHROUGH_DOMAIN_FAIL_COOLDOWN` | How long (ms) to keep a failing domain paused | `45000`
+`POWERTHROUGH_ADMIN_TOKEN` | Enables authenticated cache purge endpoint (`POST /metrics/purge`) when set | _unset_
+`POWERTHROUGH_HEADLESS` | Enable headless Playwright rendering for complex pages | `false`
+`POWERTHROUGH_HEADLESS_MAX` | Max concurrent headless render jobs | `2`
+`POWERTHROUGH_HEADLESS_TIMEOUT` | Timeout (ms) for headless navigation | `30000`
+`POWERTHROUGH_HEADLESS_UA` | Custom user-agent for headless sessions | modern Chromium UA
+`POWERTHROUGH_FALLBACK_UA` | User-agent used for direct fetches when the client omits one | modern Chromium UA
+
+## Diagnostics & monitoring
+
+- `/metrics` now returns cache stats, latency averages, domain cooling state, and safezone counters. The frontend polls this every ~15s and renders it inside the **Live diagnostics** card.
+- `/status` exposes a lighter-weight snapshot for pings or uptime monitors.
+- A manual cache purge is available at `POST /metrics/purge` when `POWERTHROUGH_ADMIN_TOKEN` is configured and supplied via the `x-safetynet-admin` header.
+- The in-app diagnostics panel surfaces cache hit-rate, active headless renderers, last request ID, safezone status, and a trimmed event log so you can see trust-but-verify level detail without leaving the UI.
+
 ## Powerthrough relay overview
 
 - Rewrites HTML `href`, `src`, `action`, and `srcset` attributes so follow-up requests also flow through `/powerthrough`.
 - Streams non-HTML responses untouched while preserving headers like `Content-Type` and `Set-Cookie`.
 - Blocks obvious private hosts (`localhost`, `127.0.0.1`, `0.0.0.0`, RFC1918 ranges) so the relay cannot poke your LAN.
+- Cools off flaky upstream domains automatically (circuit breaker) so one bad host does not lock the entire proxy.
 - Offers three personalities (Powerthrough, Prism, Phantom). They currently map to the same endpoint but give us room to tune behavior per mode.
 
 ## Customizing

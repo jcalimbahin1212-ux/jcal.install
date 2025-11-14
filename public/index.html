@@ -219,6 +219,52 @@
         </div>
       </section>
 
+      <section class="diagnostics" aria-label="SafetyNet diagnostics">
+        <header class="diagnostics__header">
+          <div>
+            <p class="diagnostics__eyebrow">Relay telemetry</p>
+            <h2>Live diagnostics</h2>
+          </div>
+          <div class="diagnostics__actions">
+            <button type="button" id="diag-refresh">Refresh</button>
+            <button type="button" id="diag-ping">Latency test</button>
+          </div>
+        </header>
+        <div class="diagnostics__grid">
+          <article>
+            <h3>Safezone</h3>
+            <p id="diag-safezone" class="diagnostics__value">Unknown</p>
+            <small>Transport channel health</small>
+          </article>
+          <article>
+            <h3>Cache</h3>
+            <p id="diag-cache" class="diagnostics__value">–</p>
+            <small>Hit rate · size</small>
+          </article>
+          <article>
+            <h3>Requests</h3>
+            <p id="diag-requests" class="diagnostics__value">–</p>
+            <small>Totals &amp; avg latency</small>
+          </article>
+          <article>
+            <h3>Headless / renderer</h3>
+            <p id="diag-headless" class="diagnostics__value">–</p>
+            <small>Headless concurrency</small>
+          </article>
+          <article>
+            <h3>Last latency test</h3>
+            <p id="diag-latency" class="diagnostics__value">–</p>
+            <small>Health endpoint ping</small>
+          </article>
+          <article>
+            <h3>Last request</h3>
+            <p id="diag-request-id" class="diagnostics__value">–</p>
+            <small>Renderer &amp; destination</small>
+          </article>
+        </div>
+        <pre id="diag-log" class="diagnostics__log" aria-live="polite">Waiting for diagnostics…</pre>
+      </section>
+
       <main>
         <section class="features">
           <article>

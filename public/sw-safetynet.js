@@ -8,6 +8,9 @@ const SAFEZONE_ENDPOINT = "/safezone";
 const SAFEZONE_PROTOCOL = "safezone.v1";
 const SAFEZONE_MAX_REPLAY_BUFFER = 32;
 const ENABLE_SAFEZONE_TRANSPORT = true;
+const REQUEST_ID_HEADER = "x-safetynet-request-id";
+const SAFEZONE_CONNECT_TIMEOUT = 8000;
+const SAFEZONE_REQUEST_TIMEOUT = 12_000;
 
 let safezoneSocket = null;
 let safezoneConnectPromise = null;
@@ -210,6 +213,11 @@ function performSafezoneProxy(targetUrl, options = {}) {
       responseChunks: [],
     });
     safezonePendingRequests.set(requestId, entry);
+    entry.timeoutId = setTimeout(() => {
+      safezonePendingRequests.delete(requestId);
+      reject(buildSafezoneError({ message: "Safezone request timed out.", status: 504 }));
+      sendTelemetry("safezone-timeout", { target: targetUrl });
+    }, SAFEZONE_REQUEST_TIMEOUT);
 
     ensureSafezoneConnection()
       .then(() => {
@@ -227,6 +235,7 @@ function performSafezoneProxy(targetUrl, options = {}) {
       })
       .catch((error) => {
         safezonePendingRequests.delete(requestId);
+        clearPendingEntryTimeout(entry);
         reject(error);
       });
   });
@@ -278,16 +287,23 @@ async function handleSafezoneRequest(clientId, message) {
   }
 
   const ws = await ensureSafezoneConnection();
-  safezonePendingRequests.set(
-    requestId,
-    createPendingEntry({
-      clientId,
-    })
-  );
+  const entry = createPendingEntry({ clientId });
+  entry.timeoutId = setTimeout(() => {
+    safezonePendingRequests.delete(requestId);
+    notifyClient(clientId, {
+      type: "safezone-error",
+      id: requestId,
+      status: 504,
+      message: "Safezone request timed out.",
+    });
+    sendSafezoneEnvelope({ type: "cancel", id: requestId }).catch(() => {});
+  }, SAFEZONE_REQUEST_TIMEOUT);
+  safezonePendingRequests.set(requestId, entry);
   try {
     ws.send(JSON.stringify(envelope));
   } catch (error) {
     safezonePendingRequests.delete(requestId);
+    clearPendingEntryTimeout(entry);
     throw error;
   }
 }
@@ -295,7 +311,9 @@ async function handleSafezoneRequest(clientId, message) {
 function cancelSafezoneRequest(_clientId, message) {
   const requestId = message?.id;
   if (!requestId) return;
+  const entry = safezonePendingRequests.get(requestId);
   safezonePendingRequests.delete(requestId);
+  clearPendingEntryTimeout(entry);
   sendSafezoneEnvelope({ type: "cancel", id: requestId }).catch(() => {});
 }
 
@@ -355,6 +373,7 @@ function createPendingEntry(meta = {}) {
   return {
     startedAt: Date.now(),
     responseChunks: [],
+    timeoutId: null,
     ...meta,
   };
 }
@@ -439,11 +458,13 @@ function handleSafezoneResponse(payload) {
   if (!entry) {
     return;
   }
+  clearPendingEntryTimeout(entry);
   entry.responseMeta = {
     status: payload.status,
     headers: payload.headers,
     fromCache: Boolean(payload.fromCache),
     renderer: payload.renderer,
+    requestId: payload.requestId,
   };
   notifyClient(entry.clientId, {
     type: "safezone-response",
@@ -452,6 +473,7 @@ function handleSafezoneResponse(payload) {
     headers: payload.headers,
     fromCache: Boolean(payload.fromCache),
     renderer: payload.renderer,
+    requestId: payload.requestId,
   });
 }
 
@@ -481,6 +503,7 @@ function handleSafezoneBody(payload) {
   }
 
   if (payload.final) {
+    clearPendingEntryTimeout(entry);
     safezonePendingRequests.delete(payload.id);
   }
 }
@@ -488,6 +511,7 @@ function handleSafezoneBody(payload) {
 function handleSafezoneError(payload) {
   const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
   if (entry) {
+    clearPendingEntryTimeout(entry);
     safezonePendingRequests.delete(payload.id);
     notifyClient(entry.clientId, {
       type: "safezone-error",
@@ -519,6 +543,7 @@ function failAllPendingRequests(message, status = 503) {
   const entries = Array.from(safezonePendingRequests.entries());
   safezonePendingRequests.clear();
   entries.forEach(([id, meta]) => {
+    clearPendingEntryTimeout(meta);
     notifyClient(meta.clientId, {
       type: "safezone-error",
       id,
@@ -542,10 +567,20 @@ async function ensureSafezoneConnection() {
   safezoneConnectPromise = new Promise((resolve, reject) => {
     const socket = new WebSocket(buildSafezoneUrl(), SAFEZONE_PROTOCOL);
     socket.binaryType = "arraybuffer";
+    const timeoutId = setTimeout(() => {
+      socket.removeEventListener("open", handleOpen);
+      socket.removeEventListener("error", handleError);
+      safezoneConnectPromise = null;
+      try {
+        socket.close(1012, "connect-timeout");
+      } catch {}
+      reject(new Error("Safezone connection timed out."));
+    }, SAFEZONE_CONNECT_TIMEOUT);
 
     const handleOpen = () => {
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("error", handleError);
+      clearTimeout(timeoutId);
       attachSafezoneSocket(socket);
       safezoneConnectPromise = null;
       broadcastSafezoneState("connected");
@@ -555,6 +590,7 @@ async function ensureSafezoneConnection() {
     const handleError = (event) => {
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("error", handleError);
+      clearTimeout(timeoutId);
       safezoneConnectPromise = null;
       reject(event?.error || new Error("Failed to establish SafetyNet safezone."));
     };
@@ -574,10 +610,20 @@ function sendSafezoneEnvelope(envelope) {
   return ensureSafezoneConnection().then((socket) => socket.send(JSON.stringify(envelope)));
 }
 
+function clearPendingEntryTimeout(entry) {
+  if (entry?.timeoutId) {
+    clearTimeout(entry.timeoutId);
+    entry.timeoutId = null;
+  }
+}
+
 function buildResponseFromEntry(entry) {
   const headers = new Headers();
   const headerList = entry.responseMeta?.headers || [];
   headerList.forEach(([key, value]) => headers.append(key, value));
+  if (entry.responseMeta?.requestId) {
+    headers.set(REQUEST_ID_HEADER, entry.responseMeta.requestId);
+  }
   const status = entry.responseMeta?.status || 200;
   const bodyBuffer = mergeResponseChunks(entry.responseChunks || []);
   const body = bodyBuffer && bodyBuffer.length ? bodyBuffer : null;

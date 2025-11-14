@@ -580,6 +580,101 @@ main {
   background: transparent;
 }
 
+.diagnostics {
+  margin: 0 clamp(1.5rem, 4vw, 5rem) 3rem;
+  padding: 1.5rem clamp(1.5rem, 3vw, 2.5rem);
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  background: rgba(8, 0, 18, 0.45);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 25px 45px rgba(5, 0, 12, 0.45);
+}
+
+.diagnostics__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.diagnostics__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin: 0 0 0.3rem;
+}
+
+.diagnostics__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.diagnostics__actions button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.diagnostics__actions button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.diagnostics__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.diagnostics__grid article {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.diagnostics__value {
+  margin: 0.35rem 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.diagnostics__grid small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.diagnostics__log {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.35);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.85rem;
+  min-height: 130px;
+  max-height: 220px;
+  overflow-y: auto;
+  color: var(--lavender);
+  white-space: pre-line;
+}
+
+.diagnostics__log[data-state="warn"] {
+  border-color: rgba(255, 191, 73, 0.6);
+}
+
+.diagnostics__log[data-state="error"] {
+  border-color: rgba(255, 120, 120, 0.65);
+}
+
 .features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -720,5 +815,13 @@ body.history-track .portal__status::after {
   #proxy-frame {
     height: 55vh;
     min-height: 320px;
+  }
+
+  .diagnostics__actions {
+    width: 100%;
+  }
+
+  .diagnostics__actions button {
+    flex: 1;
   }
 }

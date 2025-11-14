@@ -76,6 +76,15 @@ const selectors = {
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
+  diagSafezone: document.querySelector("#diag-safezone"),
+  diagCache: document.querySelector("#diag-cache"),
+  diagRequests: document.querySelector("#diag-requests"),
+  diagHeadless: document.querySelector("#diag-headless"),
+  diagLatency: document.querySelector("#diag-latency"),
+  diagRefresh: document.querySelector("#diag-refresh"),
+  diagPing: document.querySelector("#diag-ping"),
+  diagLog: document.querySelector("#diag-log"),
+  diagRequestId: document.querySelector("#diag-request-id"),
 };
 
 const historyKey = "unidentified:last-query";
@@ -114,6 +123,11 @@ let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
 let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
 let lastNavigation = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
+const DIAGNOSTICS_REFRESH_MS = 15_000;
+const DIAGNOSTICS_LOG_LIMIT = 18;
+let diagnosticsTimer = null;
+const diagnosticsLogEntries = [];
+let lastDiagnosticsStats = null;
 if (eduUnlocked) {
   document.body.classList.remove("edu-locked");
 }
@@ -138,6 +152,7 @@ registerTransportControls();
 renderTransportPreference();
 renderTransportState(transportState);
 renderTransportMetricsHint();
+startDiagnosticsPanel();
 
 function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
@@ -214,6 +229,7 @@ function registerEventHandlers() {
     setStatus("Page loaded inside SafetyNet.");
     lastNavigation = null;
     userSelectedService = activeService;
+    renderProxyMetadataFromFrame();
   });
 
   selectors.frame?.addEventListener("error", () => {
@@ -223,6 +239,7 @@ function registerEventHandlers() {
     if (!tryServiceFallback()) {
       setStatus("Unable to load the requested page.", true);
     }
+    logDiagnostics("Frame navigation errored; attempting fallback.", "warn");
   });
 
   selectors.frameReset?.addEventListener("click", () => {
@@ -312,6 +329,15 @@ function registerEventHandlers() {
   updateFullscreenButton();
 
   prepareEducationGate();
+
+  selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
+  selectors.diagPing?.addEventListener("click", () => runHealthPing());
+  window.addEventListener("beforeunload", () => {
+    if (diagnosticsTimer) {
+      clearInterval(diagnosticsTimer);
+      diagnosticsTimer = null;
+    }
+  });
 }
 
 function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
@@ -519,6 +545,7 @@ function updateSafezoneState(stateMessage) {
   };
   if (previous !== transportState.safezone) {
     announceSafezoneState(transportState);
+    logDiagnostics(`Safezone → ${transportState.safezone}.`);
   }
   renderTransportState(transportState);
 }
@@ -544,6 +571,7 @@ function renderTransportState(state) {
       ? "Safezone: unstable"
       : "Safezone: unknown";
   selectors.transportStateLabel.textContent = label;
+  updateDiagnosticsSafezone();
 }
 
 function renderTransportMetricsHint() {
@@ -858,8 +886,15 @@ function listenForSwMessages() {
     const { event: eventName, payload: eventPayload } = payload;
     if (eventName === "proxy-fetch-error") {
       setStatus(`SW proxy error: ${eventPayload.message}`, true);
+      logDiagnostics(`SW proxy error: ${eventPayload.message}`, "error");
     } else if (eventName === "network-fallback-cache") {
       setStatus("Loaded offline copy from cache.", false);
+      logDiagnostics("Offline cache served network request.");
+    } else if (eventName === "safezone-timeout") {
+      setStatus("Safezone timed out, relaying directly.", true);
+      logDiagnostics(`Safezone timeout for ${eventPayload?.target ?? "unknown"}.`, "warn");
+    } else if (eventName === "safezone-fetch-error") {
+      logDiagnostics(`Safezone fetch error: ${eventPayload?.message ?? "unknown"}.`, "warn");
     }
   });
 }
@@ -881,6 +916,7 @@ function setTransportPreference(mode) {
   renderTransportPreference();
   renderTransportMetricsHint();
   setStatus(`Transport mode set to ${transportPreference}.`);
+  logDiagnostics(`Transport preference → ${transportPreference}.`);
 }
 
 function renderTransportPreference() {
@@ -925,6 +961,7 @@ function launchWithService(serviceKey, targetUrl, { fallback = false, meta } = {
   const enrichedMeta = { ...meta, intent, transport: transportPreference };
   beginServiceAttempt(serviceKey, intent);
   const outboundUrl = composeProxyUrl(targetUrl, serviceKey, enrichedMeta);
+  logDiagnostics(`Routing ${describeTargetForLog(targetUrl)} via ${services[serviceKey].name} (${intent}).`);
   if (selectors.frame) {
     selectors.framePlaceholder?.classList.add("is-hidden");
     selectors.frame.src = outboundUrl;
@@ -952,9 +989,11 @@ function tryServiceFallback() {
       return true;
     }
     lastNavigation = null;
+    logDiagnostics("All relay fallbacks exhausted.", "error");
     return false;
   }
   setStatus(`Retrying via ${services[nextKey].name}...`, false);
+  logDiagnostics(`Fallback → ${services[nextKey].name}.`, "warn");
   launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true, meta: lastNavigation.meta });
   return true;
 }
@@ -980,9 +1019,135 @@ function advanceSearchProvider(reasonMessage) {
   const baseMessage = `Switching to ${provider.label} results...`;
   const message = reasonMessage ? `${reasonMessage} ${baseMessage}` : baseMessage;
   setStatus(message, true);
+  logDiagnostics(message, "warn");
   cancelActiveServiceAttempt();
   launchWithService(lastNavigation.order[0], lastNavigation.targetUrl, { meta: lastNavigation.meta });
   return true;
+}
+
+function startDiagnosticsPanel() {
+  if (!selectors.diagSafezone) {
+    return;
+  }
+  refreshDiagnostics({ silent: true }).finally(() => {
+    diagnosticsTimer = window.setInterval(() => refreshDiagnostics({ silent: true }), DIAGNOSTICS_REFRESH_MS);
+  });
+}
+
+async function refreshDiagnostics(options = {}) {
+  if (!selectors.diagSafezone) {
+    return;
+  }
+  try {
+    const response = await fetch("/metrics", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    lastDiagnosticsStats = payload;
+    if (selectors.diagRequests) {
+      const latency = Math.round(payload.avgLatencyMs || 0);
+      selectors.diagRequests.textContent = `${payload.requests ?? 0} req · ${latency} ms avg`;
+    }
+    if (selectors.diagCache) {
+      const hitRate = Math.round(((payload.cacheHitRate ?? 0) * 100) || 0);
+      selectors.diagCache.textContent = `${hitRate}% · ${payload.cacheSize ?? 0}/${payload.cacheMaxEntries ?? "∞"}`;
+    }
+    if (selectors.diagHeadless) {
+      selectors.diagHeadless.textContent = `${payload.headlessActive ?? 0} live · ${payload.headlessFailures ?? 0} fail`;
+    }
+    updateDiagnosticsSafezone();
+    if (!options.silent) {
+      logDiagnostics(`Diagnostics refreshed${options.userInitiated ? " (manual)" : ""}.`);
+    }
+  } catch (error) {
+    logDiagnostics(`Diagnostics refresh failed: ${error.message}`, "warn");
+  }
+}
+
+async function runHealthPing() {
+  if (!selectors.diagLatency) {
+    return;
+  }
+  const started = performance.now();
+  try {
+    const response = await fetch("/health", { cache: "no-store" });
+    const latency = Math.round(performance.now() - started);
+    selectors.diagLatency.textContent = `${latency} ms`;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    logDiagnostics(`Health ping ok (${latency} ms).`);
+  } catch (error) {
+    const latency = Math.round(performance.now() - started);
+    selectors.diagLatency.textContent = `error (${latency} ms)`;
+    logDiagnostics(`Health ping failed: ${error.message}`, "error");
+  }
+}
+
+function logDiagnostics(message, level = "info") {
+  if (!selectors.diagLog) {
+    return;
+  }
+  const timestamp = new Date().toLocaleTimeString();
+  const entry = `[${timestamp}] ${message}`;
+  diagnosticsLogEntries.push(entry);
+  if (diagnosticsLogEntries.length > DIAGNOSTICS_LOG_LIMIT) {
+    diagnosticsLogEntries.shift();
+  }
+  selectors.diagLog.textContent = diagnosticsLogEntries.join("\n");
+  selectors.diagLog.dataset.state = level;
+}
+
+function renderProxyMetadataFromFrame() {
+  if (!selectors.frame || !selectors.frame.contentDocument) {
+    return;
+  }
+  const meta = readProxyMetadata(selectors.frame.contentDocument);
+  if (!meta) {
+    return;
+  }
+  if (selectors.diagRequestId) {
+    const rendererLabel = meta.renderer ? ` · ${meta.renderer}` : "";
+    selectors.diagRequestId.textContent = meta.requestId ? `${meta.requestId}${rendererLabel}` : meta.renderer || "–";
+  }
+  if (meta.target) {
+    logDiagnostics(`Session ready for ${meta.target} (${meta.renderer || activeService}).`);
+  } else {
+    logDiagnostics(`Renderer confirmed: ${meta.renderer || "direct"}.`);
+  }
+}
+
+function readProxyMetadata(doc) {
+  try {
+    const getMeta = (name) => doc.querySelector(`meta[name='${name}']`)?.getAttribute("content") || null;
+    const requestId = getMeta("safetynet-request-id");
+    const renderer = getMeta("safetynet-renderer");
+    const target = getMeta("safetynet-target");
+    if (!requestId && !renderer && !target) {
+      return null;
+    }
+    return { requestId, renderer, target };
+  } catch {
+    return null;
+  }
+}
+
+function updateDiagnosticsSafezone() {
+  if (!selectors.diagSafezone) {
+    return;
+  }
+  const errorCount = lastDiagnosticsStats?.safezoneErrors ?? 0;
+  selectors.diagSafezone.textContent = `${transportState.safezone || "unknown"} · ${errorCount} errs`;
+}
+
+function describeTargetForLog(targetUrl) {
+  try {
+    const parsed = new URL(targetUrl);
+    return parsed.hostname || parsed.origin;
+  } catch {
+    return targetUrl;
+  }
 }
 const SEARCH_PROVIDERS = [
   {

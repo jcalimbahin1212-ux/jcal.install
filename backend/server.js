@@ -4,6 +4,7 @@ import morgan from "morgan";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
@@ -13,9 +14,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
+const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
+const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
 const ENABLE_CACHE = CACHE_TTL > 0;
 const ENABLE_HEADLESS = process.env.POWERTHROUGH_HEADLESS === "true";
 const HEADLESS_MAX_CONCURRENCY = Number(process.env.POWERTHROUGH_HEADLESS_MAX ?? 2);
+const DOMAIN_FAILURE_THRESHOLD = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_THRESHOLD ?? 3);
+const DOMAIN_FAILURE_WINDOW = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_WINDOW ?? 30_000);
+const DOMAIN_FAILURE_COOLDOWN = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_COOLDOWN ?? 45_000);
+const ADMIN_TOKEN = process.env.POWERTHROUGH_ADMIN_TOKEN || "";
+const REQUEST_ID_HEADER = "x-safetynet-request-id";
 
 const app = express();
 const server = createServer(app);
@@ -48,21 +56,31 @@ const hopByHopHeaders = new Set([
 ]);
 
 const blockedHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const envBlocked = (process.env.POWERTHROUGH_BLOCKLIST || "")
+  .split(",")
+  .map((entry) => entry.trim().toLowerCase())
+  .filter(Boolean);
+envBlocked.forEach((host) => blockedHosts.add(host));
 const upstreamRewriteRules = [
   { test: /duckduckgo\.com/i, csp: "duckduckgo-hardened" },
   { test: /google\./i, csp: "google-compatible" },
   { test: /bing\.com/i, csp: "bing-compatible" },
 ];
 const cacheStore = new Map();
+const domainHealth = new Map();
 const metrics = {
   requests: 0,
   cacheHits: 0,
   cacheMisses: 0,
+  cacheEvictions: 0,
   upstreamErrors: 0,
   totalLatencyMs: 0,
   headlessRequests: 0,
   headlessFailures: 0,
   headlessActive: 0,
+  safezoneRequests: 0,
+  safezoneErrors: 0,
+  domainBlocks: 0,
 };
 let chromiumLoader = null;
 class ProxyError extends Error {
@@ -86,6 +104,8 @@ app.get("/proxy/:encoded", (req, res) => {
 app.all("/powerthrough", async (req, res) => {
   const targetParam = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
   const renderHint = extractRenderHint(req);
+  const requestId = createRequestId("http");
+  res.setHeader(REQUEST_ID_HEADER, requestId);
 
   try {
     const result = await executeProxyCall({
@@ -96,7 +116,10 @@ app.all("/powerthrough", async (req, res) => {
         headers: req.headers,
         bodyStream: req,
       },
-    });
+    }, { requestId });
+    if (!res.headersSent && result?.requestId && result.requestId !== requestId) {
+      res.setHeader(REQUEST_ID_HEADER, result.requestId);
+    }
     return applyProxyResult(res, result);
   } catch (error) {
     const isProxyError = error instanceof ProxyError;
@@ -144,17 +167,17 @@ wss.on("connection", (ws) => {
   setupSafezoneConnection(ws);
 });
 
-async function executeProxyCall(params) {
+async function executeProxyCall(params, context = {}) {
   metrics.requests += 1;
   const start = Date.now();
   try {
-    return await handleProxyRequest(params);
+    return await handleProxyRequest(params, context);
   } finally {
     metrics.totalLatencyMs += Date.now() - start;
   }
 }
 
-async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
+async function handleProxyRequest({ targetParam, renderHint, clientRequest }, context = {}) {
   const urlParam = typeof targetParam === "string" ? targetParam : "";
   if (!urlParam) {
     throw new ProxyError(400, "Missing url query parameter.");
@@ -185,40 +208,57 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
     ENABLE_CACHE && method === "GET" ? buildCacheKey(targetUrl, wantsHeadless ? "headless" : "direct") : null;
   if (cacheKey) {
     const cached = cacheStore.get(cacheKey);
-    if (cached && Date.now() - cached.added < CACHE_TTL) {
+    if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
       metrics.cacheHits += 1;
-      return {
+      return withRequestContext(
+        {
         status: cached.status,
         headers: cloneHeaderList(cached.headers),
         body: Buffer.from(cached.body),
         fromCache: true,
         renderer: cached.renderer,
-      };
+        },
+        context
+      );
+    }
+    if (cached) {
+      cacheStore.delete(cacheKey);
     }
     metrics.cacheMisses += 1;
   }
 
+  ensureDomainHealthy(targetUrl.hostname);
+
   if (wantsHeadless) {
     metrics.headlessRequests += 1;
-    const headlessResult = await renderWithHeadless(targetUrl);
-    const headers = normalizeHeaderList(headlessResult.headers);
-    headers.push(["x-renderer", "headless"]);
-    const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl);
-    const bodyBuffer = Buffer.from(rewritten);
-    if (cacheKey) {
-      persistCacheEntry(cacheKey, {
+    try {
+      const headlessResult = await renderWithHeadless(targetUrl);
+      const headers = normalizeHeaderList(headlessResult.headers);
+      headers.push(["x-renderer", "headless"]);
+      const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl, {
+        ...context,
+        renderer: "headless",
+      });
+      const bodyBuffer = Buffer.from(rewritten);
+      if (cacheKey) {
+        persistCacheEntry(cacheKey, {
+          status: headlessResult.status,
+          headers,
+          body: bodyBuffer,
+          renderer: "headless",
+        });
+      }
+      recordDomainSuccess(targetUrl.hostname);
+      return withRequestContext({
         status: headlessResult.status,
         headers,
         body: bodyBuffer,
         renderer: "headless",
-      });
+      }, context);
+    } catch (error) {
+      recordDomainFailure(targetUrl.hostname);
+      throw error;
     }
-    return {
-      status: headlessResult.status,
-      headers,
-      body: bodyBuffer,
-      renderer: "headless",
-    };
   }
 
   try {
@@ -228,8 +268,9 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
     const rewriteProfile = selectRewriteProfile(targetUrl.hostname);
 
     if (contentType.includes("text/html")) {
-      const html = await upstream.text();
-      let rewritten = rewriteHtmlDocument(html, targetUrl);
+  const html = await upstream.text();
+  const htmlContext = { ...context, renderer: "direct" };
+  let rewritten = rewriteHtmlDocument(html, targetUrl, htmlContext);
       if (rewriteProfile?.csp === "duckduckgo-hardened") {
         rewritten = patchDuckduckgoPage(rewritten);
       } else if (rewriteProfile?.csp === "google-compatible") {
@@ -238,6 +279,7 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
       const bodyBuffer = Buffer.from(rewritten);
       setHeaderValue(headers, "content-type", "text/html; charset=utf-8");
       setHeaderValue(headers, "x-frame-options", "ALLOWALL");
+  setHeaderValue(headers, "x-renderer", "direct");
       if (rewriteProfile?.csp) {
         normalizeResponseSecurityHeaders(headers, rewriteProfile.csp);
       }
@@ -249,11 +291,12 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
           renderer: "direct",
         });
       }
-      return {
+      recordDomainSuccess(targetUrl.hostname);
+      return withRequestContext({
         status: upstream.status,
         headers,
         body: bodyBuffer,
-      };
+      }, context);
     }
 
     if (contentType.includes("text/css")) {
@@ -261,6 +304,7 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
       const rewritten = rewriteCssUrls(css, targetUrl);
       const bodyBuffer = Buffer.from(rewritten);
       setHeaderValue(headers, "content-type", contentType);
+  setHeaderValue(headers, "x-renderer", "direct");
       if (cacheKey) {
         persistCacheEntry(cacheKey, {
           status: upstream.status,
@@ -269,26 +313,32 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
           renderer: "direct",
         });
       }
-      return {
+      recordDomainSuccess(targetUrl.hostname);
+      return withRequestContext({
         status: upstream.status,
         headers,
         body: bodyBuffer,
-      };
+      }, context);
     }
 
     if (upstream.body) {
-      return {
+      setHeaderValue(headers, "x-renderer", "direct");
+      recordDomainSuccess(targetUrl.hostname);
+      return withRequestContext({
         status: upstream.status,
         headers,
         stream: Readable.fromWeb(upstream.body),
-      };
+      }, context);
     }
 
-    return {
+    setHeaderValue(headers, "x-renderer", "direct");
+    recordDomainSuccess(targetUrl.hostname);
+    return withRequestContext({
       status: upstream.status,
       headers,
-    };
+    }, context);
   } catch (error) {
+    recordDomainFailure(targetUrl.hostname);
     throw error instanceof ProxyError ? error : new ProxyError(502, "Failed to reach target upstream.", error.message);
   }
 }
@@ -296,6 +346,9 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
 function applyProxyResult(res, result) {
   res.status(result.status);
   applyHeaderList(res, result.headers);
+  if (result.requestId) {
+    res.set(REQUEST_ID_HEADER, result.requestId);
+  }
   if (result.fromCache) {
     res.set("x-cache", "HIT");
   }
@@ -378,6 +431,7 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
     sendSafezoneMessage(ws, { type: "error", message: "Request id is required." });
     return;
   }
+  metrics.safezoneRequests += 1;
 
   const normalizedMethod = typeof method === "string" ? method.toUpperCase() : "GET";
   let normalizedHeaders;
@@ -410,16 +464,21 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
     normalizedHeaders["content-length"] = String(bodyLength);
   }
 
+  const requestContext = { requestId: createRequestId("safezone") };
+
   try {
-    const result = await executeProxyCall({
-      targetParam: url,
-      renderHint,
-      clientRequest: {
-        method: normalizedMethod,
-        headers: normalizedHeaders,
-        bodyStream,
+    const result = await executeProxyCall(
+      {
+        targetParam: url,
+        renderHint,
+        clientRequest: {
+          method: normalizedMethod,
+          headers: normalizedHeaders,
+          bodyStream,
+        },
       },
-    });
+      requestContext
+    );
 
     sendSafezoneMessage(ws, {
       type: "response",
@@ -428,6 +487,7 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
       headers: result.headers,
       fromCache: Boolean(result.fromCache),
       renderer: result.renderer || "direct",
+      requestId: requestContext.requestId,
     });
 
     if (result.body) {
@@ -442,6 +502,7 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
 
     sendBodyChunk(ws, id, Buffer.alloc(0), true);
   } catch (error) {
+    metrics.safezoneErrors += 1;
     const isProxyError = error instanceof ProxyError;
     if (!isProxyError || error.status >= 500) {
       metrics.upstreamErrors += 1;
@@ -453,6 +514,7 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
       status: isProxyError ? error.status : 502,
       message: isProxyError ? error.message : "Failed to reach target upstream.",
       details: isProxyError ? error.details : error.message,
+      requestId: requestContext.requestId,
     });
   }
 }
@@ -551,13 +613,47 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/metrics", (req, res) => {
+  const totalCacheOps = metrics.cacheHits + metrics.cacheMisses;
+  const cacheHitRate = totalCacheOps > 0 ? metrics.cacheHits / totalCacheOps : 0;
+  const avgLatency = metrics.requests > 0 ? metrics.totalLatencyMs / metrics.requests : 0;
   res.json({
     ...metrics,
     cacheSize: cacheStore.size,
     cacheTtlMs: CACHE_TTL,
+    cacheMaxEntries: CACHE_MAX_ENTRIES,
     cacheEnabled: ENABLE_CACHE,
+    cacheHitRate,
+    avgLatencyMs: Math.round(avgLatency),
+    domainHealth: summarizeDomainHealth(),
   });
 });
+
+app.get("/status", (req, res) => {
+  res.json({
+    ok: true,
+    timestamp: Date.now(),
+    cache: {
+      enabled: ENABLE_CACHE,
+      size: cacheStore.size,
+      ttlMs: CACHE_TTL,
+      maxEntries: CACHE_MAX_ENTRIES,
+    },
+    safezone: {
+      requests: metrics.safezoneRequests,
+      errors: metrics.safezoneErrors,
+      headlessActive: metrics.headlessActive,
+    },
+    domainHealth: summarizeDomainHealth(),
+  });
+});
+
+if (ADMIN_TOKEN) {
+  app.post("/metrics/purge", requireAdminToken, (_req, res) => {
+    const removed = cacheStore.size;
+    cacheStore.clear();
+    res.json({ status: "purged", removed });
+  });
+}
 
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 app.use((req, res) => {
@@ -567,6 +663,123 @@ app.use((req, res) => {
 server.listen(PORT, () => {
   console.log(`Unidentified backend online at http://localhost:${PORT}`);
 });
+
+function requireAdminToken(req, res, next) {
+  if (!ADMIN_TOKEN) {
+    return res.status(501).json({ error: "Admin token not configured." });
+  }
+  const supplied = req.headers["x-safetynet-admin"];
+  if (supplied !== ADMIN_TOKEN) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  return next();
+}
+
+function createRequestId(prefix = "req") {
+  try {
+    return `${prefix}-${randomUUID()}`;
+  } catch {
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+}
+
+function withRequestContext(payload, context = {}) {
+  if (context?.requestId && !payload.requestId) {
+    payload.requestId = context.requestId;
+  }
+  return payload;
+}
+
+function ensureDomainHealthy(hostname) {
+  if (!hostname || DOMAIN_FAILURE_THRESHOLD <= 0) {
+    return;
+  }
+  const entry = domainHealth.get(hostname.toLowerCase());
+  if (entry && entry.blockedUntil && entry.blockedUntil > Date.now()) {
+    metrics.domainBlocks += 1;
+    const remaining = Math.max(0, entry.blockedUntil - Date.now());
+    throw new ProxyError(
+      503,
+      `Upstream for ${hostname} is cooling down.`,
+      `Retry in ${Math.ceil(remaining / 1000)}s.`
+    );
+  }
+}
+
+function recordDomainFailure(hostname) {
+  if (!hostname || DOMAIN_FAILURE_THRESHOLD <= 0) {
+    return;
+  }
+  const key = hostname.toLowerCase();
+  const now = Date.now();
+  const entry = domainHealth.get(key) || { failures: 0, lastFailureAt: 0, blockedUntil: 0 };
+  if (entry.blockedUntil && entry.blockedUntil > now) {
+    domainHealth.set(key, entry);
+    return;
+  }
+  if (now - entry.lastFailureAt > DOMAIN_FAILURE_WINDOW) {
+    entry.failures = 0;
+  }
+  entry.failures += 1;
+  entry.lastFailureAt = now;
+  if (entry.failures >= DOMAIN_FAILURE_THRESHOLD) {
+    entry.blockedUntil = now + DOMAIN_FAILURE_COOLDOWN;
+  }
+  domainHealth.set(key, entry);
+}
+
+function recordDomainSuccess(hostname) {
+  if (!hostname || DOMAIN_FAILURE_THRESHOLD <= 0) {
+    return;
+  }
+  domainHealth.delete(hostname.toLowerCase());
+}
+
+function summarizeDomainHealth() {
+  const now = Date.now();
+  return Array.from(domainHealth.entries()).map(([host, info]) => ({
+    host,
+    failures: info.failures,
+    coolingOff: Boolean(info.blockedUntil && info.blockedUntil > now),
+    blockedUntil: info.blockedUntil && info.blockedUntil > now ? info.blockedUntil : null,
+  }));
+}
+
+function resolveCacheTtl(headers = []) {
+  if (!ENABLE_CACHE) {
+    return 0;
+  }
+  if (!CACHE_RESPECT_CONTROL) {
+    return Math.max(0, CACHE_TTL);
+  }
+  const cacheControl = findHeaderValue(headers, "cache-control");
+  if (cacheControl) {
+    if (/no-store|private/i.test(cacheControl)) {
+      return 0;
+    }
+    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+    if (maxAgeMatch) {
+      const parsed = Number(maxAgeMatch[1]) * 1000;
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return CACHE_TTL > 0 ? Math.min(parsed, CACHE_TTL) : parsed;
+      }
+    }
+  }
+  return Math.max(0, CACHE_TTL);
+}
+
+function findHeaderValue(headers = [], target) {
+  if (!headers) {
+    return null;
+  }
+  const lowerTarget = target.toLowerCase();
+  for (const [key, value] of headers) {
+    if (key.toLowerCase() === lowerTarget) {
+      return value;
+    }
+  }
+  return null;
+}
 
 function buildFetchOptions(clientRequest, targetUrl) {
   const incomingHeaders = clientRequest.headers || {};
@@ -664,14 +877,21 @@ function persistCacheEntry(cacheKey, payload) {
   if (!cacheKey || !payload || !payload.body) {
     return;
   }
+  const ttlMs = resolveCacheTtl(payload.headers);
+  if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+    return;
+  }
   pruneCache();
+  const expiresAt = Date.now() + ttlMs;
   cacheStore.set(cacheKey, {
     status: payload.status,
     headers: cloneHeaderList(payload.headers),
     body: Buffer.from(payload.body),
     renderer: payload.renderer || "direct",
     added: Date.now(),
+    expiresAt,
   });
+  enforceCacheCapacity();
 }
 
 function buildCacheKey(targetUrl, variant = "direct") {
@@ -708,8 +928,26 @@ function stripHeader(headers, target) {
   }
 }
 
-function rewriteHtmlDocument(html, baseUrl) {
+function rewriteHtmlDocument(html, baseUrl, context = {}) {
   const $ = load(html, { decodeEntities: false });
+  if ($("head").length === 0) {
+    $("html").prepend("<head></head>");
+  }
+  const head = $("head").first();
+  const headMeta = [
+    ["safetynet-request-id", context.requestId],
+    ["safetynet-renderer", context.renderer || "direct"],
+    ["safetynet-target", baseUrl?.toString?.() ?? ""],
+  ];
+  headMeta.forEach(([name, value]) => {
+    if (!value) return;
+    const existing = head.find(`meta[name='${name}']`).first();
+    if (existing.length) {
+      existing.attr("content", value);
+    } else {
+      head.prepend(`<meta name="${name}" content="${value}">`);
+    }
+  });
 
   const attributesToRewrite = [
     ["a", "href"],
@@ -849,13 +1087,30 @@ function isPrivateIpv4(ip) {
 }
 
 function pruneCache() {
-  if (cacheStore.size < 200) return;
+  purgeExpiredCacheEntries();
+  enforceCacheCapacity();
+}
+
+function purgeExpiredCacheEntries() {
   const now = Date.now();
   for (const [key, value] of cacheStore.entries()) {
-    if (now - value.added > CACHE_TTL || cacheStore.size > 150) {
+    if (value.expiresAt && value.expiresAt <= now) {
       cacheStore.delete(key);
     }
-    if (cacheStore.size <= 150) break;
+  }
+}
+
+function enforceCacheCapacity() {
+  if (cacheStore.size <= CACHE_MAX_ENTRIES) {
+    return;
+  }
+  while (cacheStore.size > CACHE_MAX_ENTRIES) {
+    const oldestKey = cacheStore.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    cacheStore.delete(oldestKey);
+    metrics.cacheEvictions += 1;
   }
 }
 
