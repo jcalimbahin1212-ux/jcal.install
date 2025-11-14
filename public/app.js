@@ -533,6 +533,9 @@ function inspectSearchRenderFailure() {
     if (text.includes("please try again later") && text.includes("duckduckgo")) {
       return `${providerLabel} returned an error page.`;
     }
+    if (text.includes("bots use duckduckgo too") || text.includes("select all squares containing a duck")) {
+      return `${providerLabel} presented a captcha challenge. Switching providers automatically.`;
+    }
     const errorSelector =
       doc.querySelector(".msg-error, .error-page, [data-testid='error-message']") ||
       doc.querySelector("body[data-theme='dark'] .error__title");
@@ -1166,6 +1169,10 @@ function describeTargetForLog(targetUrl) {
   }
 }
 const SEARCH_PROVIDERS = [
+  {
+    label: "Bing Lite",
+    buildUrl: (term) => `https://lite.bing.com/search?q=${encodeURIComponent(term)}`,
+  },
   {
     label: "Brave Search",
     buildUrl: (term) => `https://search.brave.com/search?source=web&q=${encodeURIComponent(term)}`,
