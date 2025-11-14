@@ -370,75 +370,94 @@ function extractRenderHint(req) {
 }
 
 function setupSafezoneConnection(ws) {
-  const activeStreams = new Map();
+  const channels = new Map();
 
   ws.on("message", (data, isBinary) => {
-    handleSafezoneMessage(ws, activeStreams, data, isBinary).catch((error) => {
+    handleSafezoneMessage(ws, channels, data, isBinary).catch((error) => {
       console.error("[safezone] failed to handle message", error);
-      sendSafezoneMessage(ws, { type: "error", message: "Internal safezone failure." });
+      sendSafezoneFrame(ws, { op: SAFEZONE_OP.ERROR, payload: { message: "Internal safezone failure." } });
     });
   });
 
   ws.on("close", () => {
-    for (const stream of activeStreams.values()) {
-      stream.destroy();
+    for (const channel of channels.values()) {
+      channel.stream?.destroy();
     }
-    activeStreams.clear();
+    channels.clear();
+    metrics.safezoneActiveChannels = 0;
   });
 }
 
-async function handleSafezoneMessage(ws, activeStreams, rawData, isBinary) {
+async function handleSafezoneMessage(ws, channels, rawData, isBinary) {
   if (isBinary) {
-    sendSafezoneMessage(ws, { type: "error", message: "Binary safezone frames are not supported." });
+    sendSafezoneFrame(ws, { op: SAFEZONE_OP.ERROR, payload: { message: "Binary safezone frames are not supported." } });
     return;
   }
 
-  let payload;
+  let frame;
   try {
     const asString = typeof rawData === "string" ? rawData : rawData.toString("utf8");
-    payload = JSON.parse(asString);
+    frame = JSON.parse(asString);
   } catch {
-    sendSafezoneMessage(ws, { type: "error", message: "Invalid safezone message payload." });
+    sendSafezoneFrame(ws, { op: SAFEZONE_OP.ERROR, payload: { message: "Invalid safezone frame payload." } });
     return;
   }
 
-  if (!payload || typeof payload !== "object") {
-    sendSafezoneMessage(ws, { type: "error", message: "Malformed safezone payload." });
+  if (!frame || typeof frame !== "object" || typeof frame.op !== "string") {
+    sendSafezoneFrame(ws, { op: SAFEZONE_OP.ERROR, payload: { message: "Malformed safezone frame." } });
     return;
   }
 
-  if (payload.type === "request") {
-    await processSafezoneRequest(ws, activeStreams, payload);
+  const channelId = Number(frame.ch);
+  if (!Number.isInteger(channelId) || channelId < 0 || channelId > 65535) {
+    sendSafezoneFrame(ws, { op: SAFEZONE_OP.ERROR, payload: { message: "Invalid channel id." } });
     return;
   }
 
-  if (payload.type === "cancel") {
-    const { id } = payload;
-    if (typeof id === "string" && activeStreams.has(id)) {
-      const stream = activeStreams.get(id);
-      activeStreams.delete(id);
-      stream.destroy(new Error("Client cancelled."));
-    }
-    return;
+  switch (frame.op) {
+    case SAFEZONE_OP.OPEN:
+      await processSafezoneOpen(ws, channels, channelId, frame);
+      break;
+    case SAFEZONE_OP.CANCEL:
+      closeSafezoneChannel(channels, channelId, "Client cancelled.");
+      break;
+    case SAFEZONE_OP.PING:
+      sendSafezoneFrame(ws, { ch: channelId, op: SAFEZONE_OP.PONG, payload: frame.payload });
+      break;
+    default:
+      sendSafezoneFrame(ws, {
+        ch: channelId,
+        op: SAFEZONE_OP.ERROR,
+        payload: { message: `Unsupported safezone op: ${frame.op}` },
+      });
+      break;
   }
-
-  sendSafezoneMessage(ws, { type: "error", message: `Unsupported safezone message type: ${payload.type}` });
 }
 
-async function processSafezoneRequest(ws, activeStreams, payload) {
-  const { id, url, method, headers, renderHint, body, bodyEncoding } = payload;
-  if (!id || typeof id !== "string") {
-    sendSafezoneMessage(ws, { type: "error", message: "Request id is required." });
+async function processSafezoneOpen(ws, channels, channelId, frame) {
+  const payload = frame.payload || {};
+  const { url, method, headers, renderHint, body, bodyEncoding } = payload;
+  metrics.safezoneRequests += 1;
+
+  if (channels.has(channelId)) {
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.ERROR,
+      payload: { message: "Channel already in use." },
+    });
     return;
   }
-  metrics.safezoneRequests += 1;
 
   const normalizedMethod = typeof method === "string" ? method.toUpperCase() : "GET";
   let normalizedHeaders;
   try {
     normalizedHeaders = sanitizeHeaderBag(headers);
   } catch (error) {
-    sendSafezoneMessage(ws, { type: "error", id, message: error.message || "Invalid headers provided." });
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.ERROR,
+      payload: { message: error.message || "Invalid headers provided." },
+    });
     return;
   }
 
@@ -450,12 +469,14 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
     bodyLength = materialized.length;
   } catch (error) {
     const message = error instanceof ProxyError ? error.message : "Invalid request body.";
-    sendSafezoneMessage(ws, {
-      type: "error",
-      id,
-      status: error instanceof ProxyError ? error.status : 400,
-      message,
-      details: error.details,
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.ERROR,
+      payload: {
+        status: error instanceof ProxyError ? error.status : 400,
+        message,
+        details: error.details,
+      },
     });
     return;
   }
@@ -480,27 +501,30 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
       requestContext
     );
 
-    sendSafezoneMessage(ws, {
-      type: "response",
-      id,
-      status: result.status,
-      headers: result.headers,
-      fromCache: Boolean(result.fromCache),
-      renderer: result.renderer || "direct",
-      requestId: requestContext.requestId,
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.HEADERS,
+      payload: {
+        status: result.status,
+        headers: result.headers,
+        fromCache: Boolean(result.fromCache),
+        renderer: result.renderer || "direct",
+        requestId: requestContext.requestId,
+      },
     });
 
     if (result.body) {
-      sendBodyChunk(ws, id, result.body, true);
+      sendSafezoneDataFrame(ws, channelId, result.body, true);
       return;
     }
 
     if (result.stream) {
-      streamProxyBody(ws, id, result.stream, activeStreams);
+      metrics.safezoneActiveChannels += 1;
+      streamProxyBody(ws, channelId, result.stream, channels);
       return;
     }
 
-    sendBodyChunk(ws, id, Buffer.alloc(0), true);
+    sendSafezoneFrame(ws, { ch: channelId, op: SAFEZONE_OP.END });
   } catch (error) {
     metrics.safezoneErrors += 1;
     const isProxyError = error instanceof ProxyError;
@@ -508,55 +532,80 @@ async function processSafezoneRequest(ws, activeStreams, payload) {
       metrics.upstreamErrors += 1;
       console.error("[safezone] proxy error", error);
     }
-    sendSafezoneMessage(ws, {
-      type: "error",
-      id,
-      status: isProxyError ? error.status : 502,
-      message: isProxyError ? error.message : "Failed to reach target upstream.",
-      details: isProxyError ? error.details : error.message,
-      requestId: requestContext.requestId,
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.ERROR,
+      payload: {
+        status: isProxyError ? error.status : 502,
+        message: isProxyError ? error.message : "Failed to reach target upstream.",
+        details: isProxyError ? error.details : error.message,
+        requestId: requestContext.requestId,
+      },
     });
   }
 }
 
-function sendSafezoneMessage(ws, payload) {
+function closeSafezoneChannel(channels, channelId, reason) {
+  const channel = channels.get(channelId);
+  if (!channel) return;
+  channels.delete(channelId);
+  metrics.safezoneActiveChannels = Math.max(0, metrics.safezoneActiveChannels - 1);
+  if (channel.stream) {
+    try {
+      channel.stream.destroy(new Error(reason || "Channel closed."));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function sendSafezoneFrame(ws, frame) {
   if (ws.readyState !== WebSocket.OPEN) {
     return;
   }
   try {
-    ws.send(JSON.stringify(payload));
+    ws.send(JSON.stringify(frame));
   } catch (error) {
     console.error("[safezone] failed to send payload", error);
   }
 }
 
-function sendBodyChunk(ws, id, chunk, final = false) {
+function sendSafezoneDataFrame(ws, channelId, chunk, final = false) {
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk ?? "");
-  sendSafezoneMessage(ws, {
-    type: "body",
-    id,
-    data: buffer.length ? buffer.toString("base64") : "",
-    final: Boolean(final),
+  sendSafezoneFrame(ws, {
+    ch: channelId,
+    op: SAFEZONE_OP.DATA,
+    payload: {
+      data: buffer.length ? buffer.toString("base64") : "",
+      final: Boolean(final),
+    },
   });
+  if (final) {
+    sendSafezoneFrame(ws, { ch: channelId, op: SAFEZONE_OP.END });
+  }
 }
 
-function streamProxyBody(ws, id, stream, activeStreams) {
-  activeStreams.set(id, stream);
+function streamProxyBody(ws, channelId, stream, channels) {
+  channels.set(channelId, { stream });
   stream.on("data", (chunk) => {
-    sendBodyChunk(ws, id, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk), false);
+    sendSafezoneDataFrame(ws, channelId, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk), false);
   });
   stream.once("end", () => {
-    activeStreams.delete(id);
-    sendBodyChunk(ws, id, Buffer.alloc(0), true);
+    channels.delete(channelId);
+    metrics.safezoneActiveChannels = Math.max(0, metrics.safezoneActiveChannels - 1);
+    sendSafezoneFrame(ws, { ch: channelId, op: SAFEZONE_OP.END });
   });
   stream.once("error", (error) => {
-    activeStreams.delete(id);
-    sendSafezoneMessage(ws, {
-      type: "error",
-      id,
-      status: 502,
-      message: "Stream relay failed.",
-      details: error.message,
+    channels.delete(channelId);
+    metrics.safezoneActiveChannels = Math.max(0, metrics.safezoneActiveChannels - 1);
+    sendSafezoneFrame(ws, {
+      ch: channelId,
+      op: SAFEZONE_OP.ERROR,
+      payload: {
+        status: 502,
+        message: "Stream relay failed.",
+        details: error.message,
+      },
     });
   });
 }
