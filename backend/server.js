@@ -1,10 +1,12 @@
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";
+import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { load } from "cheerio";
+import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = process.env.PORT || 8787;
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +18,8 @@ const ENABLE_HEADLESS = process.env.POWERTHROUGH_HEADLESS === "true";
 const HEADLESS_MAX_CONCURRENCY = Number(process.env.POWERTHROUGH_HEADLESS_MAX ?? 2);
 
 const app = express();
+const server = createServer(app);
+const wss = new WebSocketServer({ noServer: true });
 
 app.disable("x-powered-by");
 app.use(morgan("dev"));
@@ -56,6 +60,13 @@ const metrics = {
   headlessActive: 0,
 };
 let chromiumLoader = null;
+class ProxyError extends Error {
+  constructor(status, message, details) {
+    super(message);
+    this.status = status;
+    this.details = details;
+  }
+}
 
 app.get("/proxy/:encoded", (req, res) => {
   try {
@@ -68,119 +79,458 @@ app.get("/proxy/:encoded", (req, res) => {
 });
 
 app.all("/powerthrough", async (req, res) => {
-  metrics.requests += 1;
-  const targetParam = req.query.url;
+  const targetParam = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
+  const renderHint = extractRenderHint(req);
 
-  if (!targetParam) {
-    return res.status(400).json({ error: "Missing url query parameter." });
+  try {
+    const result = await executeProxyCall({
+      targetParam,
+      renderHint,
+      clientRequest: {
+        method: req.method,
+        headers: req.headers,
+        bodyStream: req,
+      },
+    });
+    return applyProxyResult(res, result);
+  } catch (error) {
+    const isProxyError = error instanceof ProxyError;
+    if (!isProxyError || error.status >= 500) {
+      metrics.upstreamErrors += 1;
+      console.error("[powerthrough] proxy error", error);
+    }
+    const status = isProxyError ? error.status : 502;
+    const payload = {
+      error: isProxyError ? error.message : "Failed to reach target upstream.",
+    };
+    const details = isProxyError ? error.details : error.message;
+    if (details) {
+      payload.details = details;
+    }
+    if (!res.headersSent) {
+      res.status(status).json(payload);
+    } else {
+      res.end();
+    }
+  }
+});
+
+server.on("upgrade", (request, socket, head) => {
+  const { url = "" } = request;
+  const originHost = request.headers.host ? `http://${request.headers.host}` : `http://localhost:${PORT}`;
+  let pathname;
+  try {
+    pathname = new URL(url, originHost).pathname;
+  } catch {
+    socket.destroy();
+    return;
+  }
+
+  if (pathname === "/tunnel") {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+wss.on("connection", (ws) => {
+  setupTunnelConnection(ws);
+});
+
+async function executeProxyCall(params) {
+  metrics.requests += 1;
+  const start = Date.now();
+  try {
+    return await handleProxyRequest(params);
+  } finally {
+    metrics.totalLatencyMs += Date.now() - start;
+  }
+}
+
+async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
+  const urlParam = typeof targetParam === "string" ? targetParam : "";
+  if (!urlParam) {
+    throw new ProxyError(400, "Missing url query parameter.");
   }
 
   let targetUrl;
   try {
-    targetUrl = normalizeTargetUrl(targetParam);
+    targetUrl = normalizeTargetUrl(urlParam);
   } catch (error) {
-    return res.status(400).json({ error: "Invalid URL provided.", details: error.message });
+    throw new ProxyError(400, "Invalid URL provided.", error.message);
   }
 
   if (!["http:", "https:"].includes(targetUrl.protocol)) {
-    return res.status(400).json({ error: "Only HTTP(S) targets are supported." });
+    throw new ProxyError(400, "Only HTTP(S) targets are supported.");
   }
 
   if (isBlockedHost(targetUrl.hostname)) {
-    return res.status(403).json({ error: "Target host is not allowed." });
+    throw new ProxyError(403, "Target host is not allowed.");
   }
 
-  const start = Date.now();
-  const wantsHeadless = ENABLE_HEADLESS && req.method === "GET" && shouldUseHeadless(req);
+  const method = (clientRequest.method || "GET").toUpperCase();
+  const wantsHeadless = ENABLE_HEADLESS && method === "GET" && renderHint === "headless";
   if (wantsHeadless && metrics.headlessActive >= HEADLESS_MAX_CONCURRENCY) {
-    return res.status(429).json({ error: "Headless renderer is busy. Try again shortly." });
+    throw new ProxyError(429, "Headless renderer is busy. Try again shortly.");
   }
-  const cacheKey = ENABLE_CACHE && req.method === "GET" ? buildCacheKey(targetUrl) : null;
+
+  const cacheKey =
+    ENABLE_CACHE && method === "GET" ? buildCacheKey(targetUrl, wantsHeadless ? "headless" : "direct") : null;
   if (cacheKey) {
     const cached = cacheStore.get(cacheKey);
     if (cached && Date.now() - cached.added < CACHE_TTL) {
       metrics.cacheHits += 1;
-      return respondFromCache(res, cached);
+      return {
+        status: cached.status,
+        headers: cloneHeaderList(cached.headers),
+        body: Buffer.from(cached.body),
+        fromCache: true,
+        renderer: cached.renderer,
+      };
     }
     metrics.cacheMisses += 1;
   }
 
-  try {
-    if (wantsHeadless) {
-      metrics.headlessRequests += 1;
-      const headlessResult = await renderWithHeadless(targetUrl);
-      res.status(headlessResult.status);
-      headlessResult.headers.forEach(([key, value]) => res.set(key, value));
-      res.set("x-renderer", "headless");
-      const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl);
-      if (cacheKey) {
-        pruneCache();
-        cacheStore.set(cacheKey, {
-          status: headlessResult.status,
-          headers: collectHeaders(res),
-          body: Buffer.from(rewritten),
-          added: Date.now(),
-        });
-      }
-      return res.send(rewritten);
+  if (wantsHeadless) {
+    metrics.headlessRequests += 1;
+    const headlessResult = await renderWithHeadless(targetUrl);
+    const headers = normalizeHeaderList(headlessResult.headers);
+    headers.push(["x-renderer", "headless"]);
+    const rewritten = rewriteHtmlDocument(headlessResult.body, targetUrl);
+    const bodyBuffer = Buffer.from(rewritten);
+    if (cacheKey) {
+      persistCacheEntry(cacheKey, {
+        status: headlessResult.status,
+        headers,
+        body: bodyBuffer,
+        renderer: "headless",
+      });
     }
+    return {
+      status: headlessResult.status,
+      headers,
+      body: bodyBuffer,
+      renderer: "headless",
+    };
+  }
 
-    const upstream = await fetch(targetUrl.href, buildFetchOptions(req, targetUrl));
+  try {
+    const upstream = await fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
+    const headers = buildForwardHeaders(upstream.headers);
     const contentType = upstream.headers.get("content-type") || "";
-
-    res.status(upstream.status);
-    copyResponseHeaders(upstream.headers, res);
 
     if (contentType.includes("text/html")) {
       const html = await upstream.text();
       const rewritten = rewriteHtmlDocument(html, targetUrl);
-      res.set("content-type", "text/html; charset=utf-8");
-      res.set("x-frame-options", "ALLOWALL");
+      const bodyBuffer = Buffer.from(rewritten);
+      setHeaderValue(headers, "content-type", "text/html; charset=utf-8");
+      setHeaderValue(headers, "x-frame-options", "ALLOWALL");
       if (cacheKey) {
-        pruneCache();
-        cacheStore.set(cacheKey, {
+        persistCacheEntry(cacheKey, {
           status: upstream.status,
-          headers: collectHeaders(res),
-          body: Buffer.from(rewritten),
-          added: Date.now(),
+          headers,
+          body: bodyBuffer,
+          renderer: "direct",
         });
       }
-      return res.send(rewritten);
+      return {
+        status: upstream.status,
+        headers,
+        body: bodyBuffer,
+      };
     }
 
     if (contentType.includes("text/css")) {
       const css = await upstream.text();
       const rewritten = rewriteCssUrls(css, targetUrl);
-      res.set("content-type", contentType);
+      const bodyBuffer = Buffer.from(rewritten);
+      setHeaderValue(headers, "content-type", contentType);
       if (cacheKey) {
-        pruneCache();
-        cacheStore.set(cacheKey, {
+        persistCacheEntry(cacheKey, {
           status: upstream.status,
-          headers: collectHeaders(res),
-          body: Buffer.from(rewritten),
-          added: Date.now(),
+          headers,
+          body: bodyBuffer,
+          renderer: "direct",
         });
       }
-      return res.send(rewritten);
+      return {
+        status: upstream.status,
+        headers,
+        body: bodyBuffer,
+      };
     }
 
     if (upstream.body) {
-      return Readable.fromWeb(upstream.body).pipe(res);
+      return {
+        status: upstream.status,
+        headers,
+        stream: Readable.fromWeb(upstream.body),
+      };
     }
 
-    return res.end();
+    return {
+      status: upstream.status,
+      headers,
+    };
   } catch (error) {
-    console.error("[powerthrough] proxy error", error);
-    metrics.upstreamErrors += 1;
-    if (!res.headersSent) {
-      res.status(502).json({ error: "Failed to reach target upstream.", details: error.message });
-    } else {
-      res.end();
-    }
-  } finally {
-    metrics.totalLatencyMs += Date.now() - start;
+    throw error instanceof ProxyError ? error : new ProxyError(502, "Failed to reach target upstream.", error.message);
   }
-});
+}
+
+function applyProxyResult(res, result) {
+  res.status(result.status);
+  applyHeaderList(res, result.headers);
+  if (result.fromCache) {
+    res.set("x-cache", "HIT");
+  }
+
+  if (result.body) {
+    return res.send(result.body);
+  }
+  if (result.stream) {
+    return result.stream.pipe(res);
+  }
+  return res.end();
+}
+
+function extractRenderHint(req) {
+  const queryValue = Array.isArray(req.query.render) ? req.query.render[0] : req.query.render;
+  const headerValueRaw = req.headers["x-powerthrough-render"];
+  const headerValue = Array.isArray(headerValueRaw) ? headerValueRaw[0] : headerValueRaw;
+  return queryValue || headerValue || undefined;
+}
+
+function setupTunnelConnection(ws) {
+  const activeStreams = new Map();
+
+  ws.on("message", (data, isBinary) => {
+    handleTunnelMessage(ws, activeStreams, data, isBinary).catch((error) => {
+      console.error("[tunnel] failed to handle message", error);
+      sendTunnelMessage(ws, { type: "error", message: "Internal tunnel failure." });
+    });
+  });
+
+  ws.on("close", () => {
+    for (const stream of activeStreams.values()) {
+      stream.destroy();
+    }
+    activeStreams.clear();
+  });
+}
+
+async function handleTunnelMessage(ws, activeStreams, rawData, isBinary) {
+  if (isBinary) {
+    sendTunnelMessage(ws, { type: "error", message: "Binary tunnel frames are not supported." });
+    return;
+  }
+
+  let payload;
+  try {
+    const asString = typeof rawData === "string" ? rawData : rawData.toString("utf8");
+    payload = JSON.parse(asString);
+  } catch {
+    sendTunnelMessage(ws, { type: "error", message: "Invalid tunnel message payload." });
+    return;
+  }
+
+  if (!payload || typeof payload !== "object") {
+    sendTunnelMessage(ws, { type: "error", message: "Malformed tunnel payload." });
+    return;
+  }
+
+  if (payload.type === "request") {
+    await processTunnelRequest(ws, activeStreams, payload);
+    return;
+  }
+
+  if (payload.type === "cancel") {
+    const { id } = payload;
+    if (typeof id === "string" && activeStreams.has(id)) {
+      const stream = activeStreams.get(id);
+      activeStreams.delete(id);
+      stream.destroy(new Error("Client cancelled."));
+    }
+    return;
+  }
+
+  sendTunnelMessage(ws, { type: "error", message: `Unsupported tunnel message type: ${payload.type}` });
+}
+
+async function processTunnelRequest(ws, activeStreams, payload) {
+  const { id, url, method, headers, renderHint, body, bodyEncoding } = payload;
+  if (!id || typeof id !== "string") {
+    sendTunnelMessage(ws, { type: "error", message: "Request id is required." });
+    return;
+  }
+
+  const normalizedMethod = typeof method === "string" ? method.toUpperCase() : "GET";
+  let normalizedHeaders;
+  try {
+    normalizedHeaders = sanitizeHeaderBag(headers);
+  } catch (error) {
+    sendTunnelMessage(ws, { type: "error", id, message: error.message || "Invalid headers provided." });
+    return;
+  }
+
+  let bodyStream;
+  let bodyLength = 0;
+  try {
+    const materialized = buildBodyStreamFromMessage(normalizedMethod, body, bodyEncoding);
+    bodyStream = materialized.stream;
+    bodyLength = materialized.length;
+  } catch (error) {
+    const message = error instanceof ProxyError ? error.message : "Invalid request body.";
+    sendTunnelMessage(ws, {
+      type: "error",
+      id,
+      status: error instanceof ProxyError ? error.status : 400,
+      message,
+      details: error.details,
+    });
+    return;
+  }
+
+  if (bodyStream && !hasHeader(normalizedHeaders, "content-length")) {
+    normalizedHeaders["content-length"] = String(bodyLength);
+  }
+
+  try {
+    const result = await executeProxyCall({
+      targetParam: url,
+      renderHint,
+      clientRequest: {
+        method: normalizedMethod,
+        headers: normalizedHeaders,
+        bodyStream,
+      },
+    });
+
+    sendTunnelMessage(ws, {
+      type: "response",
+      id,
+      status: result.status,
+      headers: result.headers,
+      fromCache: Boolean(result.fromCache),
+      renderer: result.renderer || "direct",
+    });
+
+    if (result.body) {
+      sendBodyChunk(ws, id, result.body, true);
+      return;
+    }
+
+    if (result.stream) {
+      streamProxyBody(ws, id, result.stream, activeStreams);
+      return;
+    }
+
+    sendBodyChunk(ws, id, Buffer.alloc(0), true);
+  } catch (error) {
+    const isProxyError = error instanceof ProxyError;
+    if (!isProxyError || error.status >= 500) {
+      metrics.upstreamErrors += 1;
+      console.error("[tunnel] proxy error", error);
+    }
+    sendTunnelMessage(ws, {
+      type: "error",
+      id,
+      status: isProxyError ? error.status : 502,
+      message: isProxyError ? error.message : "Failed to reach target upstream.",
+      details: isProxyError ? error.details : error.message,
+    });
+  }
+}
+
+function sendTunnelMessage(ws, payload) {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  try {
+    ws.send(JSON.stringify(payload));
+  } catch (error) {
+    console.error("[tunnel] failed to send payload", error);
+  }
+}
+
+function sendBodyChunk(ws, id, chunk, final = false) {
+  const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk ?? "");
+  sendTunnelMessage(ws, {
+    type: "body",
+    id,
+    data: buffer.length ? buffer.toString("base64") : "",
+    final: Boolean(final),
+  });
+}
+
+function streamProxyBody(ws, id, stream, activeStreams) {
+  activeStreams.set(id, stream);
+  stream.on("data", (chunk) => {
+    sendBodyChunk(ws, id, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk), false);
+  });
+  stream.once("end", () => {
+    activeStreams.delete(id);
+    sendBodyChunk(ws, id, Buffer.alloc(0), true);
+  });
+  stream.once("error", (error) => {
+    activeStreams.delete(id);
+    sendTunnelMessage(ws, {
+      type: "error",
+      id,
+      status: 502,
+      message: "Stream relay failed.",
+      details: error.message,
+    });
+  });
+}
+
+function sanitizeHeaderBag(headers) {
+  if (!headers || typeof headers !== "object") {
+    return {};
+  }
+  const sanitized = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      sanitized[key] = value.map((entry) => String(entry));
+    } else {
+      sanitized[key] = String(value);
+    }
+  }
+  return sanitized;
+}
+
+function hasHeader(headers, target) {
+  const targetLower = target.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === targetLower);
+}
+
+function buildBodyStreamFromMessage(method, bodyPayload, bodyEncoding) {
+  if (!bodyPayload || ["GET", "HEAD"].includes(method)) {
+    return { stream: undefined, length: 0 };
+  }
+  const encoding = typeof bodyEncoding === "string" ? bodyEncoding.toLowerCase() : "base64";
+  if (typeof bodyPayload !== "string") {
+    throw new ProxyError(400, "Body payload must be a string.");
+  }
+  let buffer;
+  try {
+    if (encoding === "base64") {
+      buffer = Buffer.from(bodyPayload, "base64");
+    } else if (encoding === "utf8") {
+      buffer = Buffer.from(bodyPayload, "utf8");
+    } else {
+      throw new ProxyError(400, `Unsupported body encoding: ${encoding}`);
+    }
+  } catch (error) {
+    if (error instanceof ProxyError) {
+      throw error;
+    }
+    throw new ProxyError(400, "Failed to decode request body.", error.message);
+  }
+  return { stream: Readable.from(buffer), length: buffer.byteLength };
+}
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
@@ -200,14 +550,15 @@ app.use((req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Unidentified backend online at http://localhost:${PORT}`);
 });
 
 function buildFetchOptions(clientRequest, targetUrl) {
+  const incomingHeaders = clientRequest.headers || {};
   const headers = {};
 
-  for (const [key, value] of Object.entries(clientRequest.headers)) {
+  for (const [key, value] of Object.entries(incomingHeaders)) {
     if (!value) continue;
     const lower = key.toLowerCase();
     if (hopByHopHeaders.has(lower) || lower === "host") {
@@ -226,21 +577,23 @@ function buildFetchOptions(clientRequest, targetUrl) {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
   }
 
+  const method = (clientRequest.method || "GET").toUpperCase();
   const options = {
-    method: clientRequest.method,
+    method,
     headers,
     redirect: "manual",
   };
 
-  if (!["GET", "HEAD"].includes(clientRequest.method)) {
-    options.body = clientRequest;
+  if (!["GET", "HEAD"].includes(method) && clientRequest.bodyStream) {
+    options.body = clientRequest.bodyStream;
     options.duplex = "half";
   }
 
   return options;
 }
 
-function copyResponseHeaders(upstreamHeaders, response) {
+function buildForwardHeaders(upstreamHeaders) {
+  const forwarded = [];
   upstreamHeaders.forEach((value, key) => {
     const lower = key.toLowerCase();
     if (
@@ -250,19 +603,65 @@ function copyResponseHeaders(upstreamHeaders, response) {
     ) {
       return;
     }
-
-    // Strip headers that prevent iframe embedding
     if (lower === "x-frame-options" || lower === "content-security-policy") {
       return;
     }
-
     if (lower === "set-cookie") {
-      response.append("set-cookie", value);
       return;
     }
-
-    response.setHeader(key, value);
+    forwarded.push([key, value]);
   });
+  const setCookies = upstreamHeaders.getSetCookie?.() ?? [];
+  for (const cookie of setCookies) {
+    forwarded.push(["set-cookie", cookie]);
+  }
+  return forwarded;
+}
+
+function applyHeaderList(res, headers = []) {
+  for (const [key, value] of headers) {
+    if (key.toLowerCase() === "set-cookie") {
+      res.append("set-cookie", value);
+    } else {
+      res.setHeader(key, value);
+    }
+  }
+}
+
+function setHeaderValue(headers, key, value) {
+  const lower = key.toLowerCase();
+  for (let i = headers.length - 1; i >= 0; i -= 1) {
+    if (headers[i][0].toLowerCase() === lower) {
+      headers.splice(i, 1);
+    }
+  }
+  headers.push([key, value]);
+}
+
+function normalizeHeaderList(entries = []) {
+  return entries.map(([key, value]) => [key, value]);
+}
+
+function cloneHeaderList(entries = []) {
+  return entries.map(([key, value]) => [key, value]);
+}
+
+function persistCacheEntry(cacheKey, payload) {
+  if (!cacheKey || !payload || !payload.body) {
+    return;
+  }
+  pruneCache();
+  cacheStore.set(cacheKey, {
+    status: payload.status,
+    headers: cloneHeaderList(payload.headers),
+    body: Buffer.from(payload.body),
+    renderer: payload.renderer || "direct",
+    added: Date.now(),
+  });
+}
+
+function buildCacheKey(targetUrl, variant = "direct") {
+  return `${variant}:${targetUrl.toString()}`;
 }
 
 function rewriteHtmlDocument(html, baseUrl) {
@@ -397,17 +796,6 @@ function isPrivateIpv4(ip) {
   return false;
 }
 
-function respondFromCache(res, cached) {
-  res.status(cached.status);
-  cached.headers.forEach(([key, value]) => res.set(key, value));
-  res.set("x-cache", "HIT");
-  return res.send(Buffer.from(cached.body));
-}
-
-function collectHeaders(res) {
-  return Object.entries(res.getHeaders());
-}
-
 function pruneCache() {
   if (cacheStore.size < 200) return;
   const now = Date.now();
@@ -417,12 +805,6 @@ function pruneCache() {
     }
     if (cacheStore.size <= 150) break;
   }
-}
-
-function shouldUseHeadless(req) {
-  if (req.query.render === "headless") return true;
-  if (req.headers["x-powerthrough-render"] === "headless") return true;
-  return false;
 }
 
 async function renderWithHeadless(targetUrl) {
