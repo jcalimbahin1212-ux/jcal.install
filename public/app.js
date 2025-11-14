@@ -179,9 +179,10 @@ function registerEventHandlers() {
     }
 
     try {
-      const meta = { transport: transportPreference };
+      const meta = {};
       const targetUrl = buildNavigationTarget(rawValue, meta);
       const intent = meta.intent;
+      meta.transport = resolveTransportForIntent(intent);
       const order = buildServiceOrder(userSelectedService, intent);
       lastNavigation = {
         targetUrl,
@@ -607,6 +608,13 @@ function normalizeTransportPref(value) {
     return value;
   }
   return "auto";
+}
+
+function resolveTransportForIntent(intent) {
+  if (transportPreference === "auto") {
+    return intent === "search" ? "direct" : "auto";
+  }
+  return transportPreference;
 }
 
 function createMetricBucket() {
@@ -1159,16 +1167,16 @@ function describeTargetForLog(targetUrl) {
 }
 const SEARCH_PROVIDERS = [
   {
+    label: "Brave Search",
+    buildUrl: (term) => `https://search.brave.com/search?source=web&q=${encodeURIComponent(term)}`,
+  },
+  {
     label: "DuckDuckGo Lite",
     buildUrl: (term) => `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(term)}&ia=web`,
   },
   {
     label: "DuckDuckGo HTML",
     buildUrl: (term) => `https://duckduckgo.com/html/?q=${encodeURIComponent(term)}&ia=web`,
-  },
-  {
-    label: "Brave Search",
-    buildUrl: (term) => `https://search.brave.com/search?q=${encodeURIComponent(term)}`,
   },
 ];
 
