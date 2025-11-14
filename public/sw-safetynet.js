@@ -7,6 +7,16 @@ const SW_CHANNEL = "safetynet-sw";
 const SAFEZONE_ENDPOINT = "/safezone";
 const SAFEZONE_PROTOCOL = "safezone.v1";
 const SAFEZONE_MAX_REPLAY_BUFFER = 32;
+const SAFEZONE_OP = {
+  OPEN: "OPEN",
+  HEADERS: "HEADERS",
+  DATA: "DATA",
+  END: "END",
+  ERROR: "ERROR",
+  PING: "PING",
+  PONG: "PONG",
+  CANCEL: "CANCEL",
+};
 const ENABLE_SAFEZONE_TRANSPORT = true;
 const REQUEST_ID_HEADER = "x-safetynet-request-id";
 const SAFEZONE_CONNECT_TIMEOUT = 8000;
@@ -17,6 +27,15 @@ let safezoneConnectPromise = null;
 let safezoneCleanup = null;
 const safezonePendingRequests = new Map();
 const safezoneReplayBuffer = [];
+let safezoneChannelCounter = 1;
+
+function allocateSafezoneChannelId() {
+  safezoneChannelCounter = (safezoneChannelCounter + 1) & 0xffff;
+  if (safezoneChannelCounter === 0) {
+    safezoneChannelCounter = 1;
+  }
+  return safezoneChannelCounter;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -203,38 +222,36 @@ function buildProxyErrorResponse(message, error) {
 }
 
 function performSafezoneProxy(targetUrl, options = {}) {
+  const channelId = allocateSafezoneChannelId();
   const renderHint = options.renderHint;
   return new Promise((resolve, reject) => {
-    const requestId = generateSafezoneRequestId("sw");
     const entry = createPendingEntry({
       resolve,
       reject,
       expectBody: true,
       responseChunks: [],
     });
-    safezonePendingRequests.set(requestId, entry);
+    safezonePendingRequests.set(channelId, entry);
     entry.timeoutId = setTimeout(() => {
-      safezonePendingRequests.delete(requestId);
+      safezonePendingRequests.delete(channelId);
       reject(buildSafezoneError({ message: "Safezone request timed out.", status: 504 }));
-      sendTelemetry("safezone-timeout", { target: targetUrl });
+      sendSafezoneFrame({ ch: channelId, op: SAFEZONE_OP.CANCEL });
     }, SAFEZONE_REQUEST_TIMEOUT);
 
     ensureSafezoneConnection()
       .then(() => {
-        const envelope = {
-          type: "request",
-          id: requestId,
+        const payload = {
           url: targetUrl,
           method: "GET",
           headers: {},
         };
         if (renderHint) {
-          envelope.renderHint = renderHint;
+          payload.renderHint = renderHint;
         }
-        return sendSafezoneEnvelope(envelope);
+        sendSafezoneFrame({ ch: channelId, op: SAFEZONE_OP.OPEN, payload });
       })
       .catch((error) => {
-        safezonePendingRequests.delete(requestId);
+        safezonePendingRequests.delete(channelId);
         clearPendingEntryTimeout(entry);
         reject(error);
       });
@@ -262,19 +279,14 @@ function notifyClient(clientId, payload) {
 
 async function handleSafezoneRequest(clientId, message) {
   const request = message?.request || {};
-  const requestId = request.id || message.id;
   const targetUrl = request.url;
-  if (!requestId || typeof requestId !== "string") {
-    throw new Error("safezone request id is required.");
-  }
   if (!targetUrl || typeof targetUrl !== "string") {
     throw new Error("safezone request requires a target url.");
   }
 
+  const channelId = allocateSafezoneChannelId();
   const sanitizedHeaders = sanitizeHeaderBag(request.headers);
-  const envelope = {
-    type: "request",
-    id: requestId,
+  const payload = {
     url: targetUrl,
     method: request.method || "GET",
     headers: sanitizedHeaders,
@@ -282,39 +294,40 @@ async function handleSafezoneRequest(clientId, message) {
   };
 
   if (request.body !== undefined && request.body !== null) {
-    envelope.body = request.body;
-    envelope.bodyEncoding = request.bodyEncoding || "base64";
+    payload.body = request.body;
+    payload.bodyEncoding = request.bodyEncoding || "base64";
   }
 
-  const ws = await ensureSafezoneConnection();
   const entry = createPendingEntry({ clientId });
   entry.timeoutId = setTimeout(() => {
-    safezonePendingRequests.delete(requestId);
+    safezonePendingRequests.delete(channelId);
     notifyClient(clientId, {
       type: "safezone-error",
-      id: requestId,
+      id: channelId,
       status: 504,
       message: "Safezone request timed out.",
     });
-    sendSafezoneEnvelope({ type: "cancel", id: requestId }).catch(() => {});
+    sendSafezoneFrame({ ch: channelId, op: SAFEZONE_OP.CANCEL });
   }, SAFEZONE_REQUEST_TIMEOUT);
-  safezonePendingRequests.set(requestId, entry);
+  safezonePendingRequests.set(channelId, entry);
+
   try {
-    ws.send(JSON.stringify(envelope));
+    await ensureSafezoneConnection();
+    sendSafezoneFrame({ ch: channelId, op: SAFEZONE_OP.OPEN, payload });
   } catch (error) {
-    safezonePendingRequests.delete(requestId);
+    safezonePendingRequests.delete(channelId);
     clearPendingEntryTimeout(entry);
     throw error;
   }
 }
 
 function cancelSafezoneRequest(_clientId, message) {
-  const requestId = message?.id;
+  const requestId = Number(message?.id);
   if (!requestId) return;
   const entry = safezonePendingRequests.get(requestId);
   safezonePendingRequests.delete(requestId);
   clearPendingEntryTimeout(entry);
-  sendSafezoneEnvelope({ type: "cancel", id: requestId }).catch(() => {});
+  sendSafezoneFrame({ ch: requestId, op: SAFEZONE_OP.CANCEL });
 }
 
 function replaySafezoneEventsToClient(clientId) {
@@ -426,19 +439,30 @@ function handleSafezoneSocketMessage(event) {
     return;
   }
 
-  if (!payload || typeof payload !== "object") {
+  if (!payload || typeof payload !== "object" || typeof payload.op !== "string") {
     return;
   }
 
-  switch (payload.type) {
-    case "response":
-      handleSafezoneResponse(payload);
+  const channelId = Number(payload.ch);
+  if (Number.isNaN(channelId)) {
+    return;
+  }
+
+  switch (payload.op) {
+    case SAFEZONE_OP.HEADERS:
+      handleSafezoneHeaders(channelId, payload.payload);
       break;
-    case "body":
-      handleSafezoneBody(payload);
+    case SAFEZONE_OP.DATA:
+      handleSafezoneData(channelId, payload.payload);
       break;
-    case "error":
-      handleSafezoneError(payload);
+    case SAFEZONE_OP.END:
+      finalizeSafezoneChannel(channelId);
+      break;
+    case SAFEZONE_OP.ERROR:
+      handleSafezoneErrorFrame(channelId, payload.payload);
+      break;
+    case SAFEZONE_OP.PING:
+      sendSafezoneFrame({ ch: channelId, op: SAFEZONE_OP.PONG, payload: payload.payload });
       break;
     default:
       break;
@@ -453,11 +477,9 @@ function handleSafezoneSocketClose(event) {
   failAllPendingRequests(reason);
 }
 
-function handleSafezoneResponse(payload) {
-  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
-  if (!entry) {
-    return;
-  }
+function handleSafezoneHeaders(channelId, payload = {}) {
+  const entry = safezonePendingRequests.get(channelId);
+  if (!entry) return;
   clearPendingEntryTimeout(entry);
   entry.responseMeta = {
     status: payload.status,
@@ -466,64 +488,79 @@ function handleSafezoneResponse(payload) {
     renderer: payload.renderer,
     requestId: payload.requestId,
   };
-  notifyClient(entry.clientId, {
-    type: "safezone-response",
-    id: payload.id,
-    status: payload.status,
-    headers: payload.headers,
-    fromCache: Boolean(payload.fromCache),
-    renderer: payload.renderer,
-    requestId: payload.requestId,
-  });
-}
-
-function handleSafezoneBody(payload) {
-  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
-  if (!entry) {
-    return;
-  }
-  notifyClient(entry.clientId, {
-    type: "safezone-body",
-    id: payload.id,
-    data: payload.data,
-    final: Boolean(payload.final),
-  });
-
-  if (entry.resolve) {
-    if (payload.data) {
-      entry.responseChunks = entry.responseChunks || [];
-      entry.responseChunks.push(payload.data);
+  entry.timeoutId = setTimeout(() => {
+    safezonePendingRequests.delete(channelId);
+    if (entry.reject) {
+      entry.reject(buildSafezoneError({ message: "Safezone stalled.", status: 504 }));
     }
-    if (payload.final) {
-      const response = buildResponseFromEntry(entry);
-      safezonePendingRequests.delete(payload.id);
-      entry.resolve(response);
-      return;
-    }
-  }
+  }, SAFEZONE_REQUEST_TIMEOUT);
 
-  if (payload.final) {
-    clearPendingEntryTimeout(entry);
-    safezonePendingRequests.delete(payload.id);
+  if (entry.clientId) {
+    notifyClient(entry.clientId, {
+      type: "safezone-response",
+      id: channelId,
+      status: payload.status,
+      headers: payload.headers,
+      fromCache: Boolean(payload.fromCache),
+      renderer: payload.renderer,
+      requestId: payload.requestId,
+    });
   }
 }
 
-function handleSafezoneError(payload) {
-  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
+function handleSafezoneData(channelId, payload = {}) {
+  const entry = safezonePendingRequests.get(channelId);
+  if (!entry) return;
+  const chunk = payload.data || "";
+  if (entry.clientId) {
+    notifyClient(entry.clientId, {
+      type: "safezone-body",
+      id: channelId,
+      data: chunk,
+      final: false,
+    });
+  } else if (entry.resolve) {
+    entry.responseChunks = entry.responseChunks || [];
+    entry.responseChunks.push(chunk);
+  }
+}
+
+function finalizeSafezoneChannel(channelId) {
+  const entry = safezonePendingRequests.get(channelId);
+  if (!entry) return;
+  clearPendingEntryTimeout(entry);
+  safezonePendingRequests.delete(channelId);
+  if (entry.clientId) {
+    notifyClient(entry.clientId, {
+      type: "safezone-body",
+      id: channelId,
+      data: "",
+      final: true,
+    });
+  } else if (entry.resolve) {
+    const response = buildResponseFromEntry(entry);
+    entry.resolve(response);
+  }
+}
+
+function handleSafezoneErrorFrame(channelId, payload = {}) {
+  const entry = safezonePendingRequests.get(channelId);
   if (entry) {
     clearPendingEntryTimeout(entry);
-    safezonePendingRequests.delete(payload.id);
-    notifyClient(entry.clientId, {
-      type: "safezone-error",
-      id: payload.id,
-      status: payload.status,
-      message: payload.message,
-      details: payload.details,
-    });
+    safezonePendingRequests.delete(channelId);
+    if (entry.clientId) {
+      notifyClient(entry.clientId, {
+        type: "safezone-error",
+        id: channelId,
+        status: payload.status,
+        message: payload.message,
+        details: payload.details,
+      });
+    }
     if (entry.reject) {
       entry.reject(buildSafezoneError(payload));
     }
-  } else if (!payload.id) {
+  } else if (!channelId) {
     broadcastSafezoneState("error", { message: payload.message, details: payload.details });
   }
 }
@@ -544,12 +581,14 @@ function failAllPendingRequests(message, status = 503) {
   safezonePendingRequests.clear();
   entries.forEach(([id, meta]) => {
     clearPendingEntryTimeout(meta);
-    notifyClient(meta.clientId, {
-      type: "safezone-error",
-      id,
-      status,
-      message,
-    });
+    if (meta.clientId) {
+      notifyClient(meta.clientId, {
+        type: "safezone-error",
+        id,
+        status,
+        message,
+      });
+    }
     if (meta.reject) {
       meta.reject(new Error(message || "safezone disconnected."));
     }
@@ -602,12 +641,12 @@ async function ensureSafezoneConnection() {
   return safezoneConnectPromise;
 }
 
-function sendSafezoneEnvelope(envelope) {
+function sendSafezoneFrame(frame) {
   if (safezoneSocket && safezoneSocket.readyState === WebSocket.OPEN) {
-    safezoneSocket.send(JSON.stringify(envelope));
-    return Promise.resolve();
+    safezoneSocket.send(JSON.stringify(frame));
+    return;
   }
-  return ensureSafezoneConnection().then((socket) => socket.send(JSON.stringify(envelope)));
+  ensureSafezoneConnection().then((socket) => socket.send(JSON.stringify(frame)));
 }
 
 function clearPendingEntryTimeout(entry) {
