@@ -188,6 +188,17 @@ function registerEventHandlers() {
       }
       return;
     }
+    const searchFailure = inspectSearchRenderFailure();
+    if (searchFailure) {
+      finalizeServiceAttempt(false);
+      selectors.framePlaceholder?.classList.remove("is-hidden");
+      setWorkspaceStatus("Search provider blocked the request.");
+      setStatus(searchFailure, true);
+      if (!tryServiceFallback()) {
+        setStatus("Search provider error persists across relays.", true);
+      }
+      return;
+    }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
     setStatus("Page loaded inside SafetyNet.");
@@ -435,6 +446,33 @@ function inspectFrameForProxyError() {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed.error === "string") {
       return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function inspectSearchRenderFailure() {
+  const intent = activeAttempt?.intent || lastNavigation?.meta?.intent;
+  if (intent !== "search") return null;
+  if (!selectors.frame || !selectors.frame.contentDocument) return null;
+  try {
+    const doc = selectors.frame.contentDocument;
+    const body = doc.body;
+    if (!body) return null;
+    const text = body.innerText?.toLowerCase() ?? "";
+    if (text.includes("ran into an error displaying these results")) {
+      return "DuckDuckGo blocked the embedded results. Switching relays.";
+    }
+    if (text.includes("please try again later") && text.includes("duckduckgo")) {
+      return "Search provider returned an error page.";
+    }
+    const errorSelector =
+      doc.querySelector(".msg-error, .error-page, [data-testid='error-message']") ||
+      doc.querySelector("body[data-theme='dark'] .error__title");
+    if (errorSelector) {
+      return "Search provider error detected.";
     }
   } catch {
     return null;
