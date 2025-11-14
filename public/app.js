@@ -82,6 +82,7 @@ const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
+const autoBlankResetFlag = "safetynet:auto-blank-reset-v2";
 const eduRestartKey = "safetynet:edu-restarts";
 const transportPrefKey = "safetynet:transport-pref";
 const realTitle = document.title;
@@ -91,6 +92,7 @@ const faviconLink = ensureFaviconLink();
 const realFaviconHref = faviconLink?.href || "";
 
 const isCloakedContext = window.name === "unidentified-cloak";
+const isAboutBlankContext = window.location.protocol === "about:";
 
 let activeService = "safetynet";
 let userSelectedService = activeService;
@@ -98,11 +100,15 @@ let panicPrimed = false;
 let panicTimer = null;
 let persistHistory = false;
 let panicKey = localStorage.getItem(panicKeyPref) || "Escape";
+if (!isAboutBlankContext && localStorage.getItem(autoBlankResetFlag) !== "1") {
+  localStorage.setItem(autoBlankPref, "off");
+  localStorage.setItem(autoBlankResetFlag, "1");
+}
+
 let autoBlankEnabled = !isCloakedContext && localStorage.getItem(autoBlankPref) === "on";
 let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
-const isAboutBlankContext = window.location.protocol === "about:";
 const EDU_RESTART_THRESHOLD = 3;
 let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
 let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
@@ -193,7 +199,10 @@ function registerEventHandlers() {
     if (searchFailure) {
       finalizeServiceAttempt(false);
       selectors.framePlaceholder?.classList.remove("is-hidden");
-      setWorkspaceStatus("Search provider blocked the request.");
+      setWorkspaceStatus(searchFailure);
+      if (advanceSearchProvider(searchFailure)) {
+        return;
+      }
       setStatus(searchFailure, true);
       if (!tryServiceFallback()) {
         setStatus("Search provider error persists across relays.", true);
@@ -949,7 +958,7 @@ function tryServiceFallback() {
   return true;
 }
 
-function advanceSearchProvider() {
+function advanceSearchProvider(reasonMessage) {
   if (!lastNavigation || lastNavigation.meta.intent !== "search") {
     return false;
   }
@@ -967,7 +976,9 @@ function advanceSearchProvider() {
   lastNavigation.targetUrl = provider.buildUrl(lastNavigation.rawInput);
   lastNavigation.order = buildServiceOrder(userSelectedService, "search");
   lastNavigation.index = 0;
-  setStatus(`Switching to ${provider.label} results...`, false);
+  const baseMessage = `Switching to ${provider.label} results...`;
+  const message = reasonMessage ? `${reasonMessage} ${baseMessage}` : baseMessage;
+  setStatus(message, true);
   cancelActiveServiceAttempt();
   launchWithService(lastNavigation.order[0], lastNavigation.targetUrl, { meta: lastNavigation.meta });
   return true;
