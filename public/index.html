@@ -197,6 +197,21 @@
             Balancing reliability and latency across relays.
           </small>
         </div>
+
+        <div class="userscripts" aria-label="User scripts">
+          <div class="userscripts__header">
+            <p class="userscripts__label">User scripts</p>
+            <small id="userscript-status">Stored locally</small>
+          </div>
+          <textarea
+            id="userscript-input"
+            placeholder="Paste a script to inject after every page loads..."
+          ></textarea>
+          <div class="userscripts__actions">
+            <button type="button" id="userscript-save">Save script</button>
+            <button type="button" id="userscript-clear">Clear</button>
+          </div>
+        </div>
       </div>
       </header>
 
@@ -306,3 +321,4 @@
     <script type="module" src="app.js"></script>
   </body>
 </html>
+<!-- __USERSCRIPT_MARKER__ -->

@@ -85,6 +85,10 @@ const selectors = {
   diagPing: document.querySelector("#diag-ping"),
   diagLog: document.querySelector("#diag-log"),
   diagRequestId: document.querySelector("#diag-request-id"),
+  userScriptInput: document.querySelector("#userscript-input"),
+  userScriptSave: document.querySelector("#userscript-save"),
+  userScriptClear: document.querySelector("#userscript-clear"),
+  userScriptStatus: document.querySelector("#userscript-status"),
 };
 
 const historyKey = "unidentified:last-query";
@@ -94,6 +98,7 @@ const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "safetynet:auto-blank-reset-v2";
 const eduRestartKey = "safetynet:edu-restarts";
 const transportPrefKey = "safetynet:transport-pref";
+const userScriptPrefKey = "safetynet:user-script";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -152,6 +157,7 @@ registerTransportControls();
 renderTransportPreference();
 renderTransportState(transportState);
 renderTransportMetricsHint();
+hydrateUserScriptSettings();
 startDiagnosticsPanel();
 
 function registerEventHandlers() {
@@ -227,6 +233,7 @@ function registerEventHandlers() {
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
     setStatus("Page loaded inside SafetyNet.");
+    injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
     renderProxyMetadataFromFrame();
@@ -252,6 +259,7 @@ function registerEventHandlers() {
         cloakLaunched = false;
       }
       lastNavigation = null;
+      clearInjectedUserScript();
     }
   });
 
@@ -1163,3 +1171,62 @@ const SEARCH_PROVIDERS = [
     buildUrl: (term) => `https://search.brave.com/search?q=${encodeURIComponent(term)}`,
   },
 ];
+
+
+function hydrateUserScriptSettings() {
+  const stored = localStorage.getItem(userScriptPrefKey) || "";
+  if (selectors.userScriptInput) {
+    selectors.userScriptInput.value = stored;
+  }
+  updateUserScriptStatus(stored);
+  selectors.userScriptSave?.addEventListener("click", () => {
+    const value = selectors.userScriptInput?.value ?? "";
+    localStorage.setItem(userScriptPrefKey, value);
+    updateUserScriptStatus(value);
+    injectUserScriptIntoFrame();
+    setStatus("User script saved.");
+  });
+  selectors.userScriptClear?.addEventListener("click", () => {
+    selectors.userScriptInput && (selectors.userScriptInput.value = "");
+    localStorage.removeItem(userScriptPrefKey);
+    updateUserScriptStatus("");
+    clearInjectedUserScript();
+    setStatus("User script cleared.");
+  });
+}
+
+function updateUserScriptStatus(script) {
+  if (!selectors.userScriptStatus) return;
+  selectors.userScriptStatus.textContent = script?.trim()
+    ? "Injected after each load"
+    : "No script stored";
+}
+
+function injectUserScriptIntoFrame() {
+  const script = localStorage.getItem(userScriptPrefKey);
+  if (!script || !script.trim()) {
+    clearInjectedUserScript();
+    return;
+  }
+  if (!selectors.frame || !selectors.frame.contentDocument) return;
+  try {
+    const doc = selectors.frame.contentDocument;
+    let node = doc.getElementById("safetynet-userscript");
+    if (node) {
+      node.remove();
+    }
+    node = doc.createElement("script");
+    node.id = "safetynet-userscript";
+    node.type = "text/javascript";
+    node.textContent = script;
+    (doc.head || doc.documentElement).appendChild(node);
+  } catch (error) {
+    console.warn("[SafetyNet] failed to inject user script", error);
+  }
+}
+
+function clearInjectedUserScript() {
+  if (!selectors.frame || !selectors.frame.contentDocument) return;
+  const existing = selectors.frame.contentDocument.getElementById("safetynet-userscript");
+  existing?.remove();
+}
