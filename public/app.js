@@ -45,7 +45,7 @@ const METRIC_LATENCY_BASELINE = 1200;
 const METRIC_LATENCY_MAX = 6000;
 const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 let activeAttempt = null;
-let transportState = { tunnel: "unknown", lastUpdate: 0, info: null };
+let transportState = { safezone: "unknown", lastUpdate: 0, info: null };
 
 const selectors = {
   form: document.querySelector("#portal-form"),
@@ -510,39 +510,39 @@ function inspectSearchRenderFailure() {
   return null;
 }
 
-function updateTunnelState(stateMessage) {
-  const previous = transportState.tunnel;
+function updateSafezoneState(stateMessage) {
+  const previous = transportState.safezone;
   transportState = {
-    tunnel: stateMessage.state || "unknown",
+    safezone: stateMessage.state || "unknown",
     info: stateMessage.info || null,
     lastUpdate: Date.now(),
   };
-  if (previous !== transportState.tunnel) {
-    announceTunnelState(transportState);
+  if (previous !== transportState.safezone) {
+    announceSafezoneState(transportState);
   }
   renderTransportState(transportState);
 }
 
-function announceTunnelState(state) {
-  if (state.tunnel === "connected") {
-    setWorkspaceStatus("Tunnel channel active.");
-  } else if (state.tunnel === "disconnected") {
-    setStatus("Tunnel disconnected. Using direct relay fallback.", true);
-  } else if (state.tunnel === "error") {
-    setStatus("Tunnel instability detected, falling back.", true);
+function announceSafezoneState(state) {
+  if (state.safezone === "connected") {
+    setWorkspaceStatus("Safezone channel active.");
+  } else if (state.safezone === "disconnected") {
+    setStatus("Safezone disconnected. Using direct relay fallback.", true);
+  } else if (state.safezone === "error") {
+    setStatus("Safezone instability detected, falling back.", true);
   }
 }
 
 function renderTransportState(state) {
   if (!selectors.transportStateLabel) return;
   const label =
-    state.tunnel === "connected"
-      ? "Tunnel: connected"
-      : state.tunnel === "disconnected"
-      ? "Tunnel: offline"
-      : state.tunnel === "error"
-      ? "Tunnel: unstable"
-      : "Tunnel: unknown";
+    state.safezone === "connected"
+      ? "Safezone: connected"
+      : state.safezone === "disconnected"
+      ? "Safezone: offline"
+      : state.safezone === "error"
+      ? "Safezone: unstable"
+      : "Safezone: unknown";
   selectors.transportStateLabel.textContent = label;
 }
 
@@ -554,8 +554,8 @@ function renderTransportMetricsHint() {
   const prefLabel =
     transportPreference === "auto"
       ? "Auto-balancing"
-      : transportPreference === "tunnel"
-      ? "Tunnel forced"
+      : transportPreference === "safezone"
+      ? "Safezone forced"
       : "Direct path forced";
   selectors.transportHint.textContent = `${prefLabel} · ${best.join(" | ")}`;
 }
@@ -566,7 +566,8 @@ function formatServiceScore(serviceKey, intent) {
 }
 
 function normalizeTransportPref(value) {
-  if (value === "tunnel" || value === "direct") {
+  if (value === "tunnel") return "safezone";
+  if (value === "safezone" || value === "direct") {
     return value;
   }
   return "auto";
@@ -850,8 +851,8 @@ function listenForSwMessages() {
   navigator.serviceWorker.addEventListener("message", (event) => {
     const payload = event.data;
     if (!payload || payload.source !== "safetynet-sw") return;
-    if (payload.type === "tunnel-state") {
-      updateTunnelState(payload);
+    if (payload.type === "safezone-state") {
+      updateSafezoneState(payload);
       return;
     }
     const { event: eventName, payload: eventPayload } = payload;

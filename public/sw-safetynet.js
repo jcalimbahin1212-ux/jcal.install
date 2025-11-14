@@ -1,19 +1,19 @@
 const SHELL_VERSION = "v2";
 const SHELL_CACHE = `safetynet-shell-${SHELL_VERSION}`;
 const DATA_CACHE = `safetynet-data-${SHELL_VERSION}`;
-const SHELL_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/assets/logo.svg", "/sw-safetynet.js"];
+const SHELL_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/assets/logo.svg", "/sw-safetynet.js", "/manifest.json"];
 const CLIENT_CHANNEL = "safetynet-client";
 const SW_CHANNEL = "safetynet-sw";
-const TUNNEL_ENDPOINT = "/tunnel";
-const TUNNEL_PROTOCOL = "safetynet.v1";
-const TUNNEL_MAX_REPLAY_BUFFER = 32;
-const ENABLE_TUNNEL_TRANSPORT = true;
+const SAFEZONE_ENDPOINT = "/safezone";
+const SAFEZONE_PROTOCOL = "safezone.v1";
+const SAFEZONE_MAX_REPLAY_BUFFER = 32;
+const ENABLE_SAFEZONE_TRANSPORT = true;
 
-let tunnelSocket = null;
-let tunnelConnectPromise = null;
-let tunnelCleanup = null;
-const tunnelPendingRequests = new Map();
-const tunnelReplayBuffer = [];
+let safezoneSocket = null;
+let safezoneConnectPromise = null;
+let safezoneCleanup = null;
+const safezonePendingRequests = new Map();
+const safezoneReplayBuffer = [];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -77,28 +77,28 @@ self.addEventListener("message", (event) => {
   }
 
   switch (data.type) {
-    case "tunnel-open":
-      ensureTunnelConnection().catch((error) => {
+    case "safezone-open":
+      ensureSafezoneConnection().catch((error) => {
         notifyClient(clientId, {
-          type: "tunnel-error",
-          message: error.message || "Failed to open SafetyNet tunnel.",
+          type: "safezone-error",
+          message: error.message || "Failed to open SafetyNet safezone.",
         });
       });
       break;
-    case "tunnel-request":
-      handleTunnelRequest(clientId, data).catch((error) => {
+    case "safezone-request":
+      handleSafezoneRequest(clientId, data).catch((error) => {
         notifyClient(clientId, {
-          type: "tunnel-error",
+          type: "safezone-error",
           id: data?.id,
-          message: error.message || "Unable to dispatch tunnel request.",
+          message: error.message || "Unable to dispatch safezone request.",
         });
       });
       break;
-    case "tunnel-cancel":
-      cancelTunnelRequest(clientId, data);
+    case "safezone-cancel":
+      cancelSafezoneRequest(clientId, data);
       break;
-    case "tunnel-replay":
-      replayTunnelEventsToClient(clientId);
+    case "safezone-replay":
+      replaySafezoneEventsToClient(clientId);
       break;
     default:
       break;
@@ -142,13 +142,13 @@ function proxyThroughSafetyNet(url) {
   const renderHint = url.searchParams.get("render") || undefined;
   const transportHint = url.searchParams.get("transport") || undefined;
   const wantsDirectOnly = transportHint === "direct";
-  const wantsTunnelOnly = transportHint === "tunnel";
+  const wantsSafezoneOnly = transportHint === "safezone";
 
-  if (!wantsDirectOnly && ENABLE_TUNNEL_TRANSPORT) {
-    return performTunnelProxy(decodedTarget, { renderHint }).catch((error) => {
-      sendTelemetry("tunnel-fetch-error", { target: decodedTarget, message: error.message });
-      if (wantsTunnelOnly) {
-        return buildProxyErrorResponse("Tunnel request failed.", error);
+  if (!wantsDirectOnly && ENABLE_SAFEZONE_TRANSPORT) {
+    return performSafezoneProxy(decodedTarget, { renderHint }).catch((error) => {
+      sendTelemetry("safezone-fetch-error", { target: decodedTarget, message: error.message });
+      if (wantsSafezoneOnly) {
+        return buildProxyErrorResponse("Safezone request failed.", error);
       }
       return fetch(proxyUrl.toString(), { credentials: "same-origin" }).catch((fetchError) => {
         sendTelemetry("proxy-fetch-error", { target: decodedTarget, message: fetchError.message });
@@ -199,19 +199,19 @@ function buildProxyErrorResponse(message, error) {
   );
 }
 
-function performTunnelProxy(targetUrl, options = {}) {
+function performSafezoneProxy(targetUrl, options = {}) {
   const renderHint = options.renderHint;
   return new Promise((resolve, reject) => {
-    const requestId = generateTunnelRequestId("sw");
+    const requestId = generateSafezoneRequestId("sw");
     const entry = createPendingEntry({
       resolve,
       reject,
       expectBody: true,
       responseChunks: [],
     });
-    tunnelPendingRequests.set(requestId, entry);
+    safezonePendingRequests.set(requestId, entry);
 
-    ensureTunnelConnection()
+    ensureSafezoneConnection()
       .then(() => {
         const envelope = {
           type: "request",
@@ -223,10 +223,10 @@ function performTunnelProxy(targetUrl, options = {}) {
         if (renderHint) {
           envelope.renderHint = renderHint;
         }
-        return sendTunnelEnvelope(envelope);
+        return sendSafezoneEnvelope(envelope);
       })
       .catch((error) => {
-        tunnelPendingRequests.delete(requestId);
+        safezonePendingRequests.delete(requestId);
         reject(error);
       });
   });
@@ -251,15 +251,15 @@ function notifyClient(clientId, payload) {
   });
 }
 
-async function handleTunnelRequest(clientId, message) {
+async function handleSafezoneRequest(clientId, message) {
   const request = message?.request || {};
   const requestId = request.id || message.id;
   const targetUrl = request.url;
   if (!requestId || typeof requestId !== "string") {
-    throw new Error("Tunnel request id is required.");
+    throw new Error("safezone request id is required.");
   }
   if (!targetUrl || typeof targetUrl !== "string") {
-    throw new Error("Tunnel request requires a target url.");
+    throw new Error("safezone request requires a target url.");
   }
 
   const sanitizedHeaders = sanitizeHeaderBag(request.headers);
@@ -277,8 +277,8 @@ async function handleTunnelRequest(clientId, message) {
     envelope.bodyEncoding = request.bodyEncoding || "base64";
   }
 
-  const ws = await ensureTunnelConnection();
-  tunnelPendingRequests.set(
+  const ws = await ensureSafezoneConnection();
+  safezonePendingRequests.set(
     requestId,
     createPendingEntry({
       clientId,
@@ -287,21 +287,21 @@ async function handleTunnelRequest(clientId, message) {
   try {
     ws.send(JSON.stringify(envelope));
   } catch (error) {
-    tunnelPendingRequests.delete(requestId);
+    safezonePendingRequests.delete(requestId);
     throw error;
   }
 }
 
-function cancelTunnelRequest(_clientId, message) {
+function cancelSafezoneRequest(_clientId, message) {
   const requestId = message?.id;
   if (!requestId) return;
-  tunnelPendingRequests.delete(requestId);
-  sendTunnelEnvelope({ type: "cancel", id: requestId }).catch(() => {});
+  safezonePendingRequests.delete(requestId);
+  sendSafezoneEnvelope({ type: "cancel", id: requestId }).catch(() => {});
 }
 
-function replayTunnelEventsToClient(clientId) {
-  for (const event of tunnelReplayBuffer) {
-    notifyClient(clientId, { type: "tunnel-event", event });
+function replaySafezoneEventsToClient(clientId) {
+  for (const event of safezoneReplayBuffer) {
+    notifyClient(clientId, { type: "safezone-event", event });
   }
 }
 
@@ -321,20 +321,20 @@ function sanitizeHeaderBag(headers) {
   return sanitized;
 }
 
-function recordTunnelEvent(event) {
-  tunnelReplayBuffer.push(event);
-  if (tunnelReplayBuffer.length > TUNNEL_MAX_REPLAY_BUFFER) {
-    tunnelReplayBuffer.shift();
+function recordSafezoneEvent(event) {
+  safezoneReplayBuffer.push(event);
+  if (safezoneReplayBuffer.length > SAFEZONE_MAX_REPLAY_BUFFER) {
+    safezoneReplayBuffer.shift();
   }
 }
 
-function broadcastTunnelState(state, info) {
-  recordTunnelEvent({ kind: "state", state, info, at: Date.now() });
+function broadcastSafezoneState(state, info) {
+  recordSafezoneEvent({ kind: "state", state, info, at: Date.now() });
   clients.matchAll({ includeUncontrolled: true, type: "window" }).then((windows) => {
     windows.forEach((client) => {
       client.postMessage({
         source: SW_CHANNEL,
-        type: "tunnel-state",
+        type: "safezone-state",
         state,
         info,
       });
@@ -342,12 +342,12 @@ function broadcastTunnelState(state, info) {
   });
 }
 
-function buildTunnelUrl() {
+function buildSafezoneUrl() {
   const protocol = self.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${self.location.host}${TUNNEL_ENDPOINT}`;
+  return `${protocol}//${self.location.host}${SAFEZONE_ENDPOINT}`;
 }
 
-function generateTunnelRequestId(prefix = "client") {
+function generateSafezoneRequestId(prefix = "client") {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
 }
 
@@ -359,32 +359,32 @@ function createPendingEntry(meta = {}) {
   };
 }
 
-function detachTunnelSocket() {
-  if (tunnelCleanup) {
+function detachSafezoneSocket() {
+  if (safezoneCleanup) {
     try {
-      tunnelCleanup();
+      safezoneCleanup();
     } catch (error) {
-      console.warn("[safetynet-sw] tunnel cleanup failed", error);
+      console.warn("[safetynet-sw] safezone cleanup failed", error);
     }
-    tunnelCleanup = null;
+    safezoneCleanup = null;
   }
-  tunnelSocket = null;
+  safezoneSocket = null;
 }
 
-function attachTunnelSocket(ws) {
-  detachTunnelSocket();
-  tunnelSocket = ws;
-  const onMessage = (event) => handleTunnelSocketMessage(event);
-  const onClose = (event) => handleTunnelSocketClose(event);
+function attachSafezoneSocket(ws) {
+  detachSafezoneSocket();
+  safezoneSocket = ws;
+  const onMessage = (event) => handleSafezoneSocketMessage(event);
+  const onClose = (event) => handleSafezoneSocketClose(event);
   const onError = (event) => {
-    console.warn("[safetynet-sw] tunnel error", event?.message || event);
+    console.warn("[safetynet-sw] safezone error", event?.message || event);
   };
 
   ws.addEventListener("message", onMessage);
   ws.addEventListener("close", onClose);
   ws.addEventListener("error", onError);
 
-  tunnelCleanup = () => {
+  safezoneCleanup = () => {
     ws.removeEventListener("message", onMessage);
     ws.removeEventListener("close", onClose);
     ws.removeEventListener("error", onError);
@@ -398,12 +398,12 @@ function attachTunnelSocket(ws) {
   };
 }
 
-function handleTunnelSocketMessage(event) {
+function handleSafezoneSocketMessage(event) {
   let payload;
   try {
-    payload = parseTunnelPayload(event.data);
+    payload = parseSafezonePayload(event.data);
   } catch (error) {
-    console.warn("[safetynet-sw] tunnel payload parse failed", error);
+    console.warn("[safetynet-sw] safezone payload parse failed", error);
     return;
   }
 
@@ -413,29 +413,29 @@ function handleTunnelSocketMessage(event) {
 
   switch (payload.type) {
     case "response":
-      handleTunnelResponse(payload);
+      handleSafezoneResponse(payload);
       break;
     case "body":
-      handleTunnelBody(payload);
+      handleSafezoneBody(payload);
       break;
     case "error":
-      handleTunnelError(payload);
+      handleSafezoneError(payload);
       break;
     default:
       break;
   }
 }
 
-function handleTunnelSocketClose(event) {
-  const reason = event?.reason || "Tunnel connection closed.";
-  detachTunnelSocket();
-  tunnelConnectPromise = null;
-  broadcastTunnelState("disconnected", { reason });
+function handleSafezoneSocketClose(event) {
+  const reason = event?.reason || "safezone connection closed.";
+  detachSafezoneSocket();
+  safezoneConnectPromise = null;
+  broadcastSafezoneState("disconnected", { reason });
   failAllPendingRequests(reason);
 }
 
-function handleTunnelResponse(payload) {
-  const entry = payload?.id ? tunnelPendingRequests.get(payload.id) : null;
+function handleSafezoneResponse(payload) {
+  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
   if (!entry) {
     return;
   }
@@ -446,7 +446,7 @@ function handleTunnelResponse(payload) {
     renderer: payload.renderer,
   };
   notifyClient(entry.clientId, {
-    type: "tunnel-response",
+    type: "safezone-response",
     id: payload.id,
     status: payload.status,
     headers: payload.headers,
@@ -455,13 +455,13 @@ function handleTunnelResponse(payload) {
   });
 }
 
-function handleTunnelBody(payload) {
-  const entry = payload?.id ? tunnelPendingRequests.get(payload.id) : null;
+function handleSafezoneBody(payload) {
+  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
   if (!entry) {
     return;
   }
   notifyClient(entry.clientId, {
-    type: "tunnel-body",
+    type: "safezone-body",
     id: payload.id,
     data: payload.data,
     final: Boolean(payload.final),
@@ -474,37 +474,37 @@ function handleTunnelBody(payload) {
     }
     if (payload.final) {
       const response = buildResponseFromEntry(entry);
-      tunnelPendingRequests.delete(payload.id);
+      safezonePendingRequests.delete(payload.id);
       entry.resolve(response);
       return;
     }
   }
 
   if (payload.final) {
-    tunnelPendingRequests.delete(payload.id);
+    safezonePendingRequests.delete(payload.id);
   }
 }
 
-function handleTunnelError(payload) {
-  const entry = payload?.id ? tunnelPendingRequests.get(payload.id) : null;
+function handleSafezoneError(payload) {
+  const entry = payload?.id ? safezonePendingRequests.get(payload.id) : null;
   if (entry) {
-    tunnelPendingRequests.delete(payload.id);
+    safezonePendingRequests.delete(payload.id);
     notifyClient(entry.clientId, {
-      type: "tunnel-error",
+      type: "safezone-error",
       id: payload.id,
       status: payload.status,
       message: payload.message,
       details: payload.details,
     });
     if (entry.reject) {
-      entry.reject(buildTunnelError(payload));
+      entry.reject(buildSafezoneError(payload));
     }
   } else if (!payload.id) {
-    broadcastTunnelState("error", { message: payload.message, details: payload.details });
+    broadcastSafezoneState("error", { message: payload.message, details: payload.details });
   }
 }
 
-function parseTunnelPayload(data) {
+function parseSafezonePayload(data) {
   if (typeof data === "string") {
     return JSON.parse(data);
   }
@@ -516,62 +516,62 @@ function parseTunnelPayload(data) {
 }
 
 function failAllPendingRequests(message, status = 503) {
-  const entries = Array.from(tunnelPendingRequests.entries());
-  tunnelPendingRequests.clear();
+  const entries = Array.from(safezonePendingRequests.entries());
+  safezonePendingRequests.clear();
   entries.forEach(([id, meta]) => {
     notifyClient(meta.clientId, {
-      type: "tunnel-error",
+      type: "safezone-error",
       id,
       status,
       message,
     });
     if (meta.reject) {
-      meta.reject(new Error(message || "Tunnel disconnected."));
+      meta.reject(new Error(message || "safezone disconnected."));
     }
   });
 }
 
-async function ensureTunnelConnection() {
-  if (tunnelSocket && tunnelSocket.readyState === WebSocket.OPEN) {
-    return tunnelSocket;
+async function ensureSafezoneConnection() {
+  if (safezoneSocket && safezoneSocket.readyState === WebSocket.OPEN) {
+    return safezoneSocket;
   }
-  if (tunnelConnectPromise) {
-    return tunnelConnectPromise;
+  if (safezoneConnectPromise) {
+    return safezoneConnectPromise;
   }
 
-  tunnelConnectPromise = new Promise((resolve, reject) => {
-    const socket = new WebSocket(buildTunnelUrl(), TUNNEL_PROTOCOL);
+  safezoneConnectPromise = new Promise((resolve, reject) => {
+    const socket = new WebSocket(buildSafezoneUrl(), SAFEZONE_PROTOCOL);
     socket.binaryType = "arraybuffer";
 
     const handleOpen = () => {
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("error", handleError);
-      attachTunnelSocket(socket);
-      tunnelConnectPromise = null;
-      broadcastTunnelState("connected");
+      attachSafezoneSocket(socket);
+      safezoneConnectPromise = null;
+      broadcastSafezoneState("connected");
       resolve(socket);
     };
 
     const handleError = (event) => {
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("error", handleError);
-      tunnelConnectPromise = null;
-      reject(event?.error || new Error("Failed to establish SafetyNet tunnel."));
+      safezoneConnectPromise = null;
+      reject(event?.error || new Error("Failed to establish SafetyNet safezone."));
     };
 
     socket.addEventListener("open", handleOpen, { once: true });
     socket.addEventListener("error", handleError, { once: true });
   });
 
-  return tunnelConnectPromise;
+  return safezoneConnectPromise;
 }
 
-function sendTunnelEnvelope(envelope) {
-  if (tunnelSocket && tunnelSocket.readyState === WebSocket.OPEN) {
-    tunnelSocket.send(JSON.stringify(envelope));
+function sendSafezoneEnvelope(envelope) {
+  if (safezoneSocket && safezoneSocket.readyState === WebSocket.OPEN) {
+    safezoneSocket.send(JSON.stringify(envelope));
     return Promise.resolve();
   }
-  return ensureTunnelConnection().then((socket) => socket.send(JSON.stringify(envelope)));
+  return ensureSafezoneConnection().then((socket) => socket.send(JSON.stringify(envelope)));
 }
 
 function buildResponseFromEntry(entry) {
@@ -613,10 +613,14 @@ function decodeBase64Chunk(chunk) {
   return buffer;
 }
 
-function buildTunnelError(payload) {
-  const message = payload?.message || "Tunnel request failed.";
+function buildSafezoneError(payload) {
+  const message = payload?.message || "Safezone request failed.";
   const error = new Error(message);
   error.status = payload?.status;
   error.details = payload?.details;
   return error;
 }
+
+
+
+

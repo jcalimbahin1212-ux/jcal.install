@@ -131,7 +131,7 @@ server.on("upgrade", (request, socket, head) => {
     return;
   }
 
-  if (pathname === "/tunnel") {
+  if (pathname === "/safezone") {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, request);
     });
@@ -141,7 +141,7 @@ server.on("upgrade", (request, socket, head) => {
 });
 
 wss.on("connection", (ws) => {
-  setupTunnelConnection(ws);
+  setupSafezoneConnection(ws);
 });
 
 async function executeProxyCall(params) {
@@ -316,13 +316,13 @@ function extractRenderHint(req) {
   return queryValue || headerValue || undefined;
 }
 
-function setupTunnelConnection(ws) {
+function setupSafezoneConnection(ws) {
   const activeStreams = new Map();
 
   ws.on("message", (data, isBinary) => {
-    handleTunnelMessage(ws, activeStreams, data, isBinary).catch((error) => {
-      console.error("[tunnel] failed to handle message", error);
-      sendTunnelMessage(ws, { type: "error", message: "Internal tunnel failure." });
+    handleSafezoneMessage(ws, activeStreams, data, isBinary).catch((error) => {
+      console.error("[safezone] failed to handle message", error);
+      sendSafezoneMessage(ws, { type: "error", message: "Internal safezone failure." });
     });
   });
 
@@ -334,9 +334,9 @@ function setupTunnelConnection(ws) {
   });
 }
 
-async function handleTunnelMessage(ws, activeStreams, rawData, isBinary) {
+async function handleSafezoneMessage(ws, activeStreams, rawData, isBinary) {
   if (isBinary) {
-    sendTunnelMessage(ws, { type: "error", message: "Binary tunnel frames are not supported." });
+    sendSafezoneMessage(ws, { type: "error", message: "Binary safezone frames are not supported." });
     return;
   }
 
@@ -345,17 +345,17 @@ async function handleTunnelMessage(ws, activeStreams, rawData, isBinary) {
     const asString = typeof rawData === "string" ? rawData : rawData.toString("utf8");
     payload = JSON.parse(asString);
   } catch {
-    sendTunnelMessage(ws, { type: "error", message: "Invalid tunnel message payload." });
+    sendSafezoneMessage(ws, { type: "error", message: "Invalid safezone message payload." });
     return;
   }
 
   if (!payload || typeof payload !== "object") {
-    sendTunnelMessage(ws, { type: "error", message: "Malformed tunnel payload." });
+    sendSafezoneMessage(ws, { type: "error", message: "Malformed safezone payload." });
     return;
   }
 
   if (payload.type === "request") {
-    await processTunnelRequest(ws, activeStreams, payload);
+    await processSafezoneRequest(ws, activeStreams, payload);
     return;
   }
 
@@ -369,13 +369,13 @@ async function handleTunnelMessage(ws, activeStreams, rawData, isBinary) {
     return;
   }
 
-  sendTunnelMessage(ws, { type: "error", message: `Unsupported tunnel message type: ${payload.type}` });
+  sendSafezoneMessage(ws, { type: "error", message: `Unsupported safezone message type: ${payload.type}` });
 }
 
-async function processTunnelRequest(ws, activeStreams, payload) {
+async function processSafezoneRequest(ws, activeStreams, payload) {
   const { id, url, method, headers, renderHint, body, bodyEncoding } = payload;
   if (!id || typeof id !== "string") {
-    sendTunnelMessage(ws, { type: "error", message: "Request id is required." });
+    sendSafezoneMessage(ws, { type: "error", message: "Request id is required." });
     return;
   }
 
@@ -384,7 +384,7 @@ async function processTunnelRequest(ws, activeStreams, payload) {
   try {
     normalizedHeaders = sanitizeHeaderBag(headers);
   } catch (error) {
-    sendTunnelMessage(ws, { type: "error", id, message: error.message || "Invalid headers provided." });
+    sendSafezoneMessage(ws, { type: "error", id, message: error.message || "Invalid headers provided." });
     return;
   }
 
@@ -396,7 +396,7 @@ async function processTunnelRequest(ws, activeStreams, payload) {
     bodyLength = materialized.length;
   } catch (error) {
     const message = error instanceof ProxyError ? error.message : "Invalid request body.";
-    sendTunnelMessage(ws, {
+    sendSafezoneMessage(ws, {
       type: "error",
       id,
       status: error instanceof ProxyError ? error.status : 400,
@@ -421,7 +421,7 @@ async function processTunnelRequest(ws, activeStreams, payload) {
       },
     });
 
-    sendTunnelMessage(ws, {
+    sendSafezoneMessage(ws, {
       type: "response",
       id,
       status: result.status,
@@ -445,9 +445,9 @@ async function processTunnelRequest(ws, activeStreams, payload) {
     const isProxyError = error instanceof ProxyError;
     if (!isProxyError || error.status >= 500) {
       metrics.upstreamErrors += 1;
-      console.error("[tunnel] proxy error", error);
+      console.error("[safezone] proxy error", error);
     }
-    sendTunnelMessage(ws, {
+    sendSafezoneMessage(ws, {
       type: "error",
       id,
       status: isProxyError ? error.status : 502,
@@ -457,20 +457,20 @@ async function processTunnelRequest(ws, activeStreams, payload) {
   }
 }
 
-function sendTunnelMessage(ws, payload) {
+function sendSafezoneMessage(ws, payload) {
   if (ws.readyState !== WebSocket.OPEN) {
     return;
   }
   try {
     ws.send(JSON.stringify(payload));
   } catch (error) {
-    console.error("[tunnel] failed to send payload", error);
+    console.error("[safezone] failed to send payload", error);
   }
 }
 
 function sendBodyChunk(ws, id, chunk, final = false) {
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk ?? "");
-  sendTunnelMessage(ws, {
+  sendSafezoneMessage(ws, {
     type: "body",
     id,
     data: buffer.length ? buffer.toString("base64") : "",
@@ -489,7 +489,7 @@ function streamProxyBody(ws, id, stream, activeStreams) {
   });
   stream.once("error", (error) => {
     activeStreams.delete(id);
-    sendTunnelMessage(ws, {
+    sendSafezoneMessage(ws, {
       type: "error",
       id,
       status: 502,
@@ -914,3 +914,5 @@ async function loadChromium() {
   }
   return chromiumLoader;
 }
+
+

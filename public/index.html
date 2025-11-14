@@ -7,8 +7,11 @@
       name="description"
       content="Unidentified - a comfort-first incognito browser portal powered by the Powerthrough relay backend."
     />
+    <meta name="theme-color" content="#05000c" />
     <title>Unidentified | Incognito Proxy Portal</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   </head>
   <body class="edu-locked">
     <div class="edu-overlay" id="edu-overlay">
@@ -183,11 +186,11 @@
         <div class="transport-controls" aria-label="Transport controls">
           <div class="transport-controls__summary">
             <p class="transport-controls__label">Transport</p>
-            <p id="transport-state-label" class="transport-controls__state">Tunnel: unknown</p>
+            <p id="transport-state-label" class="transport-controls__state">Safezone: unknown</p>
           </div>
           <div class="relay-panel__choices transport-controls__choices" role="group" aria-label="Transport preference">
             <button class="transport-chip relay-chip is-active" data-transport="auto">Auto</button>
-            <button class="transport-chip relay-chip" data-transport="tunnel">Tunnel</button>
+            <button class="transport-chip relay-chip" data-transport="safezone">Safezone</button>
             <button class="transport-chip relay-chip" data-transport="direct">Direct</button>
           </div>
           <small id="transport-metrics-hint" class="transport-controls__hint">
