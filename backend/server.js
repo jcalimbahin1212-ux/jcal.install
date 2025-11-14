@@ -9,6 +9,17 @@ import { Readable } from "node:stream";
 import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
 
+const SAFEZONE_OP = {
+  OPEN: "OPEN",
+  HEADERS: "HEADERS",
+  DATA: "DATA",
+  END: "END",
+  ERROR: "ERROR",
+  PING: "PING",
+  PONG: "PONG",
+  CANCEL: "CANCEL",
+};
+
 const PORT = process.env.PORT || 8787;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
