@@ -48,6 +48,11 @@ const hopByHopHeaders = new Set([
 ]);
 
 const blockedHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const upstreamRewriteRules = [
+  { test: /duckduckgo\.com/i, csp: "duckduckgo-hardened" },
+  { test: /google\./i, csp: "google-compatible" },
+  { test: /bing\.com/i, csp: "bing-compatible" },
+];
 const cacheStore = new Map();
 const metrics = {
   requests: 0,
@@ -220,13 +225,22 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }) {
     const upstream = await fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
     const headers = buildForwardHeaders(upstream.headers);
     const contentType = upstream.headers.get("content-type") || "";
+    const rewriteProfile = selectRewriteProfile(targetUrl.hostname);
 
     if (contentType.includes("text/html")) {
       const html = await upstream.text();
-      const rewritten = rewriteHtmlDocument(html, targetUrl);
+      let rewritten = rewriteHtmlDocument(html, targetUrl);
+      if (rewriteProfile?.csp === "duckduckgo-hardened") {
+        rewritten = patchDuckduckgoPage(rewritten);
+      } else if (rewriteProfile?.csp === "google-compatible") {
+        rewritten = patchGooglePage(rewritten);
+      }
       const bodyBuffer = Buffer.from(rewritten);
       setHeaderValue(headers, "content-type", "text/html; charset=utf-8");
       setHeaderValue(headers, "x-frame-options", "ALLOWALL");
+      if (rewriteProfile?.csp) {
+        normalizeResponseSecurityHeaders(headers, rewriteProfile.csp);
+      }
       if (cacheKey) {
         persistCacheEntry(cacheKey, {
           status: upstream.status,
@@ -664,6 +678,36 @@ function buildCacheKey(targetUrl, variant = "direct") {
   return `${variant}:${targetUrl.toString()}`;
 }
 
+function selectRewriteProfile(hostname) {
+  if (!hostname) return null;
+  return upstreamRewriteRules.find((rule) => rule.test.test(hostname)) || null;
+}
+
+function normalizeResponseSecurityHeaders(headers, profile) {
+  if (!profile) return;
+  stripHeader(headers, "content-security-policy");
+  stripHeader(headers, "content-security-policy-report-only");
+  stripHeader(headers, "x-content-security-policy");
+  stripHeader(headers, "x-frame-options");
+
+  if (profile === "duckduckgo-hardened") {
+    setHeaderValue(headers, "content-security-policy", "default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'");
+  } else if (profile === "google-compatible") {
+    setHeaderValue(headers, "content-security-policy", "default-src * blob: data:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'");
+  } else if (profile === "bing-compatible") {
+    setHeaderValue(headers, "content-security-policy", "default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'");
+  }
+}
+
+function stripHeader(headers, target) {
+  const lowerTarget = target.toLowerCase();
+  for (let i = headers.length - 1; i >= 0; i -= 1) {
+    if (headers[i][0].toLowerCase() === lowerTarget) {
+      headers.splice(i, 1);
+    }
+  }
+}
+
 function rewriteHtmlDocument(html, baseUrl) {
   const $ = load(html, { decodeEntities: false });
 
@@ -687,6 +731,14 @@ function rewriteHtmlDocument(html, baseUrl) {
   $("[srcset]").each((_, element) => rewriteSrcset($, element, baseUrl));
 
   return $.html();
+}
+
+function patchDuckduckgoPage(html) {
+  return html.replace(/href="\/\//g, 'href="https://').replace(/integrity="[^"]+"/g, "");
+}
+
+function patchGooglePage(html) {
+  return html.replace(/nonce="[^"]+"/g, "");
 }
 
 function rewriteCssUrls(css, baseUrl) {
