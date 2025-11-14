@@ -475,6 +475,43 @@ img {
   font-size: 1rem;
 }
 
+.transport-controls {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.transport-controls__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.transport-controls__label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--text-muted);
+}
+
+.transport-controls__state {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--lavender);
+}
+
+.transport-controls__choices {
+  margin-bottom: 0.5rem;
+}
+
+.transport-controls__hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 main {
   padding: 0 clamp(1.5rem, 4vw, 5rem) 4rem;
 }

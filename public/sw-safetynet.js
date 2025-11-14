@@ -140,25 +140,26 @@ function proxyThroughSafetyNet(url) {
   });
 
   const renderHint = url.searchParams.get("render") || undefined;
-  if (ENABLE_TUNNEL_TRANSPORT) {
-    return performTunnelProxy(decodedTarget, renderHint).catch((error) => {
+  const transportHint = url.searchParams.get("transport") || undefined;
+  const wantsDirectOnly = transportHint === "direct";
+  const wantsTunnelOnly = transportHint === "tunnel";
+
+  if (!wantsDirectOnly && ENABLE_TUNNEL_TRANSPORT) {
+    return performTunnelProxy(decodedTarget, { renderHint }).catch((error) => {
       sendTelemetry("tunnel-fetch-error", { target: decodedTarget, message: error.message });
+      if (wantsTunnelOnly) {
+        return buildProxyErrorResponse("Tunnel request failed.", error);
+      }
       return fetch(proxyUrl.toString(), { credentials: "same-origin" }).catch((fetchError) => {
         sendTelemetry("proxy-fetch-error", { target: decodedTarget, message: fetchError.message });
-        return new Response(JSON.stringify({ error: "Proxy request failed.", details: fetchError.message }), {
-          status: 502,
-          headers: { "content-type": "application/json" },
-        });
+        return buildProxyErrorResponse("Proxy request failed.", fetchError);
       });
     });
   }
 
   return fetch(proxyUrl.toString(), { credentials: "same-origin" }).catch((error) => {
     sendTelemetry("proxy-fetch-error", { target: decodedTarget, message: error.message });
-    return new Response(JSON.stringify({ error: "Proxy request failed.", details: error.message }), {
-      status: 502,
-      headers: { "content-type": "application/json" },
-    });
+    return buildProxyErrorResponse("Proxy request failed.", error);
   });
 }
 
@@ -185,7 +186,21 @@ function sendTelemetry(eventName, payload) {
   });
 }
 
-function performTunnelProxy(targetUrl, renderHint) {
+function buildProxyErrorResponse(message, error) {
+  return new Response(
+    JSON.stringify({
+      error: message,
+      details: error?.message,
+    }),
+    {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
+function performTunnelProxy(targetUrl, options = {}) {
+  const renderHint = options.renderHint;
   return new Promise((resolve, reject) => {
     const requestId = generateTunnelRequestId("sw");
     const entry = createPendingEntry({

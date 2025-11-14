@@ -8,8 +8,8 @@ const services = {
     name: "SafetyNet Balanced",
     description: "Balanced rewrite mode for everyday browsing.",
     mode: "standard",
-    compose(targetUrl) {
-      return buildSafetyNetLink(targetUrl, this.mode);
+    compose(targetUrl, meta) {
+      return buildSafetyNetLink(targetUrl, { mode: this.mode, intent: meta?.intent });
     },
   },
   safetynet_headless: {
@@ -17,20 +17,35 @@ const services = {
     description: "Routes through the headless renderer for complex sites.",
     mode: "headless",
     render: "headless",
-    compose(targetUrl) {
-      return buildSafetyNetLink(targetUrl, this.mode, this.render);
+    compose(targetUrl, meta) {
+      return buildSafetyNetLink(targetUrl, { mode: this.mode, render: this.render, intent: meta?.intent });
     },
   },
   safetynet_lite: {
     name: "SafetyNet Lite",
     description: "Lightweight mode optimized for speed.",
     mode: "lite",
-    compose(targetUrl) {
-      return buildSafetyNetLink(targetUrl, this.mode);
+    compose(targetUrl, meta) {
+      return buildSafetyNetLink(targetUrl, { mode: this.mode, intent: meta?.intent });
     },
   },
 };
 const SERVICE_KEYS = Object.keys(services);
+const SERVICE_PRIORITY_DEFAULT = ["safetynet", "safetynet_headless", "safetynet_lite"];
+const SERVICE_PRIORITY_SEARCH = ["safetynet", "safetynet_lite", "safetynet_headless"];
+const SERVICE_METRICS = SERVICE_KEYS.reduce((acc, key) => {
+  acc[key] = {
+    url: createMetricBucket(),
+    search: createMetricBucket(),
+  };
+  return acc;
+}, {});
+const METRIC_DEFAULT_SCORE = 0.85;
+const METRIC_LATENCY_BASELINE = 1200;
+const METRIC_LATENCY_MAX = 6000;
+const METRIC_RECENT_FAILURE_WINDOW = 30_000;
+let activeAttempt = null;
+let transportState = { tunnel: "unknown", lastUpdate: 0, info: null };
 
 const selectors = {
   form: document.querySelector("#portal-form"),
@@ -58,6 +73,9 @@ const selectors = {
   eduButton: document.querySelector("#edu-continue"),
   eduRestart: document.querySelector("#edu-restart"),
   eduProgress: document.querySelector("#edu-progress"),
+  transportChips: document.querySelectorAll(".transport-chip"),
+  transportStateLabel: document.querySelector("#transport-state-label"),
+  transportHint: document.querySelector("#transport-metrics-hint"),
 };
 
 const historyKey = "unidentified:last-query";
@@ -65,6 +83,7 @@ const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const eduRestartKey = "safetynet:edu-restarts";
+const transportPrefKey = "safetynet:transport-pref";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -88,6 +107,7 @@ const EDU_RESTART_THRESHOLD = 3;
 let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
 let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
 let lastNavigation = null;
+let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 if (eduUnlocked) {
   document.body.classList.remove("edu-locked");
 }
@@ -108,6 +128,10 @@ watchMissionBox();
 updateActiveService(activeService);
 registerServiceWorker();
 listenForSwMessages();
+registerTransportControls();
+renderTransportPreference();
+renderTransportState(transportState);
+renderTransportMetricsHint();
 
 function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
@@ -128,14 +152,18 @@ function registerEventHandlers() {
     }
 
     try {
+      const intent = detectQueryIntent(rawValue);
       const targetUrl = normalizeQuery(rawValue);
-      const order = buildServiceOrder(userSelectedService);
+      const order = buildServiceOrder(userSelectedService, intent);
+      const meta = { intent, transport: transportPreference };
       lastNavigation = {
         targetUrl,
         order,
         index: 0,
+        meta,
       };
-      launchWithService(order[0], targetUrl);
+      cancelActiveServiceAttempt();
+      launchWithService(order[0], targetUrl, { meta });
 
       if (persistHistory) {
         localStorage.setItem(historyKey, rawValue);
@@ -148,6 +176,19 @@ function registerEventHandlers() {
   });
 
   selectors.frame?.addEventListener("load", () => {
+    const proxyError = inspectFrameForProxyError();
+    if (proxyError) {
+      finalizeServiceAttempt(false);
+      selectors.framePlaceholder?.classList.remove("is-hidden");
+      const humanMessage = proxyError.details ? `${proxyError.error}: ${proxyError.details}` : proxyError.error;
+      setWorkspaceStatus("Proxy reported an upstream error.");
+      setStatus(humanMessage || "Proxy error received.", true);
+      if (!tryServiceFallback()) {
+        setStatus("Unable to load that request right now.", true);
+      }
+      return;
+    }
+    finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
     setStatus("Page loaded inside SafetyNet.");
     lastNavigation = null;
@@ -155,6 +196,7 @@ function registerEventHandlers() {
   });
 
   selectors.frame?.addEventListener("error", () => {
+    finalizeServiceAttempt(false);
     selectors.framePlaceholder?.classList.remove("is-hidden");
     setWorkspaceStatus("Could not load that page.");
     if (!tryServiceFallback()) {
@@ -164,6 +206,7 @@ function registerEventHandlers() {
 
   selectors.frameReset?.addEventListener("click", () => {
     if (selectors.frame) {
+      cancelActiveServiceAttempt();
       selectors.frame.src = "about:blank";
       selectors.framePlaceholder?.classList.remove("is-hidden");
       setWorkspaceStatus("Workspace cleared.");
@@ -250,12 +293,12 @@ function registerEventHandlers() {
   prepareEducationGate();
 }
 
-function composeProxyUrl(targetUrl, serviceKey = activeService) {
+function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
   const service = services[serviceKey];
   if (!service) {
     throw new Error("Pick a relay personality to continue.");
   }
-  return service.compose(targetUrl);
+  return service.compose(targetUrl, meta);
 }
 
 function normalizeQuery(input) {
@@ -272,6 +315,19 @@ function normalizeQuery(input) {
 
   const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(input)}`;
   return searchUrl;
+}
+
+function detectQueryIntent(input) {
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(input);
+  const looksLikeDomain = /^[^\s]+\.[a-z]{2,}$/i.test(input);
+  if (hasScheme || looksLikeDomain) {
+    return "url";
+  }
+  return "search";
+}
+
+function normalizeIntent(intent) {
+  return intent === "search" ? "search" : "url";
 }
 
 function updateActiveService(key, announce = true) {
@@ -339,17 +395,177 @@ function watchMissionBox() {
   observer.observe(selectors.missionBox);
 }
 
-function buildSafetyNetLink(targetUrl, mode, render) {
+function buildSafetyNetLink(targetUrl, config = {}, renderOverride) {
   const encoded = encodeURIComponent(targetUrl);
   const params = new URLSearchParams();
-  if (mode && mode !== "standard") {
-    params.set("mode", mode);
+  const modeValue = typeof config === "string" ? config : config.mode;
+  if (modeValue && modeValue !== "standard") {
+    params.set("mode", modeValue);
   }
-  if (render) {
-    params.set("render", render);
+  const renderValue = typeof config === "object" ? config.render ?? renderOverride : renderOverride;
+  if (renderValue) {
+    params.set("render", renderValue);
+  }
+  const intentValue = typeof config === "object" ? config.intent : undefined;
+  if (intentValue) {
+    params.set("intent", intentValue);
+  }
+  const transportValue = typeof config === "object" ? config.transport : undefined;
+  if (transportValue && transportValue !== "auto") {
+    params.set("transport", transportValue);
   }
   const query = params.toString();
   return query ? `/proxy/${encoded}?${query}` : `/proxy/${encoded}`;
+}
+
+function inspectFrameForProxyError() {
+  if (!selectors.frame || !selectors.frame.contentDocument) return null;
+  try {
+    const doc = selectors.frame.contentDocument;
+    const body = doc.body;
+    if (!body) return null;
+    const text = body.textContent?.trim() ?? "";
+    if (!text || text.length > 2000) {
+      return null;
+    }
+    const firstChar = text[0];
+    if (firstChar !== "{" && firstChar !== "[") {
+      return null;
+    }
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.error === "string") {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function updateTunnelState(stateMessage) {
+  const previous = transportState.tunnel;
+  transportState = {
+    tunnel: stateMessage.state || "unknown",
+    info: stateMessage.info || null,
+    lastUpdate: Date.now(),
+  };
+  if (previous !== transportState.tunnel) {
+    announceTunnelState(transportState);
+  }
+  renderTransportState(transportState);
+}
+
+function announceTunnelState(state) {
+  if (state.tunnel === "connected") {
+    setWorkspaceStatus("Tunnel channel active.");
+  } else if (state.tunnel === "disconnected") {
+    setStatus("Tunnel disconnected. Using direct relay fallback.", true);
+  } else if (state.tunnel === "error") {
+    setStatus("Tunnel instability detected, falling back.", true);
+  }
+}
+
+function renderTransportState(state) {
+  if (!selectors.transportStateLabel) return;
+  const label =
+    state.tunnel === "connected"
+      ? "Tunnel: connected"
+      : state.tunnel === "disconnected"
+      ? "Tunnel: offline"
+      : state.tunnel === "error"
+      ? "Tunnel: unstable"
+      : "Tunnel: unknown";
+  selectors.transportStateLabel.textContent = label;
+}
+
+function renderTransportMetricsHint() {
+  if (!selectors.transportHint) return;
+  const intent = normalizeIntent(lastNavigation?.meta?.intent || "url");
+  const order = buildServiceOrder(userSelectedService, intent);
+  const best = order.slice(0, 2).map((key) => `${services[key].name}: ${formatServiceScore(key, intent)}`);
+  const prefLabel =
+    transportPreference === "auto"
+      ? "Auto-balancing"
+      : transportPreference === "tunnel"
+      ? "Tunnel forced"
+      : "Direct path forced";
+  selectors.transportHint.textContent = `${prefLabel} · ${best.join(" | ")}`;
+}
+
+function formatServiceScore(serviceKey, intent) {
+  const score = getServiceScore(serviceKey, intent);
+  return `${Math.round(score * 100)}%`;
+}
+
+function normalizeTransportPref(value) {
+  if (value === "tunnel" || value === "direct") {
+    return value;
+  }
+  return "auto";
+}
+
+function createMetricBucket() {
+  return {
+    successes: 0,
+    failures: 0,
+    totalLatency: 0,
+    samples: 0,
+    lastFailureAt: 0,
+  };
+}
+
+function getServiceMetricBucket(serviceKey, intent = "url") {
+  const normalizedIntent = normalizeIntent(intent);
+  const bucketHost = SERVICE_METRICS[serviceKey];
+  if (!bucketHost) {
+    return createMetricBucket();
+  }
+  return bucketHost[normalizedIntent] || bucketHost.url;
+}
+
+function beginServiceAttempt(serviceKey, intent = "url") {
+  activeAttempt = {
+    serviceKey,
+    intent: normalizeIntent(intent),
+    startedAt: performance.now(),
+  };
+}
+
+function cancelActiveServiceAttempt() {
+  activeAttempt = null;
+}
+
+function finalizeServiceAttempt(success) {
+  if (!activeAttempt) return;
+  const elapsed = Math.max(0, performance.now() - (activeAttempt.startedAt || performance.now()));
+  updateServiceMetrics(activeAttempt.serviceKey, activeAttempt.intent, success, elapsed);
+  activeAttempt = null;
+  renderTransportMetricsHint();
+}
+
+function updateServiceMetrics(serviceKey, intent, success, elapsed) {
+  const bucket = getServiceMetricBucket(serviceKey, intent);
+  if (success) {
+    bucket.successes += 1;
+  } else {
+    bucket.failures += 1;
+    bucket.lastFailureAt = Date.now();
+  }
+  if (Number.isFinite(elapsed)) {
+    bucket.totalLatency += elapsed;
+    bucket.samples += 1;
+  }
+}
+
+function getServiceScore(serviceKey, intent = "url") {
+  const bucket = getServiceMetricBucket(serviceKey, intent);
+  const attempts = bucket.successes + bucket.failures;
+  const successRate = attempts > 0 ? bucket.successes / attempts : METRIC_DEFAULT_SCORE;
+  const avgLatency = bucket.samples > 0 ? bucket.totalLatency / bucket.samples : METRIC_LATENCY_BASELINE;
+  const latencyScore = Math.max(0, 1 - avgLatency / METRIC_LATENCY_MAX);
+  const recentPenalty =
+    bucket.lastFailureAt && Date.now() - bucket.lastFailureAt < METRIC_RECENT_FAILURE_WINDOW ? 0.15 : 0;
+  return Math.max(0, successRate * 0.8 + latencyScore * 0.2 - recentPenalty);
 }
 
 function applyTabCloak(enabled) {
@@ -564,14 +780,45 @@ function listenForSwMessages() {
     return;
   }
   navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data?.source !== "safetynet-sw") return;
-    const { event: eventName, payload } = event.data;
+    const payload = event.data;
+    if (!payload || payload.source !== "safetynet-sw") return;
+    if (payload.type === "tunnel-state") {
+      updateTunnelState(payload);
+      return;
+    }
+    const { event: eventName, payload: eventPayload } = payload;
     if (eventName === "proxy-fetch-error") {
-      setStatus(`SW proxy error: ${payload.message}`, true);
+      setStatus(`SW proxy error: ${eventPayload.message}`, true);
     } else if (eventName === "network-fallback-cache") {
       setStatus("Loaded offline copy from cache.", false);
     }
   });
+}
+
+function registerTransportControls() {
+  selectors.transportChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const mode = chip.dataset.transport;
+      setTransportPreference(mode);
+    });
+  });
+}
+
+function setTransportPreference(mode) {
+  const normalized = normalizeTransportPref(mode);
+  if (transportPreference === normalized) return;
+  transportPreference = normalized;
+  localStorage.setItem(transportPrefKey, transportPreference);
+  renderTransportPreference();
+  renderTransportMetricsHint();
+  setStatus(`Transport mode set to ${transportPreference}.`);
+}
+
+function renderTransportPreference() {
+  selectors.transportChips.forEach((chip) => {
+    chip.classList.toggle("is-active", chip.dataset.transport === transportPreference);
+  });
+  renderTransportMetricsHint();
 }
 
 function setActiveService(key, { userInitiated = false } = {}) {
@@ -582,17 +829,33 @@ function setActiveService(key, { userInitiated = false } = {}) {
     userSelectedService = key;
     lastNavigation = null;
   }
+  renderTransportMetricsHint();
 }
 
-function buildServiceOrder(primaryKey) {
-  const base = services[primaryKey] ? primaryKey : SERVICE_KEYS[0];
-  const others = SERVICE_KEYS.filter((key) => key !== base);
-  return [base, ...others];
+function buildServiceOrder(primaryKey, intent = "url") {
+  const normalizedIntent = normalizeIntent(intent);
+  const priorityTemplate = normalizedIntent === "search" ? SERVICE_PRIORITY_SEARCH : SERVICE_PRIORITY_DEFAULT;
+  const desiredOrder = [primaryKey, ...priorityTemplate, ...SERVICE_KEYS];
+  const unique = [];
+  desiredOrder.forEach((key) => {
+    if (services[key] && !unique.includes(key)) {
+      unique.push(key);
+    }
+  });
+  if (unique.length <= 1) {
+    return unique;
+  }
+  const [primary, ...rest] = unique;
+  const sortedRest = rest.sort((a, b) => getServiceScore(b, normalizedIntent) - getServiceScore(a, normalizedIntent));
+  return [primary, ...sortedRest];
 }
 
-function launchWithService(serviceKey, targetUrl, { fallback = false } = {}) {
+function launchWithService(serviceKey, targetUrl, { fallback = false, meta } = {}) {
   setActiveService(serviceKey, { userInitiated: !fallback && serviceKey === userSelectedService });
-  const outboundUrl = composeProxyUrl(targetUrl, serviceKey);
+  const intent = normalizeIntent(meta?.intent);
+  const enrichedMeta = { ...meta, intent, transport: transportPreference };
+  beginServiceAttempt(serviceKey, intent);
+  const outboundUrl = composeProxyUrl(targetUrl, serviceKey, enrichedMeta);
   if (selectors.frame) {
     selectors.framePlaceholder?.classList.add("is-hidden");
     selectors.frame.src = outboundUrl;
@@ -600,7 +863,11 @@ function launchWithService(serviceKey, targetUrl, { fallback = false } = {}) {
   } else {
     const newTab = window.open(outboundUrl, "_blank", "noopener,noreferrer");
     if (!newTab) {
+      finalizeServiceAttempt(false);
       setStatus("Allow pop-ups or enable the embedded workspace to view pages.", true);
+    } else {
+      finalizeServiceAttempt(true);
+      setStatus(`Opened ${services[serviceKey].name} in a new tab.`);
     }
   }
 }
@@ -616,6 +883,6 @@ function tryServiceFallback() {
     return false;
   }
   setStatus(`Retrying via ${services[nextKey].name}...`, false);
-  launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true });
+  launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true, meta: lastNavigation.meta });
   return true;
 }
