@@ -152,12 +152,13 @@ function registerEventHandlers() {
     }
 
     try {
-      const intent = detectQueryIntent(rawValue);
-      const targetUrl = normalizeQuery(rawValue);
+      const meta = { transport: transportPreference };
+      const targetUrl = buildNavigationTarget(rawValue, meta);
+      const intent = meta.intent;
       const order = buildServiceOrder(userSelectedService, intent);
-      const meta = { intent, transport: transportPreference };
       lastNavigation = {
         targetUrl,
+        rawInput: rawValue,
         order,
         index: 0,
         meta,
@@ -312,7 +313,22 @@ function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
   return service.compose(targetUrl, meta);
 }
 
-function normalizeQuery(input) {
+function buildNavigationTarget(input, meta = {}) {
+  const intent = detectQueryIntent(input);
+  meta.intent = intent;
+  if (intent === "url") {
+    meta.searchProviderIndex = undefined;
+    meta.searchProviderLabel = undefined;
+    return normalizeExplicitUrl(input);
+  }
+  const providerIndex = clampSearchProviderIndex(meta.searchProviderIndex ?? 0);
+  meta.searchProviderIndex = providerIndex;
+  const provider = SEARCH_PROVIDERS[providerIndex] || SEARCH_PROVIDERS[0];
+  meta.searchProviderLabel = provider.label;
+  return provider.buildUrl(input);
+}
+
+function normalizeExplicitUrl(input) {
   const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(input);
   const looksLikeDomain = /^[^\s]+\.[a-z]{2,}$/i.test(input);
 
@@ -324,8 +340,7 @@ function normalizeQuery(input) {
     return new URL(`https://${input}`).toString();
   }
 
-  const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(input)}`;
-  return searchUrl;
+  return new URL(`https://${input}`).toString();
 }
 
 function detectQueryIntent(input) {
@@ -339,6 +354,11 @@ function detectQueryIntent(input) {
 
 function normalizeIntent(intent) {
   return intent === "search" ? "search" : "url";
+}
+
+function clampSearchProviderIndex(index) {
+  if (!Number.isFinite(index)) return 0;
+  return Math.max(0, Math.min(SEARCH_PROVIDERS.length - 1, Math.floor(index)));
 }
 
 function updateActiveService(key, announce = true) {
@@ -462,17 +482,18 @@ function inspectSearchRenderFailure() {
     const body = doc.body;
     if (!body) return null;
     const text = body.innerText?.toLowerCase() ?? "";
+    const providerLabel = lastNavigation?.meta?.searchProviderLabel || "The search provider";
     if (text.includes("ran into an error displaying these results")) {
-      return "DuckDuckGo blocked the embedded results. Switching relays.";
+      return `${providerLabel} blocked the embedded results. Switching relays.`;
     }
     if (text.includes("please try again later") && text.includes("duckduckgo")) {
-      return "Search provider returned an error page.";
+      return `${providerLabel} returned an error page.`;
     }
     const errorSelector =
       doc.querySelector(".msg-error, .error-page, [data-testid='error-message']") ||
       doc.querySelector("body[data-theme='dark'] .error__title");
     if (errorSelector) {
-      return "Search provider error detected.";
+      return `${providerLabel} reported an error.`;
     }
   } catch {
     return null;
@@ -917,6 +938,9 @@ function tryServiceFallback() {
   lastNavigation.index += 1;
   const nextKey = lastNavigation.order[lastNavigation.index];
   if (!nextKey) {
+    if (advanceSearchProvider()) {
+      return true;
+    }
     lastNavigation = null;
     return false;
   }
@@ -924,3 +948,41 @@ function tryServiceFallback() {
   launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true, meta: lastNavigation.meta });
   return true;
 }
+
+function advanceSearchProvider() {
+  if (!lastNavigation || lastNavigation.meta.intent !== "search") {
+    return false;
+  }
+  const currentIndex = lastNavigation.meta.searchProviderIndex ?? 0;
+  if (currentIndex >= SEARCH_PROVIDERS.length - 1) {
+    return false;
+  }
+  const nextIndex = currentIndex + 1;
+  const provider = SEARCH_PROVIDERS[nextIndex] || SEARCH_PROVIDERS[0];
+  if (!lastNavigation.rawInput) {
+    return false;
+  }
+  lastNavigation.meta.searchProviderIndex = nextIndex;
+  lastNavigation.meta.searchProviderLabel = provider.label;
+  lastNavigation.targetUrl = provider.buildUrl(lastNavigation.rawInput);
+  lastNavigation.order = buildServiceOrder(userSelectedService, "search");
+  lastNavigation.index = 0;
+  setStatus(`Switching to ${provider.label} results...`, false);
+  cancelActiveServiceAttempt();
+  launchWithService(lastNavigation.order[0], lastNavigation.targetUrl, { meta: lastNavigation.meta });
+  return true;
+}
+const SEARCH_PROVIDERS = [
+  {
+    label: "DuckDuckGo Lite",
+    buildUrl: (term) => `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(term)}&ia=web`,
+  },
+  {
+    label: "DuckDuckGo HTML",
+    buildUrl: (term) => `https://duckduckgo.com/html/?q=${encodeURIComponent(term)}&ia=web`,
+  },
+  {
+    label: "Brave Search",
+    buildUrl: (term) => `https://search.brave.com/search?q=${encodeURIComponent(term)}`,
+  },
+];
