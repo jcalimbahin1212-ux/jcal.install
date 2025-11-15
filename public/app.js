@@ -398,7 +398,13 @@ function handleAuthSubmit(event) {
 
 function releaseAuthGate() {
   selectors.authForm?.removeEventListener("submit", handleAuthSubmit);
-  selectors.authOverlay?.classList.add("is-hidden");
+  const overlayNode = selectors.authOverlay;
+  if (overlayNode) {
+    overlayNode.classList.add("is-hidden");
+    window.setTimeout(() => {
+      overlayNode.remove();
+    }, 350);
+  }
   document.body.classList.remove("auth-locked");
   if (selectors.authInput) {
     selectors.authInput.value = "";
