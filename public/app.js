@@ -91,6 +91,10 @@ const selectors = {
   authForm: document.querySelector("#auth-form"),
   authInput: document.querySelector("#auth-code"),
   authError: document.querySelector("#auth-error"),
+  devOverlay: document.querySelector("#dev-overlay"),
+  devForm: document.querySelector("#dev-form"),
+  devInput: document.querySelector("#dev-code"),
+  devError: document.querySelector("#dev-error"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
@@ -115,9 +119,14 @@ const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
+const devStorageKey = "supersonic:dev";
 const authCacheStorageKey = "supersonic:auth-cache";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
+const DEV_ENTRY_CODE = "SUPERSAFEDEV";
+const DEV_PASSCODE = "DEV-ACCESS-81";
+const DEV_ENTRY_CODE_NORMALIZED = normalizeAuthInput(DEV_ENTRY_CODE);
+const DEV_PASSCODE_NORMALIZED = normalizeAuthInput(DEV_PASSCODE);
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -145,6 +154,7 @@ let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
+let devUnlocked = localStorage.getItem(devStorageKey) === "yes";
 let primedNavigationTokens = restorePrimedNavigationTokens();
 let lastNavigation = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
@@ -162,6 +172,9 @@ if (selectors.panicKeySelect) {
 }
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
+}
+if (devUnlocked) {
+  document.body.classList.add("dev-mode");
 }
 hydrateHistoryPreference();
 registerEventHandlers();
@@ -352,6 +365,7 @@ function registerEventHandlers() {
   selectors.fullscreenToggle?.addEventListener("click", () => {
     toggleFullscreen();
   });
+  selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
 
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
@@ -381,6 +395,10 @@ function initializeAuthGate() {
 function handleAuthSubmit(event) {
   event.preventDefault();
   const provided = normalizeAuthInput(selectors.authInput?.value || "");
+  if (provided === DEV_ENTRY_CODE_NORMALIZED) {
+    triggerDevHandshake();
+    return;
+  }
   if (provided === AUTH_PASSCODE_NORMALIZED) {
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
@@ -414,11 +432,45 @@ function releaseAuthGate() {
     selectors.authError.textContent = "";
     selectors.authError.classList.remove("is-visible");
   }
+  selectors.devOverlay?.classList.add("is-hidden");
+  selectors.devError?.classList.remove("is-visible");
+  document.body.classList.toggle("dev-mode", devUnlocked);
   if (autoBlankEnabled && !cloakLaunched) {
     attemptAutoBlank(true);
   }
   primeAuthenticationCache(true);
   setStatus("Access confirmed. Welcome back to SuperSonic.");
+}
+
+function triggerDevHandshake() {
+  selectors.authOverlay?.classList.add("is-hidden");
+  selectors.devOverlay?.classList.remove("is-hidden");
+  if (selectors.authInput) {
+    selectors.authInput.value = "";
+  }
+  selectors.devError && (selectors.devError.textContent = "");
+  selectors.devError?.classList.remove("is-visible");
+  window.setTimeout(() => selectors.devInput?.focus(), 100);
+}
+
+function handleDevAuthSubmit(event) {
+  event.preventDefault();
+  const provided = normalizeAuthInput(selectors.devInput?.value || "");
+  if (provided === DEV_PASSCODE_NORMALIZED) {
+    devUnlocked = true;
+    authUnlocked = true;
+    localStorage.setItem(devStorageKey, "yes");
+    localStorage.setItem(authStorageKey, "yes");
+    selectors.devOverlay?.classList.add("is-hidden");
+    releaseAuthGate();
+    setStatus("Developer workspace ready.");
+    return;
+  }
+  if (selectors.devError) {
+    selectors.devError.textContent = "Developer access denied.";
+    selectors.devError.classList.add("is-visible");
+  }
+  showAuthLockoutScreen();
 }
 
 function showAuthLockoutScreen() {

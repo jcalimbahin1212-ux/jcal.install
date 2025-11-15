@@ -35,6 +35,27 @@
       </div>
     </div>
 
+    <div class="auth-overlay is-hidden" id="dev-overlay">
+      <div class="auth-card">
+        <p class="auth-card__eyebrow">SuperSonic dev</p>
+        <h1>Developer console</h1>
+        <p>Enter the developer access code to continue.</p>
+        <form id="dev-form" autocomplete="off">
+          <label for="dev-code" class="sr-only">Developer access code</label>
+          <input
+            id="dev-code"
+            type="password"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Enter developer code"
+            required
+          />
+          <button type="submit">Enter dev workspace</button>
+          <p id="dev-error" class="auth-error" role="alert" aria-live="assertive"></p>
+        </form>
+      </div>
+    </div>
+
     <div id="app-shell">
       <header class="hero">
         <div class="hero__content">
