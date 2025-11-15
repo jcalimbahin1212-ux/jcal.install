@@ -444,6 +444,9 @@ function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
   if (!service) {
     throw new Error("Pick a relay personality to continue.");
   }
+  if (meta?.localProvider) {
+    return targetUrl;
+  }
   return service.compose(targetUrl, meta);
 }
 
@@ -459,6 +462,15 @@ function buildNavigationTarget(input, meta = {}) {
   meta.searchProviderIndex = providerIndex;
   const provider = SEARCH_PROVIDERS[providerIndex] || SEARCH_PROVIDERS[0];
   meta.searchProviderLabel = provider.label;
+  meta.localProvider = provider.type === "local";
+  const built = provider.buildUrl(input);
+  if (provider.type === "local") {
+    try {
+      return new URL(built, window.location.origin).toString();
+    } catch {
+      return `${window.location.origin}${built.startsWith("/") ? built : `/${built}`}`;
+    }
+  }
   return provider.buildUrl(input);
 }
 
@@ -1165,7 +1177,13 @@ function advanceSearchProvider(reasonMessage) {
   }
   lastNavigation.meta.searchProviderIndex = nextIndex;
   lastNavigation.meta.searchProviderLabel = provider.label;
-  lastNavigation.targetUrl = provider.buildUrl(lastNavigation.rawInput);
+  if (provider.type === "local") {
+    lastNavigation.targetUrl = new URL(provider.buildUrl(lastNavigation.rawInput), window.location.origin).toString();
+    lastNavigation.meta.localProvider = true;
+  } else {
+    lastNavigation.targetUrl = provider.buildUrl(lastNavigation.rawInput);
+    lastNavigation.meta.localProvider = false;
+  }
   lastNavigation.order = buildServiceOrder(userSelectedService, "search");
   lastNavigation.index = 0;
   const baseMessage = `Switching to ${provider.label} results...`;
@@ -1303,6 +1321,11 @@ function describeTargetForLog(targetUrl) {
   }
 }
 const SEARCH_PROVIDERS = [
+  {
+    label: "SuperSonic Lite",
+    type: "local",
+    buildUrl: (term) => `/search/lite?q=${encodeURIComponent(term)}`,
+  },
   {
     label: "Bing Lite",
     buildUrl: (term) => `https://lite.bing.com/search?q=${encodeURIComponent(term)}`,

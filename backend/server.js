@@ -111,6 +111,38 @@ app.get("/proxy/:encoded", (req, res) => {
   redirectProxyRequest(req, res, req.params.encoded);
 });
 
+app.get("/search/lite", async (req, res) => {
+  const termRaw = Array.isArray(req.query.q) ? req.query.q[0] : req.query.q;
+  const term = (termRaw || "").toString().trim();
+  if (!term) {
+    return res.redirect("/");
+  }
+  try {
+    const upstreamUrl = new URL("https://html.duckduckgo.com/html/");
+    upstreamUrl.searchParams.set("q", term);
+    upstreamUrl.searchParams.set("ia", "web");
+    const upstream = await fetch(upstreamUrl, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).send("DuckDuckGo is unavailable right now.");
+    }
+    const html = await upstream.text();
+    const context = { requestId: createRequestId("search-lite"), renderer: "direct" };
+    let rewritten = rewriteHtmlDocument(html, upstreamUrl, context);
+    rewritten = patchDuckduckgoPage(rewritten);
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    res.setHeader("x-supersonic-renderer", "search-lite");
+    return res.send(rewritten);
+  } catch (error) {
+    console.error("[supersonic] search lite failed", error);
+    return res.status(502).send("Unable to load search results right now.");
+  }
+});
+
 app.all("/powerthrough", async (req, res) => {
   const targetParam = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
   const renderHint = extractRenderHint(req);
