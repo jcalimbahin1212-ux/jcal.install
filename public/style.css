@@ -144,6 +144,34 @@ img {
   opacity: 1;
 }
 
+.dev-launcher {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.dev-launcher img {
+  width: 28px;
+  height: 28px;
+  filter: hue-rotate(250deg);
+}
+
+.dev-launcher:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
+}
+
 .lockout-overlay {
   position: fixed;
   inset: 0;

@@ -102,6 +102,7 @@ const selectors = {
   devDashboard: document.querySelector("#dev-dashboard"),
   devCacheList: document.querySelector("#dev-cache-list"),
   devCurrentCache: document.querySelector("#dev-current-cache"),
+  devLauncher: document.querySelector("#dev-launcher"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
@@ -384,6 +385,20 @@ function registerEventHandlers() {
   selectors.bridgeForm?.addEventListener("submit", handleBridgeSubmit);
   selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
   selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
+  selectors.devLauncher?.addEventListener("click", () => {
+    if (document.body.classList.contains("dev-mode")) {
+      enableDevDashboard();
+      return;
+    }
+    selectors.authOverlay?.classList.add("is-hidden");
+    selectors.bridgeOverlay?.classList.remove("is-hidden");
+    selectors.bridgeError?.classList.remove("is-visible");
+    if (selectors.bridgeInput) {
+      selectors.bridgeInput.value = "";
+    }
+    startDevEntryTimer();
+    window.setTimeout(() => selectors.bridgeInput?.focus(), 100);
+  });
 
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
@@ -443,9 +458,6 @@ function releaseAuthGate() {
   const overlayNode = selectors.authOverlay;
   if (overlayNode) {
     overlayNode.classList.add("is-hidden");
-    window.setTimeout(() => {
-      overlayNode.remove();
-    }, 350);
   }
   document.body.classList.remove("auth-locked");
   if (selectors.authInput) {
