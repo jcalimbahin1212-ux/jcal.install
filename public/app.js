@@ -385,6 +385,9 @@ function handleAuthSubmit(event) {
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
     releaseAuthGate();
+    window.setTimeout(() => {
+      window.location.replace(`${window.location.origin}${window.location.pathname}`);
+    }, 150);
     return;
   }
   if (selectors.authError) {
