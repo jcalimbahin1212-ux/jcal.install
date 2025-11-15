@@ -541,9 +541,11 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
     }
   }
 
+  const proxyHost = extractProxyHost(clientRequest.headers);
+
   try {
     const upstream = await fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
-    const headers = buildForwardHeaders(upstream.headers);
+    const headers = buildForwardHeaders(upstream.headers, proxyHost);
     const contentType = upstream.headers.get("content-type") || "";
     const rewriteProfile = selectRewriteProfile(targetUrl.hostname);
 
@@ -1188,7 +1190,13 @@ function buildFetchOptions(clientRequest, targetUrl) {
   return options;
 }
 
-function buildForwardHeaders(upstreamHeaders) {
+function extractProxyHost(headers = {}) {
+  const rawHost = headers.host || headers.Host || "";
+  if (!rawHost) return "";
+  return rawHost.split(":")[0].toLowerCase();
+}
+
+function buildForwardHeaders(upstreamHeaders, proxyHost = "") {
   const forwarded = [];
   upstreamHeaders.forEach((value, key) => {
     const lower = key.toLowerCase();
@@ -1209,9 +1217,34 @@ function buildForwardHeaders(upstreamHeaders) {
   });
   const setCookies = upstreamHeaders.getSetCookie?.() ?? [];
   for (const cookie of setCookies) {
-    forwarded.push(["set-cookie", cookie]);
+    forwarded.push(["set-cookie", rewriteSetCookie(cookie, proxyHost)]);
   }
   return forwarded;
+}
+
+function rewriteSetCookie(value, proxyHost = "") {
+  if (!value || !proxyHost) {
+    return value;
+  }
+  const segments = value.split(";");
+  let domainRewritten = false;
+  const rewritten = segments.map((segment, index) => {
+    const trimmed = segment.trim();
+    if (index === 0) {
+      return trimmed;
+    }
+    if (trimmed.toLowerCase().startsWith("domain=")) {
+      domainRewritten = true;
+      return `Domain=${proxyHost}`;
+    }
+    return trimmed;
+  });
+
+  if (!domainRewritten) {
+    rewritten.push(`Domain=${proxyHost}`);
+  }
+
+  return rewritten.join("; ");
 }
 
 function applyHeaderList(res, headers = []) {
