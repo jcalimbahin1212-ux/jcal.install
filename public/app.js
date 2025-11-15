@@ -211,6 +211,8 @@ if (devUnlocked) {
 if (userIdentity) {
   document.body.dataset.username = userIdentity.username;
   document.body.dataset.uid = userIdentity.uid;
+  registerUserIdentity(userIdentity);
+  startUserStatusMonitor(true);
 }
 hydrateHistoryPreference();
 registerEventHandlers();
