@@ -621,7 +621,12 @@ function inspectFrameForProxyError() {
       }
     }
     const bodyLower = doc.body?.innerText?.trim().toLowerCase() ?? "";
-    if (bodyLower.includes("refused to connect") || bodyLower.includes("blocked this request")) {
+    if (
+      bodyLower.includes("refused to connect") ||
+      bodyLower.includes("blocked this request") ||
+      bodyLower.includes("this website has been blocked by your administrator") ||
+      bodyLower.includes("blocked.com-default.ws")
+    ) {
       const host = (() => {
         try {
           const url = new URL(lastNavigation?.targetUrl || "");
