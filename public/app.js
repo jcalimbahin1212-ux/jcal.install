@@ -511,6 +511,21 @@ function inspectFrameForProxyError() {
     if (parsed && typeof parsed.error === "string") {
       return parsed;
     }
+    const text = doc.body?.innerText?.trim().toLowerCase() ?? "";
+    if (text.includes("refused to connect") || text.includes("blocked this request")) {
+      const host = (() => {
+        try {
+          const url = new URL(lastNavigation?.targetUrl || "");
+          return url.hostname;
+        } catch {
+          return "The site";
+        }
+      })();
+      return {
+        error: `${host} refused to render inside a frame.`,
+        details: "Falling back to headless renderer.",
+      };
+    }
   } catch {
     return null;
   }
