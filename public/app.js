@@ -641,6 +641,12 @@ function inspectSearchRenderFailure() {
     if (!body) return null;
     const text = body.innerText?.toLowerCase() ?? "";
     const providerLabel = lastNavigation?.meta?.searchProviderLabel || "The search provider";
+    if (!text.trim()) {
+      const hasVisibleNodes = body.querySelector("*");
+      if (!hasVisibleNodes) {
+        return `${providerLabel} refused to render inside the workspace. Switching providers.`;
+      }
+    }
     if (text.includes("ran into an error displaying these results")) {
       return `${providerLabel} blocked the embedded results. Switching relays.`;
     }
