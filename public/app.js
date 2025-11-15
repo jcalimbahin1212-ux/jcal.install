@@ -436,7 +436,7 @@ function showAuthLockoutScreen() {
     } catch {
       window.location.replace("about:blank");
     }
-  }, 2500);
+  }, 5000);
 }
 
 function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
