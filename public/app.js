@@ -139,6 +139,7 @@ const authStorageKey = "supersonic:auth";
 const devStorageKey = "supersonic:dev-session";
 const authCacheStorageKey = "supersonic:auth-cache";
 const userIdentityKey = "supersonic:user-info";
+const localBanStorageKey = "supersonic:ban-state";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const DEV_ENTRY_CODE = "uG45373098!";
@@ -204,29 +205,67 @@ if (selectors.panicKeySelect) {
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
 }
-updateCurrentCacheDisplay();
-if (devUnlocked) {
-  document.body.classList.add("dev-mode");
+bootstrapSession();
+
+function bootstrapSession() {
+  enforceLocalBanGate().then((blocked) => {
+    if (blocked) {
+      return;
+    }
+    continueSessionBootstrap();
+  });
 }
-if (userIdentity) {
-  document.body.dataset.username = userIdentity.username;
-  document.body.dataset.uid = userIdentity.uid;
-  registerUserIdentity(userIdentity);
-  startUserStatusMonitor(true);
+
+function continueSessionBootstrap() {
+  updateCurrentCacheDisplay();
+  if (devUnlocked) {
+    document.body.classList.add("dev-mode");
+  }
+  if (userIdentity) {
+    document.body.dataset.username = userIdentity.username;
+    document.body.dataset.uid = userIdentity.uid;
+    registerUserIdentity(userIdentity);
+    startUserStatusMonitor(true);
+  }
+  hydrateHistoryPreference();
+  registerEventHandlers();
+  watchMissionBox();
+  updateActiveService(activeService);
+  registerServiceWorker();
+  listenForSwMessages();
+  registerTransportControls();
+  renderTransportPreference();
+  renderTransportState(transportState);
+  renderTransportMetricsHint();
+  hydrateUserScriptSettings();
+  startDiagnosticsPanel();
+  initializeAuthGate();
 }
-hydrateHistoryPreference();
-registerEventHandlers();
-watchMissionBox();
-updateActiveService(activeService);
-registerServiceWorker();
-listenForSwMessages();
-registerTransportControls();
-renderTransportPreference();
-renderTransportState(transportState);
-renderTransportMetricsHint();
-hydrateUserScriptSettings();
-startDiagnosticsPanel();
-initializeAuthGate();
+
+async function enforceLocalBanGate() {
+  const banState = readLocalBanState();
+  if (!banState) {
+    return false;
+  }
+  if (banState.uid) {
+    try {
+      const response = await fetch(`/dev/users/status/${encodeURIComponent(banState.uid)}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.allowed !== false) {
+          clearLocalBanState();
+          return false;
+        }
+      }
+    } catch {
+      // fail closed
+    }
+  }
+  showAuthLockoutScreen(banState.message || "banned.");
+  return true;
+}
 
 function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
@@ -438,9 +477,9 @@ function initializeAuthGate() {
   if (userIdentity?.uid) {
     verifyUserStatus(userIdentity).then((allowed) => {
       if (!allowed) {
-        resetUserIdentity();
-        showAuthLockoutScreen("banned.");
+        handleUserBan();
       } else {
+        clearLocalBanState();
         startAuthFlow();
       }
     });
@@ -527,6 +566,7 @@ function releaseAuthGate() {
     document.body.classList.remove("dev-mode");
     disableDevDashboard();
   }
+  clearLocalBanState();
   if (userIdentity?.uid) {
     startUserStatusMonitor();
   } else {
@@ -634,7 +674,7 @@ function handleUsernameSubmit(event) {
   };
   verifyUserStatus(identity).then((allowed) => {
     if (!allowed) {
-      showAuthLockoutScreen("banned.");
+      handleUserBan("banned.", identity);
       return;
     }
     saveUserIdentity(identity);
@@ -758,6 +798,51 @@ function registerUserIdentity(identity) {
   }).catch(() => {});
 }
 
+function readLocalBanState() {
+  try {
+    const raw = localStorage.getItem(localBanStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return {
+        uid: parsed.uid || null,
+        username: parsed.username || null,
+        message: parsed.message || "banned.",
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function persistLocalBanState(identity, message = "banned.") {
+  const payload = {
+    uid: identity?.uid || null,
+    username: identity?.username || null,
+    message,
+  };
+  try {
+    localStorage.setItem(localBanStorageKey, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearLocalBanState() {
+  try {
+    localStorage.removeItem(localBanStorageKey);
+  } catch {
+    /* ignore */
+  }
+}
+
+function handleUserBan(message = "banned.", identity = userIdentity) {
+  persistLocalBanState(identity, message);
+  cancelUserStatusMonitor();
+  showAuthLockoutScreen(message);
+}
+
 function startUserStatusMonitor(immediate = false) {
   cancelUserStatusMonitor();
   if (!userIdentity?.uid) {
@@ -768,9 +853,7 @@ function startUserStatusMonitor(immediate = false) {
     if (allowed) {
       return;
     }
-    cancelUserStatusMonitor();
-    resetUserIdentity();
-    showAuthLockoutScreen("banned.");
+    handleUserBan("banned.", userIdentity);
   };
   if (immediate) {
     checkStatus();
