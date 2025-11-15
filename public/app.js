@@ -599,16 +599,14 @@ function inspectFrameForProxyError() {
     const body = doc.body;
     if (!body) return null;
     const textContent = body.textContent?.trim() ?? "";
-    if (!textContent || textContent.length > 2000) {
-      return null;
-    }
-    const firstChar = textContent[0];
-    if (firstChar !== "{" && firstChar !== "[") {
-      return null;
-    }
-    const parsed = JSON.parse(textContent);
-    if (parsed && typeof parsed.error === "string") {
-      return parsed;
+    if (textContent && textContent.length <= 2000) {
+      const firstChar = textContent[0];
+      if (firstChar === "{" || firstChar === "[") {
+        const parsed = JSON.parse(textContent);
+        if (parsed && typeof parsed.error === "string") {
+          return parsed;
+        }
+      }
     }
     const bodyLower = doc.body?.innerText?.trim().toLowerCase() ?? "";
     if (bodyLower.includes("refused to connect") || bodyLower.includes("blocked this request")) {
