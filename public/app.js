@@ -115,6 +115,7 @@ const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
+const authCacheStorageKey = "supersonic:auth-cache";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const transportPrefKey = "supersonic:transport-pref";
@@ -144,6 +145,7 @@ let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
+let primedNavigationTokens = restorePrimedNavigationTokens();
 let lastNavigation = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
@@ -365,6 +367,7 @@ function registerEventHandlers() {
 function initializeAuthGate() {
   if (authUnlocked) {
     releaseAuthGate();
+    primeAuthenticationCache();
     return;
   }
   document.body.classList.add("auth-locked");
@@ -407,6 +410,7 @@ function releaseAuthGate() {
   if (autoBlankEnabled && !cloakLaunched) {
     attemptAutoBlank(true);
   }
+  primeAuthenticationCache(true);
   setStatus("Access confirmed. Welcome back to SuperSonic.");
 }
 
@@ -710,14 +714,62 @@ function normalizeAuthInput(value) {
     .toUpperCase();
 }
 
+function restorePrimedNavigationTokens() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(authCacheStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.sessionId && parsed.cacheKey) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function stampNavigationTokens(meta, { renew = false } = {}) {
   if (!meta) return;
+  if (!renew && primedNavigationTokens) {
+    meta.sessionId = primedNavigationTokens.sessionId;
+    meta.cacheKey = primedNavigationTokens.cacheKey;
+    primedNavigationTokens = null;
+    try {
+      localStorage.removeItem(authCacheStorageKey);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   if (renew || !meta.sessionId) {
     meta.sessionId = createSessionNonce();
   }
   if (renew || !meta.cacheKey) {
     meta.cacheKey = createSessionNonce();
   }
+}
+
+function primeAuthenticationCache(force = false) {
+  if (!("fetch" in window)) return;
+  if (!force && primedNavigationTokens) return;
+  const tokens = {
+    sessionId: createSessionNonce(),
+    cacheKey: createSessionNonce(),
+  };
+  primedNavigationTokens = tokens;
+  try {
+    localStorage.setItem(authCacheStorageKey, JSON.stringify(tokens));
+  } catch {
+    /* ignore storage errors */
+  }
+  const warmUrl = buildSuperSonicLink("https://duckduckgo.com/?q=SuperSonic+Safezone", {
+    session: tokens.sessionId,
+    cacheTag: tokens.cacheKey,
+    intent: "url",
+    transport: transportPreference,
+  });
+  fetch(warmUrl, { credentials: "same-origin", cache: "reload" }).catch(() => {});
 }
 
 function resolveTransportForIntent(intent) {
