@@ -598,20 +598,20 @@ function inspectFrameForProxyError() {
     const doc = selectors.frame.contentDocument;
     const body = doc.body;
     if (!body) return null;
-    const text = body.textContent?.trim() ?? "";
-    if (!text || text.length > 2000) {
+    const textContent = body.textContent?.trim() ?? "";
+    if (!textContent || textContent.length > 2000) {
       return null;
     }
-    const firstChar = text[0];
+    const firstChar = textContent[0];
     if (firstChar !== "{" && firstChar !== "[") {
       return null;
     }
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(textContent);
     if (parsed && typeof parsed.error === "string") {
       return parsed;
     }
-    const text = doc.body?.innerText?.trim().toLowerCase() ?? "";
-    if (text.includes("refused to connect") || text.includes("blocked this request")) {
+    const bodyLower = doc.body?.innerText?.trim().toLowerCase() ?? "";
+    if (bodyLower.includes("refused to connect") || bodyLower.includes("blocked this request")) {
       const host = (() => {
         try {
           const url = new URL(lastNavigation?.targetUrl || "");
