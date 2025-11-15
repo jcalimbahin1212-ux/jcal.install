@@ -116,6 +116,7 @@ const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
 const AUTH_PASSCODE = "12273164-JC";
+const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -377,7 +378,7 @@ function initializeAuthGate() {
 function handleAuthSubmit(event) {
   event.preventDefault();
   const provided = normalizeAuthInput(selectors.authInput?.value || "");
-  if (provided === AUTH_PASSCODE) {
+  if (provided === AUTH_PASSCODE_NORMALIZED) {
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
     releaseAuthGate();
@@ -387,7 +388,9 @@ function handleAuthSubmit(event) {
     selectors.authError.textContent = "Incorrect access code.";
     selectors.authError.classList.add("is-visible");
   }
-  window.location.replace("https://wikipedia.org");
+  setTimeout(() => {
+    window.location.replace("https://wikipedia.org");
+  }, 400);
 }
 
 function releaseAuthGate() {
@@ -703,7 +706,7 @@ function normalizeAuthInput(value) {
   if (!value) return "";
   return value
     .normalize("NFKD")
-    .replace(/[^0-9a-zA-Z-]/g, "")
+    .replace(/[^0-9a-zA-Z]/g, "")
     .toUpperCase();
 }
 
