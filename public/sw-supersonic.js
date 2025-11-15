@@ -143,6 +143,7 @@ function shouldProxy(url) {
 function shouldCache(request, url) {
   const path = url.pathname;
   if (path === "/" || path === "/index.html") return false;
+  if (path.startsWith("/search")) return false;
   if (path.startsWith("/powerthrough")) return false;
   if (path.startsWith("/proxy/")) return false;
   if (path.startsWith("/sw-supersonic.js")) return false;

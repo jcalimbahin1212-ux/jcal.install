@@ -80,6 +80,10 @@ const upstreamRewriteRules = [
 ];
 const cacheStore = new Map();
 const domainHealth = new Map();
+const duckLiteSession = {
+  cookie: "",
+  lastUpdated: 0,
+};
 const metrics = {
   requests: 0,
   cacheHits: 0,
@@ -118,23 +122,12 @@ app.get("/search/lite", async (req, res) => {
     return res.redirect("/");
   }
   try {
-    const upstreamUrl = new URL("https://html.duckduckgo.com/html/");
-    upstreamUrl.searchParams.set("q", term);
-    upstreamUrl.searchParams.set("ia", "web");
-    const upstream = await fetch(upstreamUrl, {
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
-      },
-    });
-    if (!upstream.ok) {
-      return res.status(upstream.status).send("DuckDuckGo is unavailable right now.");
-    }
-    const html = await upstream.text();
+    const { html, upstreamUrl } = await fetchDuckLiteResults(term);
     const context = { requestId: createRequestId("search-lite"), renderer: "direct" };
     let rewritten = rewriteHtmlDocument(html, upstreamUrl, context);
     rewritten = patchDuckduckgoPage(rewritten);
     res.setHeader("content-type", "text/html; charset=utf-8");
+    res.setHeader("cache-control", "no-store");
     res.setHeader("x-supersonic-renderer", "search-lite");
     return res.send(rewritten);
   } catch (error) {
@@ -1157,6 +1150,60 @@ function redirectProxyRequest(req, res, encodedParam, sessionId) {
   } catch {
     return res.status(400).json({ error: "Invalid proxy encoding." });
   }
+}
+
+function buildDuckLiteHeaders() {
+  const headers = {
+    "user-agent":
+      process.env.POWERTHROUGH_HEADLESS_UA ||
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+    "accept-language": "en-US,en;q=0.9",
+    referer: "https://duckduckgo.com/",
+  };
+  if (duckLiteSession.cookie) {
+    headers.cookie = duckLiteSession.cookie;
+  }
+  return headers;
+}
+
+function updateDuckLiteCookies(response) {
+  const setCookies = response.headers?.getSetCookie?.() || [];
+  if (!setCookies.length) {
+    return;
+  }
+  const parsed = [];
+  setCookies.forEach((entry) => {
+    const [pair] = entry.split(";");
+    if (pair) {
+      parsed.push(pair.trim());
+    }
+  });
+  if (parsed.length) {
+    duckLiteSession.cookie = parsed.join("; ");
+    duckLiteSession.lastUpdated = Date.now();
+  }
+}
+
+async function fetchDuckLiteResults(term, attempt = 0) {
+  const upstreamUrl = new URL("https://html.duckduckgo.com/html/");
+  upstreamUrl.searchParams.set("q", term);
+  upstreamUrl.searchParams.set("ia", "web");
+  upstreamUrl.searchParams.set("t", "supersonic");
+  upstreamUrl.searchParams.set("kl", "us-en");
+  const response = await fetch(upstreamUrl, {
+    headers: buildDuckLiteHeaders(),
+    redirect: "follow",
+  });
+  updateDuckLiteCookies(response);
+  if (!response.ok) {
+    throw new Error(`duckduckgo responded with ${response.status}`);
+  }
+  const html = await response.text();
+  if (/bots use duckduckgo too/i.test(html) && attempt < 2) {
+    duckLiteSession.cookie = "";
+    return fetchDuckLiteResults(term, attempt + 1);
+  }
+  return { html, upstreamUrl };
 }
 
 function buildSupersonicUrl(target) {
