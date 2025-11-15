@@ -68,11 +68,6 @@ const selectors = {
   autoBlankToggle: document.querySelector("#auto-blank"),
   panicKeySelect: document.querySelector("#panic-key"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
-  eduOverlay: document.querySelector("#edu-overlay"),
-  eduScroll: document.querySelector("#edu-scroll"),
-  eduButton: document.querySelector("#edu-continue"),
-  eduRestart: document.querySelector("#edu-restart"),
-  eduProgress: document.querySelector("#edu-progress"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
@@ -96,7 +91,6 @@ const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
-const eduRestartKey = "supersonic:edu-restarts";
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -123,9 +117,6 @@ let autoBlankEnabled = !isCloakedContext && localStorage.getItem(autoBlankPref) 
 let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
-const EDU_RESTART_THRESHOLD = 3;
-let eduRestarts = Number(localStorage.getItem(eduRestartKey) || "0");
-let eduUnlocked = eduRestarts >= EDU_RESTART_THRESHOLD || !document.body.classList.contains("edu-locked");
 let lastNavigation = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
@@ -133,9 +124,6 @@ const DIAGNOSTICS_LOG_LIMIT = 18;
 let diagnosticsTimer = null;
 const diagnosticsLogEntries = [];
 let lastDiagnosticsStats = null;
-if (eduUnlocked) {
-  document.body.classList.remove("edu-locked");
-}
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -145,6 +133,9 @@ if (selectors.panicKeySelect) {
 }
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
+}
+if (autoBlankEnabled && !cloakLaunched) {
+  attemptAutoBlank(true);
 }
 
 hydrateHistoryPreference();
@@ -336,9 +327,6 @@ function registerEventHandlers() {
   });
 
   updateFullscreenButton();
-
-  prepareEducationGate();
-
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
   selectors.diagPing?.addEventListener("click", () => runHealthPing());
   window.addEventListener("beforeunload", () => {
@@ -832,65 +820,6 @@ function disarmAutoBlank() {
   document.removeEventListener("keydown", autoBlankArmHandler);
   autoBlankArmHandler = null;
   autoBlankArmed = false;
-}
-
-function prepareEducationGate() {
-  if (eduUnlocked || !selectors.eduOverlay) {
-    document.body.classList.remove("edu-locked");
-    if (autoBlankEnabled && !cloakLaunched) {
-      attemptAutoBlank(true);
-    }
-    return;
-  }
-  updateEduProgress();
-  selectors.eduRestart?.addEventListener("click", handleEduRestart);
-  selectors.eduButton?.addEventListener("click", unlockSuperSonic);
-}
-
-function unlockSuperSonic() {
-  if (!eduUnlocked && eduRestarts < EDU_RESTART_THRESHOLD) {
-    setStatus(`Complete ${EDU_RESTART_THRESHOLD - eduRestarts} more restart(s).`, true);
-    return;
-  }
-  if (eduUnlocked) return;
-  eduUnlocked = true;
-  localStorage.setItem(eduRestartKey, String(Math.max(eduRestarts, EDU_RESTART_THRESHOLD)));
-  selectors.eduButton?.removeEventListener("click", unlockSuperSonic);
-  document.body.classList.remove("edu-locked");
-  selectors.eduOverlay?.classList.add("is-hidden");
-  if (autoBlankEnabled && !cloakLaunched) {
-    setTimeout(() => attemptAutoBlank(true), 250);
-  }
-  setStatus("SuperSonic ready. Stay safe.");
-}
-
-function handleEduRestart() {
-  eduRestarts += 1;
-  localStorage.setItem(eduRestartKey, String(eduRestarts));
-  updateEduProgress();
-  selectors.eduOverlay?.classList.add("is-reloading");
-  setTimeout(() => {
-    selectors.eduOverlay?.classList.remove("is-reloading");
-    window.location.reload();
-  }, 350);
-  if (eduRestarts >= EDU_RESTART_THRESHOLD && selectors.eduButton) {
-    selectors.eduButton.disabled = false;
-    selectors.eduButton.textContent = "Google";
-  }
-}
-
-function updateEduProgress() {
-  if (!selectors.eduProgress) return;
-  const remaining = Math.max(0, EDU_RESTART_THRESHOLD - eduRestarts);
-  if (remaining > 0) {
-    selectors.eduProgress.textContent = `Reload the lesson ${remaining} more ${
-      remaining === 1 ? "time" : "times"
-    } to unlock SuperSonic.`;
-    selectors.eduButton && (selectors.eduButton.disabled = true);
-  } else {
-    selectors.eduProgress.textContent = "Lesson verified. Select Google to continue to SuperSonic.";
-    selectors.eduButton && (selectors.eduButton.disabled = false);
-  }
 }
 
 function registerServiceWorker() {
