@@ -177,34 +177,6 @@ body:not(.auth-locked) .dev-launcher {
 
 
 
-.dev-launcher {
-  position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
-  border: none;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(12px);
-  cursor: pointer;
-  transition: transform 150ms ease, box-shadow 150ms ease;
-}
-
-.dev-launcher img {
-  width: 28px;
-  height: 28px;
-  filter: hue-rotate(250deg);
-}
-
-.dev-launcher:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
-}
-
 .lockout-overlay {
   position: fixed;
   inset: 0;
@@ -968,10 +940,23 @@ body.history-track .portal__status::after {
   margin: 0;
 }
 
+.dev-dashboard__welcome {
+  margin: 0.35rem 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .dev-dashboard__url {
   margin-top: 0.5rem;
   color: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
+}
+
+.dev-dashboard__grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 1.5rem;
 }
 
 .dev-dashboard__list {
@@ -1017,12 +1002,6 @@ body.history-track .portal__status::after {
   font-size: 0.85rem;
   cursor: pointer;
 }
-.dev-dashboard__grid {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  margin-top: 1.5rem;
-}
 
 .dev-user-list {
   display: flex;
@@ -1040,6 +1019,25 @@ body.history-track .portal__status::after {
   gap: 0.4rem;
 }
 
+.dev-user-entry__meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.dev-user-entry__uid {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dev-user-entry__details {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
 .dev-user-entry__actions,
 .dev-cache-entry__actions {
   display: flex;
@@ -1047,6 +1045,44 @@ body.history-track .portal__status::after {
   flex-wrap: wrap;
 }
 
-body:not(.auth-locked) .dev-launcher {
-  display: flex;
+.dev-user-entry__actions button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.dev-log-entry {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dev-log-entry__meta {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: 0.4rem;
+}
+
+.dev-log-entry__details {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0.15rem 0;
+}
+
+.dev-log-entry__target {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  word-break: break-word;
+}
+
+.dev-log-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }

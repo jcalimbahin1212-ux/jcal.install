@@ -63,6 +63,9 @@ const METRIC_DEFAULT_SCORE = 0.85;
 const METRIC_LATENCY_BASELINE = 1200;
 const METRIC_LATENCY_MAX = 6000;
 const METRIC_RECENT_FAILURE_WINDOW = 30_000;
+const DEV_CACHE_REFRESH_MS = 30_000;
+const DEV_USER_REFRESH_MS = 45_000;
+const DEV_LOG_REFRESH_MS = 20_000;
 let activeAttempt = null;
 let transportState = { safezone: "unknown", lastUpdate: 0, info: null };
 
@@ -95,6 +98,10 @@ const selectors = {
   bridgeForm: document.querySelector("#bridge-form"),
   bridgeInput: document.querySelector("#bridge-code"),
   bridgeError: document.querySelector("#bridge-error"),
+  usernameOverlay: document.querySelector("#username-overlay"),
+  usernameForm: document.querySelector("#username-form"),
+  usernameInput: document.querySelector("#username-input"),
+  usernameError: document.querySelector("#username-error"),
   devOverlay: document.querySelector("#dev-overlay"),
   devForm: document.querySelector("#dev-form"),
   devInput: document.querySelector("#dev-code"),
@@ -102,6 +109,8 @@ const selectors = {
   devDashboard: document.querySelector("#dev-dashboard"),
   devCacheList: document.querySelector("#dev-cache-list"),
   devCurrentCache: document.querySelector("#dev-current-cache"),
+  devUserList: document.querySelector("#dev-user-list"),
+  devLogList: document.querySelector("#dev-log-list"),
   devLauncher: document.querySelector("#dev-launcher"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
@@ -129,6 +138,7 @@ const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
 const devStorageKey = "supersonic:dev-session";
 const authCacheStorageKey = "supersonic:auth-cache";
+const userIdentityKey = "supersonic:user-info";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const DEV_ENTRY_CODE = "uG45373098!";
@@ -170,9 +180,12 @@ let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
 let devUnlocked = sessionStorage.getItem(devStorageKey) === "yes";
 let devEntryTimer = null;
 let primedNavigationTokens = restorePrimedNavigationTokens();
+let userIdentity = loadUserIdentity();
 let currentCacheTag = new URLSearchParams(window.location.search).get("cache");
 let lastNavigation = null;
 let devCacheRefreshTimer = null;
+let devUserRefreshTimer = null;
+let devLogRefreshTimer = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
 const DIAGNOSTICS_LOG_LIMIT = 18;
@@ -192,6 +205,10 @@ if (selectors.autoBlankToggle) {
 updateCurrentCacheDisplay();
 if (devUnlocked) {
   document.body.classList.add("dev-mode");
+}
+if (userIdentity) {
+  document.body.dataset.username = userIdentity.username;
+  document.body.dataset.uid = userIdentity.uid;
 }
 hydrateHistoryPreference();
 registerEventHandlers();
@@ -385,6 +402,8 @@ function registerEventHandlers() {
   selectors.bridgeForm?.addEventListener("submit", handleBridgeSubmit);
   selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
   selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
+  selectors.devUserList?.addEventListener("click", handleDevUserActionClick);
+  selectors.usernameForm?.addEventListener("submit", handleUsernameSubmit);
   selectors.devLauncher?.addEventListener("click", () => {
     if (document.body.classList.contains("dev-mode")) {
       enableDevDashboard();
@@ -412,12 +431,32 @@ function registerEventHandlers() {
 }
 
 function initializeAuthGate() {
+  if (userIdentity?.uid) {
+    verifyUserStatus(userIdentity).then((allowed) => {
+      if (!allowed) {
+        resetUserIdentity();
+        showAuthLockoutScreen("banned.");
+      } else {
+        startAuthFlow();
+      }
+    });
+    return;
+  }
+  startAuthFlow();
+}
+
+function startAuthFlow() {
   if (devUnlocked) {
     authUnlocked = true;
     selectors.authOverlay?.classList.add("is-hidden");
     selectors.bridgeOverlay?.classList.add("is-hidden");
     selectors.devOverlay?.classList.add("is-hidden");
     releaseAuthGate();
+    return;
+  }
+  if (authUnlocked && !userIdentity) {
+    selectors.authOverlay?.classList.add("is-hidden");
+    promptUsernameCapture();
     return;
   }
   if (authUnlocked) {
@@ -441,6 +480,11 @@ function handleAuthSubmit(event) {
     return;
   }
   if (provided === AUTH_PASSCODE_NORMALIZED) {
+    if (!userIdentity) {
+      selectors.authOverlay?.classList.add("is-hidden");
+      promptUsernameCapture();
+      return;
+    }
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
     releaseAuthGate();
@@ -564,6 +608,173 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   }, 5000);
 }
 
+function handleUsernameSubmit(event) {
+  event.preventDefault();
+  const entered = selectors.usernameInput?.value?.trim() || "";
+  const sanitized = sanitizeUsername(entered);
+  if (sanitized.length < 3) {
+    if (selectors.usernameError) {
+      selectors.usernameError.textContent = "Username must be at least 3 characters.";
+      selectors.usernameError.classList.add("is-visible");
+    }
+    return;
+  }
+  const identity = {
+    username: sanitized,
+    uid: userIdentity?.uid || generateUserUid(),
+  };
+  verifyUserStatus(identity).then((allowed) => {
+    if (!allowed) {
+      showAuthLockoutScreen("banned.");
+      return;
+    }
+    saveUserIdentity(identity);
+    selectors.usernameOverlay?.classList.add("is-hidden");
+    authUnlocked = true;
+    localStorage.setItem(authStorageKey, "yes");
+    releaseAuthGate();
+  });
+}
+
+function attachUserMetadataToUrl(urlString, meta = {}) {
+  if (!meta?.user?.uid && !meta?.intent && !userIdentity?.uid) {
+    return urlString;
+  }
+  const absolute = new URL(urlString, window.location.origin);
+  const uidValue = meta?.user?.uid || userIdentity?.uid;
+  const usernameValue = meta?.user?.username || userIdentity?.username;
+  if (uidValue) {
+    absolute.searchParams.set("uid", uidValue);
+  }
+  if (usernameValue) {
+    absolute.searchParams.set("uname", usernameValue);
+  }
+  if (meta?.intent) {
+    absolute.searchParams.set("intent", meta.intent);
+  }
+  if (absolute.origin === window.location.origin) {
+    return `${absolute.pathname}${absolute.search}${absolute.hash}`;
+  }
+  return absolute.toString();
+}
+
+function updateHistoryParams() {
+  if (typeof window === "undefined") return;
+  try {
+    const currentUrl = new URL(window.location.href);
+    if (currentCacheTag) {
+      currentUrl.searchParams.set("cache", currentCacheTag);
+    }
+    if (userIdentity?.uid) {
+      currentUrl.searchParams.set("uid", userIdentity.uid);
+    }
+    window.history.replaceState(null, "", currentUrl.toString());
+  } catch {
+    /* ignore */
+  }
+}
+
+function promptUsernameCapture() {
+  selectors.usernameOverlay?.classList.remove("is-hidden");
+  selectors.usernameError?.classList.remove("is-visible");
+  selectors.usernameInput && (selectors.usernameInput.value = userIdentity?.username || "");
+  window.setTimeout(() => selectors.usernameInput?.focus(), 100);
+}
+
+function loadUserIdentity() {
+  try {
+    const stored = localStorage.getItem(userIdentityKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (parsed && parsed.username && parsed.uid) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function saveUserIdentity(identity) {
+  if (!identity) return;
+  userIdentity = identity;
+  try {
+    localStorage.setItem(userIdentityKey, JSON.stringify(identity));
+  } catch {
+    /* ignore */
+  }
+  document.body.dataset.username = identity.username;
+  document.body.dataset.uid = identity.uid;
+  registerUserIdentity(identity);
+  updateCurrentCacheDisplay();
+}
+
+function resetUserIdentity() {
+  userIdentity = null;
+  document.body.dataset.username = "";
+  document.body.dataset.uid = "";
+  try {
+    localStorage.removeItem(userIdentityKey);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function verifyUserStatus(identity) {
+  if (!identity?.uid) {
+    return true;
+  }
+  try {
+    const response = await fetch(`/dev/users/status/${encodeURIComponent(identity.uid)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return true;
+    }
+    const payload = await response.json();
+    return payload.allowed !== false;
+  } catch {
+    return true;
+  }
+}
+
+function registerUserIdentity(identity) {
+  if (!identity?.uid) return;
+  fetch("/dev/users/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(identity),
+  }).catch(() => {});
+}
+
+function generateUserUid() {
+  return `uid-${Math.random().toString(36).slice(2, 7)}${Date.now().toString(36).slice(-5)}`;
+}
+
+function sanitizeUsername(value) {
+  return value.replace(/[^a-z0-9_\- ]/gi, "").trim().slice(0, 32);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatTimestamp(value) {
+  if (!value && value !== 0) {
+    return "never";
+  }
+  const date = new Date(Number(value));
+  if (Number.isNaN(date.getTime())) {
+    return "never";
+  }
+  return date.toLocaleString();
+}
+
 function startDevEntryTimer() {
   cancelDevEntryTimer();
   devEntryTimer = window.setTimeout(() => {
@@ -598,8 +809,16 @@ function enableDevDashboard() {
   if (!selectors.devDashboard) return;
   selectors.devDashboard.hidden = false;
   refreshDevCacheList();
+  refreshDevUserList();
+  refreshDevLogList();
   if (!devCacheRefreshTimer) {
-    devCacheRefreshTimer = window.setInterval(refreshDevCacheList, 30_000);
+    devCacheRefreshTimer = window.setInterval(refreshDevCacheList, DEV_CACHE_REFRESH_MS);
+  }
+  if (!devUserRefreshTimer) {
+    devUserRefreshTimer = window.setInterval(refreshDevUserList, DEV_USER_REFRESH_MS);
+  }
+  if (!devLogRefreshTimer) {
+    devLogRefreshTimer = window.setInterval(refreshDevLogList, DEV_LOG_REFRESH_MS);
   }
   updateCurrentCacheDisplay();
 }
@@ -609,9 +828,23 @@ function disableDevDashboard() {
   if (selectors.devCacheList) {
     selectors.devCacheList.textContent = "Dev mode inactive.";
   }
+  if (selectors.devUserList) {
+    selectors.devUserList.textContent = "Dev mode inactive.";
+  }
+  if (selectors.devLogList) {
+    selectors.devLogList.textContent = "Dev mode inactive.";
+  }
   if (devCacheRefreshTimer) {
     clearInterval(devCacheRefreshTimer);
     devCacheRefreshTimer = null;
+  }
+  if (devUserRefreshTimer) {
+    clearInterval(devUserRefreshTimer);
+    devUserRefreshTimer = null;
+  }
+  if (devLogRefreshTimer) {
+    clearInterval(devLogRefreshTimer);
+    devLogRefreshTimer = null;
   }
 }
 
@@ -637,13 +870,19 @@ function renderDevCacheEntries(entries = []) {
   }
   const fragment = entries
     .map((entry) => {
-      const expires =
-        entry.expiresAt && Number.isFinite(entry.expiresAt)
-          ? new Date(entry.expiresAt).toLocaleTimeString()
-          : "session";
-      return `<div class="dev-cache-entry" data-cache-key="${entry.key}">
+      const expiresLabel =
+        entry.expiresAt && Number.isFinite(entry.expiresAt) ? formatTimestamp(entry.expiresAt) : "session";
+      const keyLabel = escapeHtml(entry.key || "unknown");
+      const rendererLabel = escapeHtml(entry.renderer || "direct");
+      const userLabel =
+        entry.user && entry.user.uid
+          ? `${escapeHtml(entry.user.username || "unknown")} (${escapeHtml(entry.user.uid)})`
+          : "";
+      const statusLabel = entry.banned ? " | status: banned" : "";
+      const userSegment = userLabel ? ` | user: ${userLabel}` : "";
+      return `<div class="dev-cache-entry" data-cache-key="${escapeHtml(entry.key || "")}">
         <div class="dev-cache-entry__meta">
-          <strong>${entry.key}</strong> · renderer ${entry.renderer || "direct"} · expires ${expires}
+          <strong>${keyLabel}</strong> | renderer ${rendererLabel} | expires ${escapeHtml(expiresLabel)}${userSegment}${statusLabel}
         </div>
         <div class="dev-cache-entry__actions">
           <button data-cache-action="kick">Lock once</button>
@@ -680,6 +919,125 @@ function handleDevCacheActionClick(event) {
   }
 }
 
+async function refreshDevUserList() {
+  if (!document.body.classList.contains("dev-mode") || !selectors.devUserList) return;
+  try {
+    const response = await fetch("/dev/users", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    renderDevUserEntries(payload);
+  } catch (error) {
+    selectors.devUserList.textContent = `Failed to load users: ${error.message}`;
+  }
+}
+
+function renderDevUserEntries(users = []) {
+  if (!selectors.devUserList) return;
+  if (!users.length) {
+    selectors.devUserList.textContent = "No users yet.";
+    return;
+  }
+  const fragment = users
+    .map((user) => {
+      const uid = escapeHtml(user.uid || "unknown");
+      const username = escapeHtml(user.username || "unknown");
+      const statusLabel = user.banned ? "Status: banned" : "Status: active";
+      const lastSeen = escapeHtml(formatTimestamp(user.lastSeen));
+      const banAction = user.banned ? "unban" : "ban";
+      const banLabel = user.banned ? "Lift ban" : "Lock permanently";
+      return `<div class="dev-user-entry" data-uid="${uid}" data-username="${username}">
+        <div class="dev-user-entry__meta">
+          <strong>${username}</strong>
+          <span class="dev-user-entry__uid">${uid}</span>
+        </div>
+        <div class="dev-user-entry__details">${statusLabel} | last seen ${lastSeen}</div>
+        <div class="dev-user-entry__actions">
+          <button data-user-action="${banAction}">${banLabel}</button>
+          <button data-user-action="rename">Rename</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+  selectors.devUserList.innerHTML = fragment;
+}
+
+async function sendDevUserAction(uid, action, payload = {}) {
+  try {
+    await fetch(`/dev/users/${encodeURIComponent(uid)}/action`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, ...payload }),
+    });
+    refreshDevUserList();
+  } catch (error) {
+    console.error("[SuperSonic] dev user action failed", error);
+  }
+}
+
+function handleDevUserActionClick(event) {
+  const button = event.target.closest("[data-user-action]");
+  if (!button) return;
+  const container = button.closest(".dev-user-entry");
+  const uid = container?.dataset.uid;
+  const action = button.dataset.userAction;
+  if (!uid || !action) {
+    return;
+  }
+  if (action === "rename") {
+    const currentName = container?.dataset.username || "";
+    const proposed = window.prompt("Enter new username for this UID:", currentName);
+    const sanitized = sanitizeUsername(proposed || "");
+    if (!sanitized || sanitized.length < 3) {
+      setStatus("Username must be at least 3 characters for rename.", true);
+      return;
+    }
+    sendDevUserAction(uid, action, { username: sanitized });
+    return;
+  }
+  sendDevUserAction(uid, action);
+}
+
+async function refreshDevLogList() {
+  if (!document.body.classList.contains("dev-mode") || !selectors.devLogList) return;
+  try {
+    const response = await fetch("/dev/logs", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    renderDevLogEntries(payload);
+  } catch (error) {
+    selectors.devLogList.textContent = `Failed to load logs: ${error.message}`;
+  }
+}
+
+function renderDevLogEntries(entries = []) {
+  if (!selectors.devLogList) return;
+  if (!entries.length) {
+    selectors.devLogList.textContent = "No activity logged.";
+    return;
+  }
+  const fragment = entries
+    .map((entry) => {
+      const username = escapeHtml(entry.username || "unknown");
+      const uid = escapeHtml(entry.uid || "unknown");
+      const when = escapeHtml(formatTimestamp(entry.timestamp));
+      const intent = escapeHtml(normalizeIntent(entry.intent || "url"));
+      const renderer = escapeHtml(entry.renderer || "direct");
+      const status = escapeHtml(String(entry.status ?? "n/a"));
+      const target = escapeHtml(describeTargetForLog(entry.target || "unknown"));
+      return `<div class="dev-log-entry">
+        <div><strong>${username}</strong> <span class="dev-log-entry__meta">${uid}</span></div>
+        <div class="dev-log-entry__details">${when} | ${intent} via ${renderer} | status ${status}</div>
+        <div class="dev-log-entry__target">${target}</div>
+      </div>`;
+    })
+    .join("");
+  selectors.devLogList.innerHTML = fragment;
+}
+
 function updateCurrentCacheDisplay() {
   if (selectors.devCurrentCache) {
     selectors.devCurrentCache.textContent = currentCacheTag || "n/a";
@@ -691,10 +1049,15 @@ function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
   if (!service) {
     throw new Error("Pick a relay personality to continue.");
   }
+  const enrichedMeta = {
+    ...meta,
+    user: userIdentity,
+  };
   if (meta?.localProvider) {
-    return targetUrl;
+    return attachUserMetadataToUrl(targetUrl, enrichedMeta);
   }
-  return service.compose(targetUrl, meta);
+  const composed = service.compose(targetUrl, enrichedMeta);
+  return attachUserMetadataToUrl(composed, enrichedMeta);
 }
 
 function buildNavigationTarget(input, meta = {}) {
@@ -1377,7 +1740,7 @@ function buildServiceOrder(primaryKey, intent = "url") {
 function launchWithService(serviceKey, targetUrl, { fallback = false, meta } = {}) {
   setActiveService(serviceKey, { userInitiated: !fallback && serviceKey === userSelectedService });
   const intent = normalizeIntent(meta?.intent);
-  const enrichedMeta = { ...meta, intent, transport: transportPreference };
+  const enrichedMeta = { ...meta, intent, transport: transportPreference, user: userIdentity };
   beginServiceAttempt(serviceKey, intent);
   const outboundUrl = composeProxyUrl(targetUrl, serviceKey, enrichedMeta);
   logDiagnostics(`Routing ${describeTargetForLog(targetUrl)} via ${services[serviceKey].name} (${intent}).`);

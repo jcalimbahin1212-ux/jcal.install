@@ -27,6 +27,9 @@ const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
 const DATA_DIR = path.resolve(__dirname, "../data");
 const BANNED_CACHE_PATH = path.resolve(DATA_DIR, "banned-cache.json");
+const USERS_PATH = path.resolve(DATA_DIR, "users.json");
+const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
+const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
 const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
@@ -44,8 +47,18 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const jsonParser = express.json({ limit: "50kb" });
+fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
 loadBannedCacheKeys().catch((error) => {
   console.error("[supersonic] failed to load banned caches", error);
+});
+loadUserRegistry().catch((error) => {
+  console.error("[supersonic] failed to load user registry", error);
+});
+loadUserLogs().catch((error) => {
+  console.error("[supersonic] failed to load user logs", error);
+});
+loadBannedUsers().catch((error) => {
+  console.error("[supersonic] failed to load banned users", error);
 });
 
 app.disable("x-powered-by");
@@ -92,6 +105,10 @@ const duckLiteSession = {
   lastUpdated: 0,
 };
 const bannedCacheKeys = new Set();
+const userRegistry = new Map();
+const userLogs = [];
+const bannedUsers = new Set();
+const MAX_LOG_ENTRIES = 1000;
 const metrics = {
   requests: 0,
   cacheHits: 0,
@@ -134,9 +151,21 @@ app.get("/search/lite", async (req, res) => {
     const context = { requestId: createRequestId("search-lite"), renderer: "direct" };
     let rewritten = rewriteHtmlDocument(html, upstreamUrl, context);
     rewritten = patchDuckduckgoPage(rewritten);
+    const uid = sanitizeUid(getFirstQueryValue(req.query.uid));
+    const username = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
     res.setHeader("x-supersonic-renderer", "search-lite");
+    if (uid) {
+      recordUserLog({
+        uid,
+        username,
+        target: upstreamUrl.toString(),
+        intent: "search",
+        renderer: "search-lite",
+        status: 200,
+      });
+    }
     return res.send(rewritten);
   } catch (error) {
     console.error("[supersonic] search lite failed", error);
@@ -175,11 +204,86 @@ app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
   return res.status(400).json({ error: "Unknown action." });
 });
 
+app.post("/dev/users/register", jsonParser, (req, res) => {
+  const uid = sanitizeUid(req.body?.uid);
+  const username = sanitizeUsernameInput(req.body?.username);
+  if (!uid || !username) {
+    return res.status(400).json({ error: "uid and username are required." });
+  }
+  const entry = userRegistry.get(uid) || {};
+  entry.username = username;
+  entry.lastSeen = Date.now();
+  userRegistry.set(uid, entry);
+  persistUserRegistry();
+  return res.json({ ok: true });
+});
+
+app.get("/dev/users", (req, res) => {
+  const data = Array.from(userRegistry.entries()).map(([uid, info]) => ({
+    uid,
+    username: info.username || "unknown",
+    lastSeen: info.lastSeen || null,
+    banned: bannedUsers.has(uid),
+  }));
+  res.json(data);
+});
+
+app.get("/dev/users/status/:uid", (req, res) => {
+  const uid = sanitizeUid(req.params.uid);
+  if (!uid) {
+    return res.status(400).json({ error: "uid required" });
+  }
+  return res.json({ allowed: !bannedUsers.has(uid) });
+});
+
+app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
+  const uid = sanitizeUid(req.params.uid);
+  const action = (req.body?.action || "").toString();
+  if (!uid || !action) {
+    return res.status(400).json({ error: "Missing uid or action." });
+  }
+  if (action === "ban") {
+    bannedUsers.add(uid);
+    persistBannedUsers();
+    return res.json({ ok: true, message: "User banned." });
+  }
+  if (action === "unban") {
+    bannedUsers.delete(uid);
+    persistBannedUsers();
+    return res.json({ ok: true, message: "User unbanned." });
+  }
+  if (action === "rename") {
+    const newName = sanitizeUsernameInput(req.body?.username);
+    if (!newName) {
+      return res.status(400).json({ error: "username required for rename." });
+    }
+    const entry = userRegistry.get(uid);
+    if (!entry) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    entry.username = newName;
+    userRegistry.set(uid, entry);
+    persistUserRegistry();
+    return res.json({ ok: true, message: "Username updated." });
+  }
+  return res.status(400).json({ error: "Unknown action." });
+});
+
+app.get("/dev/logs", (req, res) => {
+  res.json(userLogs.slice(-200).reverse());
+});
+
 app.all("/powerthrough", async (req, res) => {
   const targetParam = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
   const renderHint = extractRenderHint(req);
   const requestId = createRequestId("http");
   res.setHeader(REQUEST_ID_HEADER, requestId);
+  const uidParam = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const usernameParam = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
+  const intentParam = getFirstQueryValue(req.query.intent) || "url";
+  if (uidParam && bannedUsers.has(uidParam)) {
+    return res.status(451).json({ error: "User banned.", details: "user-banned" });
+  }
 
   try {
     const result = await executeProxyCall({
@@ -190,7 +294,7 @@ app.all("/powerthrough", async (req, res) => {
         headers: req.headers,
         bodyStream: req,
       },
-    }, { requestId });
+    }, { requestId, user: uidParam ? { uid: uidParam, username: usernameParam } : null, intent: intentParam });
     if (!res.headersSent && result?.requestId && result.requestId !== requestId) {
       res.setHeader(REQUEST_ID_HEADER, result.requestId);
     }
@@ -287,15 +391,17 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
     const cached = cacheStore.get(cacheKey);
     if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
       metrics.cacheHits += 1;
-      return withRequestContext(
+      return respondWithContext(
         {
-        status: cached.status,
-        headers: cloneHeaderList(cached.headers),
-        body: Buffer.from(cached.body),
-        fromCache: true,
-        renderer: cached.renderer,
+          status: cached.status,
+          headers: cloneHeaderList(cached.headers),
+          body: Buffer.from(cached.body),
+          fromCache: true,
+          renderer: cached.renderer,
         },
-        context
+        targetUrl,
+        context,
+        { renderer: cached.renderer, status: cached.status }
       );
     }
     if (cached) {
@@ -323,15 +429,21 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
           headers,
           body: bodyBuffer,
           renderer: "headless",
+          user: context.user,
         });
       }
       recordDomainSuccess(targetUrl.hostname);
-      return withRequestContext({
-        status: headlessResult.status,
-        headers,
-        body: bodyBuffer,
-        renderer: "headless",
-      }, context);
+      return respondWithContext(
+        {
+          status: headlessResult.status,
+          headers,
+          body: bodyBuffer,
+          renderer: "headless",
+        },
+        targetUrl,
+        context,
+        { renderer: "headless", status: headlessResult.status }
+      );
     } catch (error) {
       recordDomainFailure(targetUrl.hostname);
       throw error;
@@ -366,14 +478,21 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
           headers,
           body: bodyBuffer,
           renderer: "direct",
+          user: context.user,
         });
       }
       recordDomainSuccess(targetUrl.hostname);
-      return withRequestContext({
-        status: upstream.status,
-        headers,
-        body: bodyBuffer,
-      }, context);
+      return respondWithContext(
+        {
+          status: upstream.status,
+          headers,
+          body: bodyBuffer,
+          renderer: "direct",
+        },
+        targetUrl,
+        context,
+        { renderer: "direct", status: upstream.status }
+      );
     }
 
     if (contentType.includes("text/css")) {
@@ -381,39 +500,58 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
       const rewritten = rewriteCssUrls(css, targetUrl);
       const bodyBuffer = Buffer.from(rewritten);
       setHeaderValue(headers, "content-type", contentType);
-  setHeaderValue(headers, "x-renderer", "direct");
+      setHeaderValue(headers, "x-renderer", "direct");
       if (cacheKey) {
         persistCacheEntry(cacheKey, {
           status: upstream.status,
           headers,
           body: bodyBuffer,
           renderer: "direct",
+          user: context.user,
         });
       }
       recordDomainSuccess(targetUrl.hostname);
-      return withRequestContext({
-        status: upstream.status,
-        headers,
-        body: bodyBuffer,
-      }, context);
+      return respondWithContext(
+        {
+          status: upstream.status,
+          headers,
+          body: bodyBuffer,
+          renderer: "direct",
+        },
+        targetUrl,
+        context,
+        { renderer: "direct", status: upstream.status }
+      );
     }
 
     if (upstream.body) {
       setHeaderValue(headers, "x-renderer", "direct");
       recordDomainSuccess(targetUrl.hostname);
-      return withRequestContext({
-        status: upstream.status,
-        headers,
-        stream: Readable.fromWeb(upstream.body),
-      }, context);
+      return respondWithContext(
+        {
+          status: upstream.status,
+          headers,
+          stream: Readable.fromWeb(upstream.body),
+          renderer: "direct",
+        },
+        targetUrl,
+        context,
+        { renderer: "direct", status: upstream.status }
+      );
     }
 
     setHeaderValue(headers, "x-renderer", "direct");
     recordDomainSuccess(targetUrl.hostname);
-    return withRequestContext({
-      status: upstream.status,
-      headers,
-    }, context);
+    return respondWithContext(
+      {
+        status: upstream.status,
+        headers,
+        renderer: "direct",
+      },
+      targetUrl,
+      context,
+      { renderer: "direct", status: upstream.status }
+    );
   } catch (error) {
     recordDomainFailure(targetUrl.hostname);
     throw error instanceof ProxyError ? error : new ProxyError(502, "Failed to reach target upstream.", error.message);
@@ -816,6 +954,20 @@ function withRequestContext(payload, context = {}) {
   return payload;
 }
 
+function respondWithContext(payload, targetUrl, context = {}, extra = {}) {
+  if (context?.user?.uid) {
+    recordUserLog({
+      uid: context.user.uid,
+      username: context.user.username,
+      target: targetUrl?.toString?.() ?? "",
+      intent: context.intent || "url",
+      renderer: payload.renderer || extra.renderer || "direct",
+      status: payload.status || extra.status || 200,
+    });
+  }
+  return withRequestContext(payload, context);
+}
+
 function ensureDomainHealthy(hostname) {
   if (!hostname || DOMAIN_FAILURE_THRESHOLD <= 0) {
     return;
@@ -1014,6 +1166,7 @@ function persistCacheEntry(cacheKey, payload) {
     headers: cloneHeaderList(payload.headers),
     body: Buffer.from(payload.body),
     renderer: payload.renderer || "direct",
+    user: payload.user || null,
     added: Date.now(),
     expiresAt,
   });
@@ -1204,6 +1357,7 @@ function listCacheEntries() {
     ageMs: now - value.added,
     size: value.body?.length ?? 0,
     banned: bannedCacheKeys.has(key),
+    user: value.user || null,
   }));
 }
 
@@ -1227,6 +1381,84 @@ async function persistBannedCacheKeys() {
     await fs.writeFile(BANNED_CACHE_PATH, JSON.stringify([...bannedCacheKeys]), "utf8");
   } catch (error) {
     console.error("[supersonic] failed to persist banned caches", error);
+  }
+}
+
+async function loadUserRegistry() {
+  try {
+    const raw = await fs.readFile(USERS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      Object.entries(parsed).forEach(([uid, info]) => {
+        if (uid && info && typeof info === "object") {
+          userRegistry.set(uid, info);
+        }
+      });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistUserRegistry() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    const payload = Object.fromEntries(userRegistry.entries());
+    await fs.writeFile(USERS_PATH, JSON.stringify(payload), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist user registry", error);
+  }
+}
+
+async function loadUserLogs() {
+  try {
+    const raw = await fs.readFile(LOGS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((entry) => {
+        if (entry && entry.uid) {
+          userLogs.push(entry);
+        }
+      });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistUserLogs() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(LOGS_PATH, JSON.stringify(userLogs.slice(-MAX_LOG_ENTRIES)), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist user logs", error);
+  }
+}
+
+async function loadBannedUsers() {
+  try {
+    const raw = await fs.readFile(BANNED_USERS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((uid) => bannedUsers.add(uid));
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistBannedUsers() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(BANNED_USERS_PATH, JSON.stringify([...bannedUsers]), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist banned users", error);
   }
 }
 
@@ -1297,6 +1529,49 @@ function normalizeTargetUrl(input) {
     }
     return new URL(`https://duckduckgo.com/?q=${encodeURIComponent(input)}`);
   }
+}
+
+function getFirstQueryValue(value) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function sanitizeUid(value) {
+  if (!value) return "";
+  return value.toString().trim().slice(0, 40);
+}
+
+function sanitizeUsernameInput(value) {
+  if (!value) return "";
+  return value.toString().replace(/[^a-z0-9_\- ]/gi, "").trim().slice(0, 32);
+}
+
+function recordUserLog(entry) {
+  if (!entry?.uid) {
+    return;
+  }
+  const logEntry = {
+    uid: entry.uid,
+    username:
+      entry.username || userRegistry.get(entry.uid)?.username || "unknown",
+    target: entry.target || "",
+    intent: entry.intent || "url",
+    renderer: entry.renderer || "direct",
+    timestamp: entry.timestamp || Date.now(),
+    status: entry.status || 200,
+  };
+  userLogs.push(logEntry);
+  if (userLogs.length > MAX_LOG_ENTRIES) {
+    userLogs.splice(0, userLogs.length - MAX_LOG_ENTRIES);
+  }
+  persistUserLogs();
+  const registryEntry = userRegistry.get(entry.uid) || {};
+  registryEntry.username = logEntry.username;
+  registryEntry.lastSeen = logEntry.timestamp;
+  userRegistry.set(entry.uid, registryEntry);
+  persistUserRegistry();
 }
 
 function looksLikeDomain(value) {

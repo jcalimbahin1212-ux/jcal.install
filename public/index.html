@@ -35,6 +35,20 @@
       </div>
     </div>
 
+    <div class="auth-overlay is-hidden" id="username-overlay" role="dialog" aria-modal="true">
+      <div class="auth-card">
+        <p class="auth-card__eyebrow">SuperSonic ID</p>
+        <h1>Choose a username</h1>
+        <p class="auth-card__lead">Pick a unique name so we can build your private workspace.</p>
+        <form id="username-form" autocomplete="off">
+          <label for="username-input" class="sr-only">Username</label>
+          <input id="username-input" type="text" autocomplete="off" placeholder="Enter username" required />
+          <button type="submit">Save username</button>
+          <p id="username-error" class="auth-error" role="alert" aria-live="assertive"></p>
+        </form>
+      </div>
+    </div>
+
     <div class="auth-overlay is-hidden" id="bridge-overlay">
       <div class="auth-card">
         <p class="auth-card__eyebrow">SuperSonic dev</p>
@@ -281,10 +295,24 @@
         <section id="dev-dashboard" class="dev-dashboard" hidden>
           <header>
             <p class="dev-dashboard__eyebrow">Developer mode</p>
-            <h2>Active cache sessions</h2>
+            <h2>Active sessions</h2>
+            <p class="dev-dashboard__welcome">Welcome to the panel, James.</p>
             <p class="dev-dashboard__url">Current URL cache: <span id="dev-current-cache">n/a</span></p>
           </header>
-          <div class="dev-dashboard__list" id="dev-cache-list">No cache entries yet.</div>
+          <div class="dev-dashboard__grid">
+            <article>
+              <h3>Cache entries</h3>
+              <div class="dev-dashboard__list" id="dev-cache-list">No cache entries yet.</div>
+            </article>
+            <article>
+              <h3>Registered users</h3>
+              <div class="dev-dashboard__list dev-user-list" id="dev-user-list">No users yet.</div>
+            </article>
+            <article>
+              <h3>Recent activity</h3>
+              <div class="dev-dashboard__list" id="dev-log-list">No activity logged.</div>
+            </article>
+          </div>
         </section>
 
         <section class="features">
