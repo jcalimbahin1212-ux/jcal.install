@@ -249,7 +249,11 @@ async function enforceLocalBanGate() {
   }
   if (banState.uid) {
     try {
-      const response = await fetch(`/dev/users/status/${encodeURIComponent(banState.uid)}`, {
+      const url = new URL(`/dev/users/status/${encodeURIComponent(banState.uid)}`, window.location.origin);
+      if (banState.username) {
+        url.searchParams.set("uname", banState.username);
+      }
+      const response = await fetch(url.toString(), {
         cache: "no-store",
       });
       if (response.ok) {
@@ -776,7 +780,11 @@ async function verifyUserStatus(identity) {
     return true;
   }
   try {
-    const response = await fetch(`/dev/users/status/${encodeURIComponent(identity.uid)}`, {
+    const url = new URL(`/dev/users/status/${encodeURIComponent(identity.uid)}`, window.location.origin);
+    if (identity.username) {
+      url.searchParams.set("uname", identity.username);
+    }
+    const response = await fetch(url.toString(), {
       cache: "no-store",
     });
     if (!response.ok) {
@@ -795,7 +803,13 @@ function registerUserIdentity(identity) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(identity),
-  }).catch(() => {});
+  })
+    .then((response) => {
+      if (!response.ok && response.status === 451) {
+        handleUserBan("banned.", identity);
+      }
+    })
+    .catch(() => {});
 }
 
 function readLocalBanState() {
@@ -819,7 +833,7 @@ function readLocalBanState() {
 function persistLocalBanState(identity, message = "banned.") {
   const payload = {
     uid: identity?.uid || null,
-    username: identity?.username || null,
+    username: identity?.username ? sanitizeUsername(identity.username) : null,
     message,
   };
   try {
@@ -840,6 +854,7 @@ function clearLocalBanState() {
 function handleUserBan(message = "banned.", identity = userIdentity) {
   persistLocalBanState(identity, message);
   cancelUserStatusMonitor();
+  resetUserIdentity();
   showAuthLockoutScreen(message);
 }
 

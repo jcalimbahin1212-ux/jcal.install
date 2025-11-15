@@ -107,7 +107,8 @@ const duckLiteSession = {
 const bannedCacheKeys = new Set();
 const userRegistry = new Map();
 const userLogs = [];
-const bannedUsers = new Set();
+const bannedUsers = new Map();
+const bannedAliases = new Set();
 const MAX_LOG_ENTRIES = 1000;
 const metrics = {
   requests: 0,
@@ -227,6 +228,9 @@ app.post("/dev/users/register", jsonParser, (req, res) => {
   if (!uid || !username) {
     return res.status(400).json({ error: "uid and username are required." });
   }
+  if (isUidBanned(uid) || isUsernameBanned(username)) {
+    return res.status(451).json({ error: "User banned." });
+  }
   const entry = userRegistry.get(uid) || {};
   entry.username = username;
   entry.lastSeen = Date.now();
@@ -297,7 +301,13 @@ app.get("/dev/users/status/:uid", (req, res) => {
   if (!uid) {
     return res.status(400).json({ error: "uid required" });
   }
-  return res.json({ allowed: !bannedUsers.has(uid) });
+  const username = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
+  const blockedUid = isUidBanned(uid);
+  const blockedAlias = isUsernameBanned(username);
+  return res.json({
+    allowed: !(blockedUid || blockedAlias),
+    reason: blockedUid ? "uid" : blockedAlias ? "alias" : null,
+  });
 });
 
 app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
@@ -307,13 +317,14 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
     return res.status(400).json({ error: "Missing uid or action." });
   }
   if (action === "ban") {
-    bannedUsers.add(uid);
-    persistBannedUsers();
+    const overrideName = sanitizeUsernameInput(req.body?.username);
+    const registryName = getRegistryUsername(uid);
+    const finalName = overrideName || registryName;
+    rememberBanEntry(uid, finalName);
     return res.json({ ok: true, message: "User banned." });
   }
   if (action === "unban") {
-    bannedUsers.delete(uid);
-    persistBannedUsers();
+    forgetBanEntry(uid);
     return res.json({ ok: true, message: "User unbanned." });
   }
   if (action === "rename") {
@@ -328,6 +339,9 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
     entry.username = newName;
     userRegistry.set(uid, entry);
     persistUserRegistry();
+    if (bannedUsers.has(uid)) {
+      rememberBanEntry(uid, newName);
+    }
     return res.json({ ok: true, message: "Username updated." });
   }
   return res.status(400).json({ error: "Unknown action." });
@@ -358,7 +372,7 @@ app.all("/powerthrough", async (req, res) => {
   const uidParam = sanitizeUid(getFirstQueryValue(req.query.uid));
   const usernameParam = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
   const intentParam = getFirstQueryValue(req.query.intent) || "url";
-  if (uidParam && bannedUsers.has(uidParam)) {
+  if (isUidBanned(uidParam) || isUsernameBanned(usernameParam)) {
     return res.status(451).json({ error: "User banned.", details: "user-banned" });
   }
 
@@ -1443,7 +1457,7 @@ function serializeUserRegistry() {
     uid,
     username: info?.username || "unknown",
     lastSeen: info?.lastSeen || null,
-    banned: bannedUsers.has(uid),
+    banned: isUidBanned(uid),
   }));
 }
 
@@ -1550,7 +1564,13 @@ async function loadBannedUsers() {
     const raw = await fs.readFile(BANNED_USERS_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      parsed.forEach((uid) => bannedUsers.add(uid));
+      parsed.forEach((entry) => {
+        if (typeof entry === "string") {
+          ingestBanEntry(entry, null, Date.now());
+        } else if (entry && entry.uid) {
+          ingestBanEntry(entry.uid, entry.username || null, entry.timestamp || Date.now());
+        }
+      });
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
@@ -1562,7 +1582,12 @@ async function loadBannedUsers() {
 async function persistBannedUsers() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(BANNED_USERS_PATH, JSON.stringify([...bannedUsers]), "utf8");
+    const payload = Array.from(bannedUsers.values()).map((entry) => ({
+      uid: entry.uid,
+      username: entry.username || null,
+      timestamp: entry.timestamp || Date.now(),
+    }));
+    await fs.writeFile(BANNED_USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
     console.error("[supersonic] failed to persist banned users", error);
   }
@@ -1676,6 +1701,73 @@ function sanitizeUid(value) {
 function sanitizeUsernameInput(value) {
   if (!value) return "";
   return value.toString().replace(/[^a-z0-9_\- ]/gi, "").trim().slice(0, 32);
+}
+
+function normalizeAliasToken(value) {
+  const sanitized = sanitizeUsernameInput(value);
+  return normalizedAliasFromSanitized(sanitized);
+}
+
+function isUidBanned(uid) {
+  if (!uid) {
+    return false;
+  }
+  return bannedUsers.has(uid);
+}
+
+function isUsernameBanned(username) {
+  const alias = normalizeAliasToken(username);
+  if (!alias) {
+    return false;
+  }
+  return bannedAliases.has(alias);
+}
+
+function ingestBanEntry(uid, username, timestamp = Date.now()) {
+  if (!uid) return;
+  const sanitized = sanitizeUsernameInput(username);
+  const alias = normalizedAliasFromSanitized(sanitized);
+  bannedUsers.set(uid, {
+    uid,
+    username: sanitized || null,
+    alias: alias || null,
+    timestamp,
+  });
+  if (alias) {
+    bannedAliases.add(alias);
+  }
+}
+
+function normalizedAliasFromSanitized(value) {
+  return value ? value.toLowerCase() : "";
+}
+
+function rememberBanEntry(uid, username) {
+  ingestBanEntry(uid, username, Date.now());
+  persistBannedUsers();
+}
+
+function forgetBanEntry(uid) {
+  const entry = bannedUsers.get(uid);
+  if (entry?.alias) {
+    let aliasStillUsed = false;
+    for (const other of bannedUsers.values()) {
+      if (other.uid !== uid && other.alias === entry.alias) {
+        aliasStillUsed = true;
+        break;
+      }
+    }
+    if (!aliasStillUsed) {
+      bannedAliases.delete(entry.alias);
+    }
+  }
+  bannedUsers.delete(uid);
+  persistBannedUsers();
+}
+
+function getRegistryUsername(uid) {
+  const entry = userRegistry.get(uid);
+  return entry?.username || null;
 }
 
 function recordUserLog(entry) {
