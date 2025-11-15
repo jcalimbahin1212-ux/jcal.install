@@ -103,14 +103,12 @@ class ProxyError extends Error {
   }
 }
 
+app.get("/proxy/:session/:encoded", (req, res) => {
+  redirectProxyRequest(req, res, req.params.encoded, req.params.session);
+});
+
 app.get("/proxy/:encoded", (req, res) => {
-  try {
-    const decoded = decodeURIComponent(req.params.encoded || "");
-    const redirectTarget = `/powerthrough?url=${encodeURIComponent(decoded)}`;
-    return res.redirect(302, redirectTarget);
-  } catch {
-    return res.status(400).json({ error: "Invalid proxy encoding." });
-  }
+  redirectProxyRequest(req, res, req.params.encoded);
 });
 
 app.all("/powerthrough", async (req, res) => {
@@ -1104,6 +1102,29 @@ function rewriteSrcset($, element, baseUrl) {
     .join(", ");
 
   $(element).attr("srcset", rewritten);
+}
+
+function redirectProxyRequest(req, res, encodedParam, sessionId) {
+  try {
+    const decoded = decodeURIComponent(encodedParam || "");
+    const params = new URLSearchParams();
+    params.set("url", decoded);
+    const query = req.query || {};
+    for (const [key, value] of Object.entries(query)) {
+      if (typeof value === "undefined") continue;
+      if (Array.isArray(value)) {
+        value.forEach((entry) => params.append(key, entry));
+      } else {
+        params.append(key, value);
+      }
+    }
+    if (sessionId && !params.has("cache")) {
+      params.set("cache", sessionId);
+    }
+    return res.redirect(302, `/powerthrough?${params.toString()}`);
+  } catch {
+    return res.status(400).json({ error: "Invalid proxy encoding." });
+  }
 }
 
 function buildSupersonicUrl(target) {

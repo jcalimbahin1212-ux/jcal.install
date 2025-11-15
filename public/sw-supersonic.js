@@ -1,4 +1,4 @@
-const SHELL_VERSION = "v3";
+const SHELL_VERSION = "v4";
 const SHELL_CACHE = `supersonic-shell-${SHELL_VERSION}`;
 const DATA_CACHE = `supersonic-data-${SHELL_VERSION}`;
 const SHELL_ASSETS = [
@@ -159,9 +159,21 @@ async function cacheFirst(request) {
   return response;
 }
 
+function extractProxyComponents(pathname) {
+  const remainder = pathname.replace(/^\/proxy\//, "");
+  const slashIndex = remainder.indexOf("/");
+  if (slashIndex === -1) {
+    return { session: null, encoded: remainder };
+  }
+  return {
+    session: remainder.slice(0, slashIndex) || null,
+    encoded: remainder.slice(slashIndex + 1),
+  };
+}
+
 function proxyThroughSuperSonic(url) {
-  const encodedTarget = url.pathname.replace(/^\/proxy\//, "");
-  const decodedTarget = decodeURIComponent(encodedTarget);
+  const { session, encoded } = extractProxyComponents(url.pathname);
+  const decodedTarget = decodeURIComponent(encoded || '');
   const proxyUrl = new URL("/powerthrough", self.location.origin);
   proxyUrl.searchParams.set("url", decodedTarget);
   url.searchParams.forEach((value, key) => {
@@ -169,6 +181,9 @@ function proxyThroughSuperSonic(url) {
       proxyUrl.searchParams.set(key, value);
     }
   });
+  if (session && !proxyUrl.searchParams.has("cache")) {
+    proxyUrl.searchParams.set("cache", session);
+  }
 
   const renderHint = url.searchParams.get("render") || undefined;
   const transportHint = url.searchParams.get("transport") || undefined;

@@ -31,6 +31,12 @@ body {
   line-height: 1.6;
 }
 
+body.auth-locked #app-shell {
+  filter: blur(18px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 img {
   max-width: 100%;
   display: block;
@@ -45,6 +51,91 @@ img {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, rgba(9, 27, 65, 0.82), rgba(2, 4, 10, 0.95));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  z-index: 3000;
+  transition: opacity 200ms ease, visibility 200ms ease;
+}
+
+.auth-overlay.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  padding: 2.5rem;
+  border-radius: 1.5rem;
+  background: rgba(3, 11, 26, 0.9);
+  border: 1px solid rgba(124, 201, 255, 0.25);
+  box-shadow: 0 35px 90px rgba(1, 5, 18, 0.85);
+  text-align: center;
+}
+
+.auth-card__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  font-size: 0.75rem;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.auth-card__lead {
+  margin: 0.5rem 0 1.5rem;
+  color: rgba(239, 247, 255, 0.8);
+}
+
+#auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+#auth-code {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(124, 201, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  padding: 0.85rem 1.1rem;
+  font-size: 1rem;
+}
+
+#auth-form button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.9rem 1.2rem;
+  background: linear-gradient(120deg, #0d6df0, #00c2ff);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+#auth-form button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.auth-error {
+  min-height: 1.2rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #ff8d8d;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.auth-error.is-visible {
+  opacity: 1;
 }
 
 .hero {

@@ -8,8 +8,14 @@ const services = {
     name: "SuperSonic Balanced",
     description: "Balanced rewrite mode for everyday browsing.",
     mode: "standard",
-    compose(targetUrl, meta) {
-      return buildSuperSonicLink(targetUrl, { mode: this.mode, intent: meta?.intent });
+    compose(targetUrl, meta = {}) {
+      return buildSuperSonicLink(targetUrl, {
+        mode: this.mode,
+        intent: meta?.intent,
+        transport: meta?.transport,
+        session: meta?.sessionId,
+        cacheTag: meta?.cacheKey,
+      });
     },
   },
   supersonic_headless: {
@@ -17,16 +23,29 @@ const services = {
     description: "Routes through the headless renderer for complex sites.",
     mode: "headless",
     render: "headless",
-    compose(targetUrl, meta) {
-      return buildSuperSonicLink(targetUrl, { mode: this.mode, render: this.render, intent: meta?.intent });
+    compose(targetUrl, meta = {}) {
+      return buildSuperSonicLink(targetUrl, {
+        mode: this.mode,
+        render: this.render,
+        intent: meta?.intent,
+        transport: meta?.transport,
+        session: meta?.sessionId,
+        cacheTag: meta?.cacheKey,
+      });
     },
   },
   supersonic_lite: {
     name: "SuperSonic Lite",
     description: "Lightweight mode optimized for speed.",
     mode: "lite",
-    compose(targetUrl, meta) {
-      return buildSuperSonicLink(targetUrl, { mode: this.mode, intent: meta?.intent });
+    compose(targetUrl, meta = {}) {
+      return buildSuperSonicLink(targetUrl, {
+        mode: this.mode,
+        intent: meta?.intent,
+        transport: meta?.transport,
+        session: meta?.sessionId,
+        cacheTag: meta?.cacheKey,
+      });
     },
   },
 };
@@ -68,6 +87,10 @@ const selectors = {
   autoBlankToggle: document.querySelector("#auto-blank"),
   panicKeySelect: document.querySelector("#panic-key"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
+  authOverlay: document.querySelector("#auth-overlay"),
+  authForm: document.querySelector("#auth-form"),
+  authInput: document.querySelector("#auth-code"),
+  authError: document.querySelector("#auth-error"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
@@ -91,6 +114,8 @@ const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
+const authStorageKey = "supersonic:auth";
+const AUTH_PASSCODE = "12273164-JC";
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -117,6 +142,7 @@ let autoBlankEnabled = !isCloakedContext && localStorage.getItem(autoBlankPref) 
 let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
+let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
 let lastNavigation = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
@@ -134,10 +160,6 @@ if (selectors.panicKeySelect) {
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
 }
-if (autoBlankEnabled && !cloakLaunched) {
-  attemptAutoBlank(true);
-}
-
 hydrateHistoryPreference();
 registerEventHandlers();
 watchMissionBox();
@@ -150,6 +172,7 @@ renderTransportState(transportState);
 renderTransportMetricsHint();
 hydrateUserScriptSettings();
 startDiagnosticsPanel();
+initializeAuthGate();
 
 function registerEventHandlers() {
   selectors.chips.forEach((chip) => {
@@ -172,6 +195,7 @@ function registerEventHandlers() {
     try {
       const meta = {};
       const targetUrl = buildNavigationTarget(rawValue, meta);
+      stampNavigationTokens(meta, { renew: true });
       const intent = meta.intent;
       meta.transport = resolveTransportForIntent(intent);
       const order = buildServiceOrder(userSelectedService, intent);
@@ -337,6 +361,52 @@ function registerEventHandlers() {
   });
 }
 
+function initializeAuthGate() {
+  if (authUnlocked) {
+    releaseAuthGate();
+    return;
+  }
+  document.body.classList.add("auth-locked");
+  selectors.authOverlay?.classList.remove("is-hidden");
+  selectors.authError && (selectors.authError.textContent = "");
+  selectors.authError?.classList.remove("is-visible");
+  selectors.authForm?.addEventListener("submit", handleAuthSubmit);
+  window.setTimeout(() => selectors.authInput?.focus(), 100);
+}
+
+function handleAuthSubmit(event) {
+  event.preventDefault();
+  const provided = selectors.authInput?.value?.trim() || "";
+  if (provided === AUTH_PASSCODE) {
+    authUnlocked = true;
+    localStorage.setItem(authStorageKey, "yes");
+    releaseAuthGate();
+    return;
+  }
+  if (selectors.authError) {
+    selectors.authError.textContent = "Incorrect access code.";
+    selectors.authError.classList.add("is-visible");
+  }
+  window.location.replace("https://wikipedia.org");
+}
+
+function releaseAuthGate() {
+  selectors.authForm?.removeEventListener("submit", handleAuthSubmit);
+  selectors.authOverlay?.classList.add("is-hidden");
+  document.body.classList.remove("auth-locked");
+  if (selectors.authInput) {
+    selectors.authInput.value = "";
+  }
+  if (selectors.authError) {
+    selectors.authError.textContent = "";
+    selectors.authError.classList.remove("is-visible");
+  }
+  if (autoBlankEnabled && !cloakLaunched) {
+    attemptAutoBlank(true);
+  }
+  setStatus("Access confirmed. Welcome back to SuperSonic.");
+}
+
 function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
   const service = services[serviceKey];
   if (!service) {
@@ -477,8 +547,17 @@ function buildSuperSonicLink(targetUrl, config = {}, renderOverride) {
   if (transportValue && transportValue !== "auto") {
     params.set("transport", transportValue);
   }
+  const cacheTagValue = typeof config === "object" ? config.cacheTag : undefined;
+  if (cacheTagValue) {
+    params.set("cache", cacheTagValue);
+  } else {
+    params.set("cache", createSessionNonce());
+  }
+  const sessionValue =
+    typeof config === "object" && config.session ? config.session : createSessionNonce();
+  const basePath = `/proxy/${sessionValue}/${encoded}`;
   const query = params.toString();
-  return query ? `/proxy/${encoded}?${query}` : `/proxy/${encoded}`;
+  return query ? `${basePath}?${query}` : basePath;
 }
 
 function inspectFrameForProxyError() {
@@ -614,6 +693,20 @@ function normalizeTransportPref(value) {
     return value;
   }
   return "auto";
+}
+
+function createSessionNonce() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function stampNavigationTokens(meta, { renew = false } = {}) {
+  if (!meta) return;
+  if (renew || !meta.sessionId) {
+    meta.sessionId = createSessionNonce();
+  }
+  if (renew || !meta.cacheKey) {
+    meta.cacheKey = createSessionNonce();
+  }
 }
 
 function resolveTransportForIntent(intent) {
@@ -960,6 +1053,7 @@ function tryServiceFallback() {
   }
   setStatus(`Retrying via ${services[nextKey].name}...`, false);
   logDiagnostics(`Fallback → ${services[nextKey].name}.`, "warn");
+  stampNavigationTokens(lastNavigation.meta, { renew: true });
   launchWithService(nextKey, lastNavigation.targetUrl, { fallback: true, meta: lastNavigation.meta });
   return true;
 }
@@ -987,6 +1081,7 @@ function advanceSearchProvider(reasonMessage) {
   setStatus(message, true);
   logDiagnostics(message, "warn");
   cancelActiveServiceAttempt();
+  stampNavigationTokens(lastNavigation.meta, { renew: true });
   launchWithService(lastNavigation.order[0], lastNavigation.targetUrl, { meta: lastNavigation.meta });
   return true;
 }

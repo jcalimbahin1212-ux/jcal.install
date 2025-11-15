@@ -13,7 +13,28 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   </head>
-  <body>
+  <body class="auth-locked">
+    <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <div class="auth-card">
+        <p class="auth-card__eyebrow">SuperSonic Safezone</p>
+        <h1 id="auth-title">Access required</h1>
+        <p class="auth-card__lead">Enter the SuperSonic access code to continue.</p>
+        <form id="auth-form" autocomplete="off">
+          <label for="auth-code" class="sr-only">Access code</label>
+          <input
+            id="auth-code"
+            type="password"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Enter access code"
+            required
+          />
+          <button type="submit">Enter workspace</button>
+          <p id="auth-error" class="auth-error" role="alert" aria-live="assertive"></p>
+        </form>
+      </div>
+    </div>
+
     <div id="app-shell">
       <header class="hero">
         <div class="hero__content">
