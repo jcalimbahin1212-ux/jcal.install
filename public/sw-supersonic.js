@@ -141,9 +141,11 @@ function shouldProxy(url) {
 }
 
 function shouldCache(request, url) {
-  if (url.pathname.startsWith("/powerthrough")) return false;
-  if (url.pathname.startsWith("/proxy/")) return false;
-  if (url.pathname.startsWith("/sw-supersonic.js")) return false;
+  const path = url.pathname;
+  if (path === "/" || path === "/index.html") return false;
+  if (path.startsWith("/powerthrough")) return false;
+  if (path.startsWith("/proxy/")) return false;
+  if (path.startsWith("/sw-supersonic.js")) return false;
   if (request.destination === "document") return true;
   return ["style", "script", "image", ""].includes(request.destination);
 }
