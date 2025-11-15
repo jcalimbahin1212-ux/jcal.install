@@ -148,6 +148,7 @@ const DEV_STAGE_TWO_NORMALIZED = normalizeAuthInput(DEV_STAGE_TWO_CODE);
 const DEV_ENTRY_CODE_NORMALIZED = normalizeAuthInput(DEV_ENTRY_CODE);
 const DEV_PASSCODE_NORMALIZED = normalizeAuthInput(DEV_PASSCODE);
 const DEV_ENTRY_WINDOW_MS = 180_000;
+const USER_STATUS_INTERVAL_MS = 10_000;
 const DEFAULT_LOCKOUT_MESSAGE =
   "you tried getting in, didnt you. why would you do that without my permission. i trusted that you would see the password screen and ask me for the password. you little rulebreaker.";
 const transportPrefKey = "supersonic:transport-pref";
@@ -192,6 +193,7 @@ const DIAGNOSTICS_LOG_LIMIT = 18;
 let diagnosticsTimer = null;
 const diagnosticsLogEntries = [];
 let lastDiagnosticsStats = null;
+let userStatusTimer = null;
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -523,6 +525,11 @@ function releaseAuthGate() {
     document.body.classList.remove("dev-mode");
     disableDevDashboard();
   }
+  if (userIdentity?.uid) {
+    startUserStatusMonitor();
+  } else {
+    cancelUserStatusMonitor();
+  }
   if (autoBlankEnabled && !cloakLaunched) {
     attemptAutoBlank(true);
   }
@@ -707,6 +714,7 @@ function saveUserIdentity(identity) {
   document.body.dataset.uid = identity.uid;
   registerUserIdentity(identity);
   updateCurrentCacheDisplay();
+  startUserStatusMonitor(true);
 }
 
 function resetUserIdentity() {
@@ -718,6 +726,7 @@ function resetUserIdentity() {
   } catch {
     /* ignore */
   }
+  cancelUserStatusMonitor();
 }
 
 async function verifyUserStatus(identity) {
@@ -745,6 +754,34 @@ function registerUserIdentity(identity) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(identity),
   }).catch(() => {});
+}
+
+function startUserStatusMonitor(immediate = false) {
+  cancelUserStatusMonitor();
+  if (!userIdentity?.uid) {
+    return;
+  }
+  const checkStatus = async () => {
+    const allowed = await verifyUserStatus(userIdentity);
+    if (allowed) {
+      return;
+    }
+    cancelUserStatusMonitor();
+    resetUserIdentity();
+    showAuthLockoutScreen("banned.");
+  };
+  if (immediate) {
+    checkStatus();
+  }
+  userStatusTimer = window.setInterval(checkStatus, USER_STATUS_INTERVAL_MS);
+}
+
+function cancelUserStatusMonitor() {
+  if (!userStatusTimer) {
+    return;
+  }
+  clearInterval(userStatusTimer);
+  userStatusTimer = null;
 }
 
 function generateUserUid() {

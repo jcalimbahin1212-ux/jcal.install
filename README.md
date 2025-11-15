@@ -78,4 +78,18 @@ Environment variable | Purpose | Default
 - Modify the UI logic (search normalization, panic shortcut, history toggle) in `public/app.js`.
 - Tune the SuperSonic workspace experience (in-page iframe, tab cloak, about:blank helper) inside `public/index.html` + `public/app.js`.
 
+## Developer control panel API
+
+The in-app developer dashboard talks to a small JSON API exposed by the backend:
+
+- `GET /dev/cache` &ndash; list active cache entries (supports `uid`, `renderer`, `includeBanned`, `limit`).
+- `POST /dev/cache/:key/action` &ndash; apply `kick`, `ban`, or `rotate` actions to a cache key.
+- `GET /dev/users` &ndash; list registered users (`uid`, `search`, `limit` filters supported).
+- `POST /dev/users/:uid/action` &ndash; `ban`, `unban`, or `rename` a user entry.
+- `GET /dev/users/status/:uid` &ndash; lightweight status check used by the auth gate.
+- `GET /dev/logs` &ndash; retrieve per-request audit logs (`uid`, `limit`, `since` filters).
+- `GET /dev/panel` &ndash; aggregated payload (caches, users, logs, metrics) for the dashboard.
+
+The API is intentionally lightweight so you can wire your own tooling if needed; add an auth layer or reverse proxy restrictions before exposing it publicly.
+
 PRs and experiments are welcome. This project is intentionally lightweight so you can riff on the idea. Stay safe out there.

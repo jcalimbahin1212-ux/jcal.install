@@ -174,7 +174,24 @@ app.get("/search/lite", async (req, res) => {
 });
 
 app.get("/dev/cache", (req, res) => {
-  res.json(listCacheEntries());
+  const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const rendererFilter = (getFirstQueryValue(req.query.renderer) || "").toString().toLowerCase().trim();
+  const includeBanned = normalizeBoolean(getFirstQueryValue(req.query.includeBanned));
+  const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), 200, 1, 500);
+  let entries = listCacheEntries();
+  if (uidFilter) {
+    entries = entries.filter((entry) => entry.user?.uid === uidFilter);
+  }
+  if (rendererFilter) {
+    entries = entries.filter((entry) => (entry.renderer || "direct").toLowerCase() === rendererFilter);
+  }
+  if (!includeBanned) {
+    entries = entries.filter((entry) => !entry.banned);
+  }
+  if (limit) {
+    entries = entries.slice(0, limit);
+  }
+  res.json(entries);
 });
 
 app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
@@ -219,13 +236,60 @@ app.post("/dev/users/register", jsonParser, (req, res) => {
 });
 
 app.get("/dev/users", (req, res) => {
-  const data = Array.from(userRegistry.entries()).map(([uid, info]) => ({
-    uid,
-    username: info.username || "unknown",
-    lastSeen: info.lastSeen || null,
-    banned: bannedUsers.has(uid),
-  }));
+  const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const searchFilter = sanitizeUsernameInput(getFirstQueryValue(req.query.search)).toLowerCase();
+  const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), 200, 5, 500);
+  let data = serializeUserRegistry();
+  if (uidFilter) {
+    data = data.filter((entry) => entry.uid === uidFilter);
+  } else if (searchFilter) {
+    data = data.filter((entry) => entry.username?.toLowerCase().includes(searchFilter));
+  }
+  if (limit) {
+    data = data.slice(0, limit);
+  }
   res.json(data);
+});
+
+app.get("/dev/panel", (req, res) => {
+  const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const includeBanned = normalizeBoolean(getFirstQueryValue(req.query.includeBanned));
+  const cacheLimit = sanitizeLimit(getFirstQueryValue(req.query.cacheLimit), 150, 10, 400);
+  const logLimit = sanitizeLimit(getFirstQueryValue(req.query.logLimit), 150, 10, 400);
+  let caches = listCacheEntries();
+  let logs = userLogs.slice(-MAX_LOG_ENTRIES);
+  let users = serializeUserRegistry();
+  if (uidFilter) {
+    caches = caches.filter((entry) => entry.user?.uid === uidFilter);
+    logs = logs.filter((entry) => entry.uid === uidFilter);
+    users = users.filter((entry) => entry.uid === uidFilter);
+  }
+  if (!includeBanned) {
+    caches = caches.filter((entry) => !entry.banned);
+  }
+  if (cacheLimit) {
+    caches = caches.slice(0, cacheLimit);
+  }
+  if (logLimit) {
+    logs = logs.slice(-logLimit);
+  }
+  logs = logs.reverse();
+  res.json({
+    filters: {
+      uid: uidFilter || null,
+      includeBanned: !!includeBanned,
+    },
+    caches,
+    users,
+    logs,
+    summary: {
+      bannedCacheCount: bannedCacheKeys.size,
+      bannedUserCount: bannedUsers.size,
+      cacheCount: caches.length,
+      userCount: users.length,
+    },
+    metrics: summarizeMetrics(),
+  });
 });
 
 app.get("/dev/users/status/:uid", (req, res) => {
@@ -270,7 +334,20 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
 });
 
 app.get("/dev/logs", (req, res) => {
-  res.json(userLogs.slice(-200).reverse());
+  const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), 200, 10, 400);
+  const since = Number(getFirstQueryValue(req.query.since)) || null;
+  let entries = userLogs.slice(-MAX_LOG_ENTRIES);
+  if (uidFilter) {
+    entries = entries.filter((entry) => entry.uid === uidFilter);
+  }
+  if (since) {
+    entries = entries.filter((entry) => entry.timestamp >= since);
+  }
+  if (limit) {
+    entries = entries.slice(-limit);
+  }
+  res.json(entries.reverse());
 });
 
 app.all("/powerthrough", async (req, res) => {
@@ -1361,6 +1438,35 @@ function listCacheEntries() {
   }));
 }
 
+function serializeUserRegistry() {
+  return Array.from(userRegistry.entries()).map(([uid, info]) => ({
+    uid,
+    username: info?.username || "unknown",
+    lastSeen: info?.lastSeen || null,
+    banned: bannedUsers.has(uid),
+  }));
+}
+
+function summarizeMetrics() {
+  const cacheRequests = metrics.cacheHits + metrics.cacheMisses;
+  const avgLatencyMs =
+    metrics.requests > 0 ? Math.round(metrics.totalLatencyMs / metrics.requests) : 0;
+  return {
+    requests: metrics.requests,
+    cacheHitRate: cacheRequests > 0 ? metrics.cacheHits / cacheRequests : 0,
+    cacheSize: cacheStore.size,
+    cacheMaxEntries: CACHE_MAX_ENTRIES,
+    headlessActive: metrics.headlessActive,
+    headlessFailures: metrics.headlessFailures,
+    safezone: {
+      requests: metrics.safezoneRequests,
+      errors: metrics.safezoneErrors,
+    },
+    domainBlocks: metrics.domainBlocks,
+    avgLatencyMs,
+  };
+}
+
 async function loadBannedCacheKeys() {
   try {
     const raw = await fs.readFile(BANNED_CACHE_PATH, "utf8");
@@ -1536,6 +1642,30 @@ function getFirstQueryValue(value) {
     return value[0];
   }
   return value;
+}
+
+function sanitizeLimit(value, defaultValue = null, min = 1, max = 500) {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return defaultValue;
+  }
+  const clamped = Math.max(min, Math.min(max, Math.floor(numeric)));
+  return clamped;
+}
+
+function normalizeBoolean(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+  }
+  return Boolean(value);
 }
 
 function sanitizeUid(value) {
