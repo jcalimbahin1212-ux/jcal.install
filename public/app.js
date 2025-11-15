@@ -4,35 +4,35 @@
  */
 
 const services = {
-  safetynet: {
-    name: "SafetyNet Balanced",
+  supersonic: {
+    name: "SuperSonic Balanced",
     description: "Balanced rewrite mode for everyday browsing.",
     mode: "standard",
     compose(targetUrl, meta) {
-      return buildSafetyNetLink(targetUrl, { mode: this.mode, intent: meta?.intent });
+      return buildSuperSonicLink(targetUrl, { mode: this.mode, intent: meta?.intent });
     },
   },
-  safetynet_headless: {
-    name: "SafetyNet Headless",
+  supersonic_headless: {
+    name: "SuperSonic Headless",
     description: "Routes through the headless renderer for complex sites.",
     mode: "headless",
     render: "headless",
     compose(targetUrl, meta) {
-      return buildSafetyNetLink(targetUrl, { mode: this.mode, render: this.render, intent: meta?.intent });
+      return buildSuperSonicLink(targetUrl, { mode: this.mode, render: this.render, intent: meta?.intent });
     },
   },
-  safetynet_lite: {
-    name: "SafetyNet Lite",
+  supersonic_lite: {
+    name: "SuperSonic Lite",
     description: "Lightweight mode optimized for speed.",
     mode: "lite",
     compose(targetUrl, meta) {
-      return buildSafetyNetLink(targetUrl, { mode: this.mode, intent: meta?.intent });
+      return buildSuperSonicLink(targetUrl, { mode: this.mode, intent: meta?.intent });
     },
   },
 };
 const SERVICE_KEYS = Object.keys(services);
-const SERVICE_PRIORITY_DEFAULT = ["safetynet", "safetynet_headless", "safetynet_lite"];
-const SERVICE_PRIORITY_SEARCH = ["safetynet", "safetynet_lite", "safetynet_headless"];
+const SERVICE_PRIORITY_DEFAULT = ["supersonic", "supersonic_headless", "supersonic_lite"];
+const SERVICE_PRIORITY_SEARCH = ["supersonic", "supersonic_lite", "supersonic_headless"];
 const SERVICE_METRICS = SERVICE_KEYS.reduce((acc, key) => {
   acc[key] = {
     url: createMetricBucket(),
@@ -95,10 +95,10 @@ const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
-const autoBlankResetFlag = "safetynet:auto-blank-reset-v2";
-const eduRestartKey = "safetynet:edu-restarts";
-const transportPrefKey = "safetynet:transport-pref";
-const userScriptPrefKey = "safetynet:user-script";
+const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
+const eduRestartKey = "supersonic:edu-restarts";
+const transportPrefKey = "supersonic:transport-pref";
+const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -108,7 +108,7 @@ const realFaviconHref = faviconLink?.href || "";
 const isCloakedContext = window.name === "unidentified-cloak";
 const isAboutBlankContext = window.location.protocol === "about:";
 
-let activeService = "safetynet";
+let activeService = "supersonic";
 let userSelectedService = activeService;
 let panicPrimed = false;
 let panicTimer = null;
@@ -233,7 +233,7 @@ function registerEventHandlers() {
     }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Page loaded inside SafetyNet.");
+    setStatus("Page loaded inside SuperSonic.");
     injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
@@ -470,7 +470,7 @@ function watchMissionBox() {
   observer.observe(selectors.missionBox);
 }
 
-function buildSafetyNetLink(targetUrl, config = {}, renderOverride) {
+function buildSuperSonicLink(targetUrl, config = {}, renderOverride) {
   const encoded = encodeURIComponent(targetUrl);
   const params = new URLSearchParams();
   const modeValue = typeof config === "string" ? config : config.mode;
@@ -844,10 +844,10 @@ function prepareEducationGate() {
   }
   updateEduProgress();
   selectors.eduRestart?.addEventListener("click", handleEduRestart);
-  selectors.eduButton?.addEventListener("click", unlockSafetyNet);
+  selectors.eduButton?.addEventListener("click", unlockSuperSonic);
 }
 
-function unlockSafetyNet() {
+function unlockSuperSonic() {
   if (!eduUnlocked && eduRestarts < EDU_RESTART_THRESHOLD) {
     setStatus(`Complete ${EDU_RESTART_THRESHOLD - eduRestarts} more restart(s).`, true);
     return;
@@ -855,13 +855,13 @@ function unlockSafetyNet() {
   if (eduUnlocked) return;
   eduUnlocked = true;
   localStorage.setItem(eduRestartKey, String(Math.max(eduRestarts, EDU_RESTART_THRESHOLD)));
-  selectors.eduButton?.removeEventListener("click", unlockSafetyNet);
+  selectors.eduButton?.removeEventListener("click", unlockSuperSonic);
   document.body.classList.remove("edu-locked");
   selectors.eduOverlay?.classList.add("is-hidden");
   if (autoBlankEnabled && !cloakLaunched) {
     setTimeout(() => attemptAutoBlank(true), 250);
   }
-  setStatus("SafetyNet ready. Stay safe.");
+  setStatus("SuperSonic ready. Stay safe.");
 }
 
 function handleEduRestart() {
@@ -869,7 +869,10 @@ function handleEduRestart() {
   localStorage.setItem(eduRestartKey, String(eduRestarts));
   updateEduProgress();
   selectors.eduOverlay?.classList.add("is-reloading");
-  setTimeout(() => selectors.eduOverlay?.classList.remove("is-reloading"), 350);
+  setTimeout(() => {
+    selectors.eduOverlay?.classList.remove("is-reloading");
+    window.location.reload();
+  }, 350);
   if (eduRestarts >= EDU_RESTART_THRESHOLD && selectors.eduButton) {
     selectors.eduButton.disabled = false;
     selectors.eduButton.textContent = "Google";
@@ -882,10 +885,10 @@ function updateEduProgress() {
   if (remaining > 0) {
     selectors.eduProgress.textContent = `Reload the lesson ${remaining} more ${
       remaining === 1 ? "time" : "times"
-    } to unlock SafetyNet.`;
+    } to unlock SuperSonic.`;
     selectors.eduButton && (selectors.eduButton.disabled = true);
   } else {
-    selectors.eduProgress.textContent = "Lesson verified. Select Google to continue to SafetyNet.";
+    selectors.eduProgress.textContent = "Lesson verified. Select Google to continue to SuperSonic.";
     selectors.eduButton && (selectors.eduButton.disabled = false);
   }
 }
@@ -896,12 +899,12 @@ function registerServiceWorker() {
   }
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("/sw-safetynet.js", { scope: "/" })
+      .register("/sw-supersonic.js", { scope: "/" })
       .then(() => {
-        console.info("[SafetyNet] service worker registered");
+        console.info("[SuperSonic] service worker registered");
       })
       .catch((error) => {
-        console.warn("[SafetyNet] failed to register service worker", error);
+        console.warn("[SuperSonic] failed to register service worker", error);
       });
   });
 }
@@ -912,7 +915,7 @@ function listenForSwMessages() {
   }
   navigator.serviceWorker.addEventListener("message", (event) => {
     const payload = event.data;
-    if (!payload || payload.source !== "safetynet-sw") return;
+    if (!payload || payload.source !== "supersonic-sw") return;
     if (payload.type === "safezone-state") {
       updateSafezoneState(payload);
       return;
@@ -1155,9 +1158,9 @@ function renderProxyMetadataFromFrame() {
 function readProxyMetadata(doc) {
   try {
     const getMeta = (name) => doc.querySelector(`meta[name='${name}']`)?.getAttribute("content") || null;
-    const requestId = getMeta("safetynet-request-id");
-    const renderer = getMeta("safetynet-renderer");
-    const target = getMeta("safetynet-target");
+    const requestId = getMeta("supersonic-request-id");
+    const renderer = getMeta("supersonic-renderer");
+    const target = getMeta("supersonic-target");
     if (!requestId && !renderer && !target) {
       return null;
     }
@@ -1241,22 +1244,22 @@ function injectUserScriptIntoFrame() {
   if (!selectors.frame || !selectors.frame.contentDocument) return;
   try {
     const doc = selectors.frame.contentDocument;
-    let node = doc.getElementById("safetynet-userscript");
+    let node = doc.getElementById("supersonic-userscript");
     if (node) {
       node.remove();
     }
     node = doc.createElement("script");
-    node.id = "safetynet-userscript";
+    node.id = "supersonic-userscript";
     node.type = "text/javascript";
     node.textContent = script;
     (doc.head || doc.documentElement).appendChild(node);
   } catch (error) {
-    console.warn("[SafetyNet] failed to inject user script", error);
+    console.warn("[SuperSonic] failed to inject user script", error);
   }
 }
 
 function clearInjectedUserScript() {
   if (!selectors.frame || !selectors.frame.contentDocument) return;
-  const existing = selectors.frame.contentDocument.getElementById("safetynet-userscript");
+  const existing = selectors.frame.contentDocument.getElementById("supersonic-userscript");
   existing?.remove();
 }

@@ -1,12 +1,12 @@
-# Unidentified
+# SuperSonic (formerly Unidentified)
 
-Unidentified is a comfort-first, purple-soaked incognito portal. The UI lives in `public/` and a custom Node-powered relay in `backend/` (codename **Powerthrough**) rewrites outbound traffic so you can browse through a single host without depending on Scramjet, Ultraviolet, or Rammerhead.
+SuperSonic is a comfort-first, Sonic-soaked incognito portal. The UI lives in `public/` and a custom Node-powered relay in `backend/` (codename **SuperSonic Safezone**, formerly Powerthrough) rewrites outbound traffic so you can browse through a single host without depending on Scramjet, Ultraviolet, or Rammerhead.
 
 ## Project layout
 
 ```
 public/   - Static assets (HTML, CSS, JS)
-backend/  - Express server + Powerthrough relay proxy
+backend/  - Express server + SuperSonic relay proxy
 index.html - Redirect helper for static hosts
 ```
 
@@ -59,16 +59,16 @@ Environment variable | Purpose | Default
 
 - `/metrics` now returns cache stats, latency averages, domain cooling state, and safezone counters. The frontend polls this every ~15s and renders it inside the **Live diagnostics** card.
 - `/status` exposes a lighter-weight snapshot for pings or uptime monitors.
-- A manual cache purge is available at `POST /metrics/purge` when `POWERTHROUGH_ADMIN_TOKEN` is configured and supplied via the `x-safetynet-admin` header.
+- A manual cache purge is available at `POST /metrics/purge` when `POWERTHROUGH_ADMIN_TOKEN` is configured and supplied via the `x-supersonic-admin` header.
 - The in-app diagnostics panel surfaces cache hit-rate, active headless renderers, last request ID, safezone status, and a trimmed event log so you can see trust-but-verify level detail without leaving the UI.
 
-## Powerthrough relay overview
+## SuperSonic relay overview
 
 - Rewrites HTML `href`, `src`, `action`, and `srcset` attributes so follow-up requests also flow through `/powerthrough`.
 - Streams non-HTML responses untouched while preserving headers like `Content-Type` and `Set-Cookie`.
 - Blocks obvious private hosts (`localhost`, `127.0.0.1`, `0.0.0.0`, RFC1918 ranges) so the relay cannot poke your LAN.
 - Cools off flaky upstream domains automatically (circuit breaker) so one bad host does not lock the entire proxy.
-- Offers three personalities (Powerthrough, Prism, Phantom). They currently map to the same endpoint but give us room to tune behavior per mode.
+- Offers three personalities (SuperSonic Balanced/Headless/Lite). They currently map to the same endpoint but give us room to tune behavior per mode.
 
 ## Customizing
 
@@ -76,6 +76,6 @@ Environment variable | Purpose | Default
 - Tweak the palette in `public/style.css`.
 - Adjust relay behavior, sanitization, or rewriting in `backend/server.js`.
 - Modify the UI logic (search normalization, panic shortcut, history toggle) in `public/app.js`.
-- Tune the Powerthrough workspace experience (in-page iframe, tab cloak, about:blank helper) inside `public/index.html` + `public/app.js`.
+- Tune the SuperSonic workspace experience (in-page iframe, tab cloak, about:blank helper) inside `public/index.html` + `public/app.js`.
 
 PRs and experiments are welcome. This project is intentionally lightweight so you can riff on the idea. Stay safe out there.

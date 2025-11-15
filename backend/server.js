@@ -34,7 +34,8 @@ const DOMAIN_FAILURE_THRESHOLD = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_THR
 const DOMAIN_FAILURE_WINDOW = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_WINDOW ?? 30_000);
 const DOMAIN_FAILURE_COOLDOWN = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_COOLDOWN ?? 45_000);
 const ADMIN_TOKEN = process.env.POWERTHROUGH_ADMIN_TOKEN || "";
-const REQUEST_ID_HEADER = "x-safetynet-request-id";
+const ADMIN_HEADER = "x-supersonic-admin";
+const REQUEST_ID_HEADER = "x-supersonic-request-id";
 
 const app = express();
 const server = createServer(app);
@@ -136,7 +137,7 @@ app.all("/powerthrough", async (req, res) => {
     const isProxyError = error instanceof ProxyError;
     if (!isProxyError || error.status >= 500) {
       metrics.upstreamErrors += 1;
-      console.error("[powerthrough] proxy error", error);
+    console.error("[supersonic] proxy error", error);
     }
     const status = isProxyError ? error.status : 502;
     const payload = {
@@ -375,7 +376,7 @@ function applyProxyResult(res, result) {
 
 function extractRenderHint(req) {
   const queryValue = Array.isArray(req.query.render) ? req.query.render[0] : req.query.render;
-  const headerValueRaw = req.headers["x-powerthrough-render"];
+  const headerValueRaw = req.headers["x-supersonic-render"];
   const headerValue = Array.isArray(headerValueRaw) ? headerValueRaw[0] : headerValueRaw;
   return queryValue || headerValue || undefined;
 }
@@ -721,14 +722,14 @@ app.use((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Unidentified backend online at http://localhost:${PORT}`);
+  console.log(`SuperSonic backend online at http://localhost:${PORT}`);
 });
 
 function requireAdminToken(req, res, next) {
   if (!ADMIN_TOKEN) {
     return res.status(501).json({ error: "Admin token not configured." });
   }
-  const supplied = req.headers["x-safetynet-admin"];
+  const supplied = req.headers[ADMIN_HEADER];
   if (supplied !== ADMIN_TOKEN) {
     return res.status(403).json({ error: "Forbidden" });
   }
@@ -995,9 +996,9 @@ function rewriteHtmlDocument(html, baseUrl, context = {}) {
   }
   const head = $("head").first();
   const headMeta = [
-    ["safetynet-request-id", context.requestId],
-    ["safetynet-renderer", context.renderer || "direct"],
-    ["safetynet-target", baseUrl?.toString?.() ?? ""],
+    ["supersonic-request-id", context.requestId],
+    ["supersonic-renderer", context.renderer || "direct"],
+    ["supersonic-target", baseUrl?.toString?.() ?? ""],
   ];
   headMeta.forEach(([name, value]) => {
     if (!value) return;
@@ -1047,7 +1048,7 @@ function rewriteCssUrls(css, baseUrl) {
     }
     try {
       const resolved = new URL(url, baseUrl);
-      return `url(${buildPowerthroughUrl(resolved.toString())})`;
+      return `url(${buildSupersonicUrl(resolved.toString())})`;
     } catch {
       return match;
     }
@@ -1058,7 +1059,7 @@ function rewriteAttribute($, element, attribute, baseUrl) {
   let value = $(element).attr(attribute);
   if (!value) {
     if (attribute === "action") {
-      $(element).attr(attribute, buildPowerthroughUrl(baseUrl.toString()));
+      $(element).attr(attribute, buildSupersonicUrl(baseUrl.toString()));
     }
     return;
   }
@@ -1073,7 +1074,7 @@ function rewriteAttribute($, element, attribute, baseUrl) {
   }
   try {
     const resolved = new URL(value, baseUrl);
-    $(element).attr(attribute, buildPowerthroughUrl(resolved.toString()));
+    $(element).attr(attribute, buildSupersonicUrl(resolved.toString()));
   } catch {
     // Ignore rewrites that fail URL resolution.
   }
@@ -1093,7 +1094,7 @@ function rewriteSrcset($, element, baseUrl) {
       }
       try {
         const resolved = new URL(url, baseUrl);
-        const proxied = buildPowerthroughUrl(resolved.toString());
+        const proxied = buildSupersonicUrl(resolved.toString());
         return descriptor ? `${proxied} ${descriptor}` : proxied;
       } catch {
         return entry;
@@ -1105,7 +1106,7 @@ function rewriteSrcset($, element, baseUrl) {
   $(element).attr("srcset", rewritten);
 }
 
-function buildPowerthroughUrl(target) {
+function buildSupersonicUrl(target) {
   return `/powerthrough?url=${encodeURIComponent(target)}`;
 }
 
@@ -1221,7 +1222,7 @@ async function loadChromium() {
       .then((mod) => mod.chromium)
       .catch((error) => {
         console.error(
-          "[powerthrough] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
+          "[supersonic] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
           error
         );
         return null;

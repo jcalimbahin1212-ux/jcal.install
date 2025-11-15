@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Unidentified - a comfort-first incognito browser portal powered by the Powerthrough relay backend."
+      content="SuperSonic is a Sonic-themed Safezone proxy that cloaks your browsing and outruns school firewalls."
     />
-    <meta name="theme-color" content="#05000c" />
-    <title>Unidentified | Incognito Proxy Portal</title>
+    <meta name="theme-color" content="#020b1f" />
+    <title>SuperSonic | Safezone Proxy Portal</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
@@ -75,7 +75,7 @@
         </div>
 
         <footer class="edu-wiki__footer">
-          <div id="edu-progress" class="edu-progress">Reload the lesson 3 more times to unlock SafetyNet.</div>
+          <div id="edu-progress" class="edu-progress">Reload the lesson 3 more times to unlock SuperSonic.</div>
           <div class="edu-actions">
             <button id="edu-restart">Reload lesson</button>
             <button id="edu-continue" disabled>Google</button>
@@ -87,11 +87,11 @@
     <div id="app-shell">
       <header class="hero">
         <div class="hero__content">
-        <img src="assets/logo.svg" class="hero__logo" alt="Unidentified Powerthrough logo" width="120" height="120" />
-        <p class="hero__eyebrow">Reliable web proxy</p>
-        <h1 class="hero__title">SafetyNet</h1>
+        <img src="assets/logo.svg" class="hero__logo" alt="SuperSonic Safezone logo" width="120" height="120" />
+        <p class="hero__eyebrow">Reliable Web Proxy</p>
+        <h1 class="hero__title">SuperSonic</h1>
         <p class="hero__lead">
-          An experimental web proxy to stop censorship in communities for the sake of privacy.
+          A Sonic-inspired Safezone tunnel built to finally end annoying internet censorship at school.
         </p>
 
         <form id="portal-form" class="portal" autocomplete="off">
@@ -104,7 +104,7 @@
             placeholder="Type a URL or search anything..."
             required
           />
-          <button type="submit">Launch secure tab</button>
+          <button type="submit">Engage Safezone</button>
         </form>
 
         <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
@@ -155,15 +155,15 @@
       </div>
 
       <div class="relay-panel" aria-live="polite">
-        <p class="relay-panel__label">Active relay</p>
-        <p id="active-service-name" class="relay-panel__name">SafetyNet Relay</p>
+        <p class="relay-panel__label">Active engine</p>
+        <p id="active-service-name" class="relay-panel__name">SuperSonic Balanced</p>
         <p id="active-service-desc" class="relay-panel__desc">
-          Native Node tunnel that rewrites traffic on the fly with zero third-party dependencies.
+          Sonic-speed rewrite engine that balances stealth, compatibility, and performance.
         </p>
         <div class="relay-panel__choices" role="group" aria-label="Relay choice">
-          <button class="relay-chip is-active" data-service="safetynet">Balanced</button>
-          <button class="relay-chip" data-service="safetynet_headless">Headless</button>
-          <button class="relay-chip" data-service="safetynet_lite">Lite</button>
+          <button class="relay-chip is-active" data-service="supersonic">Balanced</button>
+          <button class="relay-chip" data-service="supersonic_headless">Headless</button>
+          <button class="relay-chip" data-service="supersonic_lite">Lite</button>
         </div>
 
         <div class="relay-panel__status">
@@ -186,7 +186,7 @@
         <div class="transport-controls" aria-label="Transport controls">
           <div class="transport-controls__summary">
             <p class="transport-controls__label">Transport</p>
-            <p id="transport-state-label" class="transport-controls__state">Safezone: unknown</p>
+            <p id="transport-state-label" class="transport-controls__state">Safezone tunnel: unknown</p>
           </div>
           <div class="relay-panel__choices transport-controls__choices" role="group" aria-label="Transport preference">
             <button class="transport-chip relay-chip is-active" data-transport="auto">Auto</button>
@@ -194,7 +194,7 @@
             <button class="transport-chip relay-chip" data-transport="direct">Direct</button>
           </div>
           <small id="transport-metrics-hint" class="transport-controls__hint">
-            Balancing reliability and latency across relays.
+            Balancing Safezone reliability and straight-through latency automatically.
           </small>
         </div>
 
@@ -215,7 +215,7 @@
       </div>
       </header>
 
-      <section class="workspace" aria-label="Powerthrough workspace">
+      <section class="workspace" aria-label="SuperSonic Safezone workspace">
         <div class="workspace__chrome">
           <p id="workspace-status">Awaiting secure session.</p>
           <button type="button" id="workspace-reset">Reset view</button>
@@ -227,14 +227,14 @@
           </div>
           <iframe
             id="proxy-frame"
-            title="Powerthrough session"
+            title="SuperSonic Safezone session"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             loading="lazy"
           ></iframe>
         </div>
       </section>
 
-      <section class="diagnostics" aria-label="SafetyNet diagnostics">
+      <section class="diagnostics" aria-label="SuperSonic diagnostics">
         <header class="diagnostics__header">
           <div>
             <p class="diagnostics__eyebrow">Relay telemetry</p>
@@ -287,27 +287,27 @@
             <p>Browser-grade privacy without the sign-in baggage. Everything is ephemeral unless you say otherwise.</p>
           </article>
           <article>
-            <h2>Pure SafetyNet</h2>
-            <p>Everything runs through a single, hardened SafetyNet relay so you always know what stack you're using.</p>
+            <h2>Pure SuperSonic</h2>
+            <p>Everything runs through a single, hardened SuperSonic relay so you always know exactly what stack cloaks you.</p>
           </article>
           <article>
             <h2>Comfort-first UX</h2>
-            <p>A centered search bar, generous spacing, and purple gradients keep things calm even when traffic spikes.</p>
+            <p>A centered search bar, generous spacing, and deep blue gradients keep things calm even when traffic spikes.</p>
           </article>
         </section>
 
         <section class="mission" id="mission">
           <p>
-            The goal of SafetyNet is to finally end annoying internet censorships, especially at school. Solo made by
-            @1d3nt1ty.
+            The goal of SuperSonic is to finally end annoying internet censorships, especially at school. Solo made by
+            @1d3nt1ty. Visit the TN Discord at <a href="https://discord.gg/bypass" target="_blank" rel="noreferrer">discord.gg/bypass</a>.
           </p>
         </section>
 
         <section class="how-it-works">
-          <h2>How SafetyNet works</h2>
+          <h2>How SuperSonic works</h2>
           <ol>
             <li>Paste a URL or type anything to search privately.</li>
-            <li>SafetyNet launches a cloaked tab through our native rewrite backend.</li>
+            <li>SuperSonic launches a cloaked tab through our native Safezone rewrite backend.</li>
           </ol>
           <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
         </section>

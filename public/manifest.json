@@ -1,10 +1,10 @@
 {
-  "name": "SafetyNet Safezone",
-  "short_name": "SafetyNet",
+  "name": "SuperSonic Safezone",
+  "short_name": "SuperSonic",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#05000c",
-  "theme_color": "#05000c",
+  "background_color": "#010b1c",
+  "theme_color": "#021635",
   "icons": [
     {
       "src": "assets/logo.svg",

@@ -1,9 +1,18 @@
-const SHELL_VERSION = "v2";
-const SHELL_CACHE = `safetynet-shell-${SHELL_VERSION}`;
-const DATA_CACHE = `safetynet-data-${SHELL_VERSION}`;
-const SHELL_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/assets/logo.svg", "/sw-safetynet.js", "/manifest.json"];
-const CLIENT_CHANNEL = "safetynet-client";
-const SW_CHANNEL = "safetynet-sw";
+const SHELL_VERSION = "v3";
+const SHELL_CACHE = `supersonic-shell-${SHELL_VERSION}`;
+const DATA_CACHE = `supersonic-data-${SHELL_VERSION}`;
+const SHELL_ASSETS = [
+  "/",
+  "/index.html",
+  "/style.css",
+  "/app.js",
+  "/assets/logo.svg",
+  "/sw-supersonic.js",
+  "/sw-safetynet.js",
+  "/manifest.json",
+];
+const CLIENT_CHANNEL = "supersonic-client";
+const SW_CHANNEL = "supersonic-sw";
 const SAFEZONE_ENDPOINT = "/safezone";
 const SAFEZONE_PROTOCOL = "safezone.v1";
 const SAFEZONE_MAX_REPLAY_BUFFER = 32;
@@ -18,7 +27,7 @@ const SAFEZONE_OP = {
   CANCEL: "CANCEL",
 };
 const ENABLE_SAFEZONE_TRANSPORT = true;
-const REQUEST_ID_HEADER = "x-safetynet-request-id";
+const REQUEST_ID_HEADER = "x-supersonic-request-id";
 const SAFEZONE_CONNECT_TIMEOUT = 8000;
 const SAFEZONE_REQUEST_TIMEOUT = 12_000;
 
@@ -74,7 +83,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (shouldProxy(url)) {
-    event.respondWith(proxyThroughSafetyNet(url));
+    event.respondWith(proxyThroughSuperSonic(url));
     return;
   }
 
@@ -103,7 +112,7 @@ self.addEventListener("message", (event) => {
       ensureSafezoneConnection().catch((error) => {
         notifyClient(clientId, {
           type: "safezone-error",
-          message: error.message || "Failed to open SafetyNet safezone.",
+          message: error.message || "Failed to open SuperSonic safezone.",
         });
       });
       break;
@@ -134,7 +143,7 @@ function shouldProxy(url) {
 function shouldCache(request, url) {
   if (url.pathname.startsWith("/powerthrough")) return false;
   if (url.pathname.startsWith("/proxy/")) return false;
-  if (url.pathname.startsWith("/sw-safetynet.js")) return false;
+  if (url.pathname.startsWith("/sw-supersonic.js")) return false;
   if (request.destination === "document") return true;
   return ["style", "script", "image", ""].includes(request.destination);
 }
@@ -150,7 +159,7 @@ async function cacheFirst(request) {
   return response;
 }
 
-function proxyThroughSafetyNet(url) {
+function proxyThroughSuperSonic(url) {
   const encodedTarget = url.pathname.replace(/^\/proxy\//, "");
   const decodedTarget = decodeURIComponent(encodedTarget);
   const proxyUrl = new URL("/powerthrough", self.location.origin);
@@ -396,7 +405,7 @@ function detachSafezoneSocket() {
     try {
       safezoneCleanup();
     } catch (error) {
-      console.warn("[safetynet-sw] safezone cleanup failed", error);
+      console.warn("[supersonic-sw] safezone cleanup failed", error);
     }
     safezoneCleanup = null;
   }
@@ -409,7 +418,7 @@ function attachSafezoneSocket(ws) {
   const onMessage = (event) => handleSafezoneSocketMessage(event);
   const onClose = (event) => handleSafezoneSocketClose(event);
   const onError = (event) => {
-    console.warn("[safetynet-sw] safezone error", event?.message || event);
+    console.warn("[supersonic-sw] safezone error", event?.message || event);
   };
 
   ws.addEventListener("message", onMessage);
@@ -435,7 +444,7 @@ function handleSafezoneSocketMessage(event) {
   try {
     payload = parseSafezonePayload(event.data);
   } catch (error) {
-    console.warn("[safetynet-sw] safezone payload parse failed", error);
+    console.warn("[supersonic-sw] safezone payload parse failed", error);
     return;
   }
 
@@ -631,7 +640,7 @@ async function ensureSafezoneConnection() {
       socket.removeEventListener("error", handleError);
       clearTimeout(timeoutId);
       safezoneConnectPromise = null;
-      reject(event?.error || new Error("Failed to establish SafetyNet safezone."));
+      reject(event?.error || new Error("Failed to establish SuperSonic safezone."));
     };
 
     socket.addEventListener("open", handleOpen, { once: true });
