@@ -91,10 +91,17 @@ const selectors = {
   authForm: document.querySelector("#auth-form"),
   authInput: document.querySelector("#auth-code"),
   authError: document.querySelector("#auth-error"),
+  bridgeOverlay: document.querySelector("#bridge-overlay"),
+  bridgeForm: document.querySelector("#bridge-form"),
+  bridgeInput: document.querySelector("#bridge-code"),
+  bridgeError: document.querySelector("#bridge-error"),
   devOverlay: document.querySelector("#dev-overlay"),
   devForm: document.querySelector("#dev-form"),
   devInput: document.querySelector("#dev-code"),
   devError: document.querySelector("#dev-error"),
+  devDashboard: document.querySelector("#dev-dashboard"),
+  devCacheList: document.querySelector("#dev-cache-list"),
+  devCurrentCache: document.querySelector("#dev-current-cache"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
   transportHint: document.querySelector("#transport-metrics-hint"),
@@ -119,14 +126,19 @@ const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
 const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
-const devStorageKey = "supersonic:dev";
+const devStorageKey = "supersonic:dev-session";
 const authCacheStorageKey = "supersonic:auth-cache";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
-const DEV_ENTRY_CODE = "SUPERSAFEDEV";
-const DEV_PASSCODE = "DEV-ACCESS-81";
+const DEV_ENTRY_CODE = "uG45373098!";
+const DEV_STAGE_TWO_CODE = "jamesem.2138826";
+const DEV_PASSCODE = "F!ndYourJ0y!";
+const DEV_STAGE_TWO_NORMALIZED = normalizeAuthInput(DEV_STAGE_TWO_CODE);
 const DEV_ENTRY_CODE_NORMALIZED = normalizeAuthInput(DEV_ENTRY_CODE);
 const DEV_PASSCODE_NORMALIZED = normalizeAuthInput(DEV_PASSCODE);
+const DEV_ENTRY_WINDOW_MS = 180_000;
+const DEFAULT_LOCKOUT_MESSAGE =
+  "you tried getting in, didnt you. why would you do that without my permission. i trusted that you would see the password screen and ask me for the password. you little rulebreaker.";
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -154,9 +166,12 @@ let cloakLaunched = isCloakedContext;
 let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
-let devUnlocked = localStorage.getItem(devStorageKey) === "yes";
+let devUnlocked = sessionStorage.getItem(devStorageKey) === "yes";
+let devEntryTimer = null;
 let primedNavigationTokens = restorePrimedNavigationTokens();
+let currentCacheTag = new URLSearchParams(window.location.search).get("cache");
 let lastNavigation = null;
+let devCacheRefreshTimer = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
 const DIAGNOSTICS_LOG_LIMIT = 18;
@@ -173,6 +188,7 @@ if (selectors.panicKeySelect) {
 if (selectors.autoBlankToggle) {
   selectors.autoBlankToggle.checked = autoBlankEnabled;
 }
+updateCurrentCacheDisplay();
 if (devUnlocked) {
   document.body.classList.add("dev-mode");
 }
@@ -365,7 +381,9 @@ function registerEventHandlers() {
   selectors.fullscreenToggle?.addEventListener("click", () => {
     toggleFullscreen();
   });
+  selectors.bridgeForm?.addEventListener("submit", handleBridgeSubmit);
   selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
+  selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
 
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
@@ -379,6 +397,14 @@ function registerEventHandlers() {
 }
 
 function initializeAuthGate() {
+  if (devUnlocked) {
+    authUnlocked = true;
+    selectors.authOverlay?.classList.add("is-hidden");
+    selectors.bridgeOverlay?.classList.add("is-hidden");
+    selectors.devOverlay?.classList.add("is-hidden");
+    releaseAuthGate();
+    return;
+  }
   if (authUnlocked) {
     releaseAuthGate();
     primeAuthenticationCache();
@@ -396,16 +422,13 @@ function handleAuthSubmit(event) {
   event.preventDefault();
   const provided = normalizeAuthInput(selectors.authInput?.value || "");
   if (provided === DEV_ENTRY_CODE_NORMALIZED) {
-    triggerDevHandshake();
+    triggerBridgeHandshake();
     return;
   }
   if (provided === AUTH_PASSCODE_NORMALIZED) {
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
     releaseAuthGate();
-    window.setTimeout(() => {
-      window.location.replace(`${window.location.origin}${window.location.pathname}`);
-    }, 150);
     return;
   }
   if (selectors.authError) {
@@ -432,9 +455,18 @@ function releaseAuthGate() {
     selectors.authError.textContent = "";
     selectors.authError.classList.remove("is-visible");
   }
+  selectors.bridgeOverlay?.classList.add("is-hidden");
+  selectors.bridgeError?.classList.remove("is-visible");
   selectors.devOverlay?.classList.add("is-hidden");
   selectors.devError?.classList.remove("is-visible");
-  document.body.classList.toggle("dev-mode", devUnlocked);
+  if (devUnlocked) {
+    sessionStorage.setItem(devStorageKey, "yes");
+    document.body.classList.add("dev-mode");
+    enableDevDashboard();
+  } else {
+    document.body.classList.remove("dev-mode");
+    disableDevDashboard();
+  }
   if (autoBlankEnabled && !cloakLaunched) {
     attemptAutoBlank(true);
   }
@@ -442,11 +474,38 @@ function releaseAuthGate() {
   setStatus("Access confirmed. Welcome back to SuperSonic.");
 }
 
-function triggerDevHandshake() {
+function triggerBridgeHandshake() {
   selectors.authOverlay?.classList.add("is-hidden");
+  selectors.bridgeOverlay?.classList.remove("is-hidden");
+  selectors.bridgeError?.classList.remove("is-visible");
+  selectors.devOverlay?.classList.add("is-hidden");
+  if (selectors.bridgeInput) {
+    selectors.bridgeInput.value = "";
+  }
+  startDevEntryTimer();
+  window.setTimeout(() => selectors.bridgeInput?.focus(), 100);
+}
+
+function handleBridgeSubmit(event) {
+  event.preventDefault();
+  const provided = normalizeAuthInput(selectors.bridgeInput?.value || "");
+  if (provided === DEV_STAGE_TWO_NORMALIZED) {
+    selectors.bridgeOverlay?.classList.add("is-hidden");
+    triggerDevHandshake();
+    return;
+  }
+  if (selectors.bridgeError) {
+    selectors.bridgeError.textContent = "Stage-two code incorrect.";
+    selectors.bridgeError.classList.add("is-visible");
+  }
+  resetDevProcess();
+  showAuthLockoutScreen();
+}
+
+function triggerDevHandshake() {
   selectors.devOverlay?.classList.remove("is-hidden");
-  if (selectors.authInput) {
-    selectors.authInput.value = "";
+  if (selectors.devInput) {
+    selectors.devInput.value = "";
   }
   selectors.devError && (selectors.devError.textContent = "");
   selectors.devError?.classList.remove("is-visible");
@@ -457,9 +516,10 @@ function handleDevAuthSubmit(event) {
   event.preventDefault();
   const provided = normalizeAuthInput(selectors.devInput?.value || "");
   if (provided === DEV_PASSCODE_NORMALIZED) {
+    cancelDevEntryTimer();
     devUnlocked = true;
     authUnlocked = true;
-    localStorage.setItem(devStorageKey, "yes");
+    sessionStorage.setItem(devStorageKey, "yes");
     localStorage.setItem(authStorageKey, "yes");
     selectors.devOverlay?.classList.add("is-hidden");
     releaseAuthGate();
@@ -470,16 +530,17 @@ function handleDevAuthSubmit(event) {
     selectors.devError.textContent = "Developer access denied.";
     selectors.devError.classList.add("is-visible");
   }
+  resetDevProcess();
   showAuthLockoutScreen();
 }
 
-function showAuthLockoutScreen() {
+function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   if (document.querySelector(".lockout-overlay")) {
     return;
   }
   const overlay = document.createElement("div");
   overlay.className = "lockout-overlay";
-  overlay.innerHTML = `<div class="lockout-overlay__content">you tried getting in, didnt you. why would you do that without my permission. i trusted that you would see the password screen and ask me for the password. you little rulebreaker.</div>`;
+  overlay.innerHTML = `<div class="lockout-overlay__content">${message}</div>`;
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("is-active"));
   window.setTimeout(() => {
@@ -489,6 +550,128 @@ function showAuthLockoutScreen() {
       window.location.replace("about:blank");
     }
   }, 5000);
+}
+
+function startDevEntryTimer() {
+  cancelDevEntryTimer();
+  devEntryTimer = window.setTimeout(() => {
+    resetDevProcess();
+    showAuthLockoutScreen("did you just.. make an attempt to access my dev server..? quit doing that.");
+  }, DEV_ENTRY_WINDOW_MS);
+}
+
+function cancelDevEntryTimer() {
+  if (devEntryTimer) {
+    clearTimeout(devEntryTimer);
+    devEntryTimer = null;
+  }
+}
+
+function resetDevProcess() {
+  cancelDevEntryTimer();
+  selectors.bridgeOverlay?.classList.add("is-hidden");
+  selectors.devOverlay?.classList.add("is-hidden");
+  selectors.authOverlay?.classList.remove("is-hidden");
+  selectors.bridgeInput && (selectors.bridgeInput.value = "");
+  selectors.devInput && (selectors.devInput.value = "");
+  selectors.bridgeError?.classList.remove("is-visible");
+  selectors.devError?.classList.remove("is-visible");
+  devUnlocked = false;
+  sessionStorage.removeItem(devStorageKey);
+  document.body.classList.remove("dev-mode");
+  disableDevDashboard();
+}
+
+function enableDevDashboard() {
+  if (!selectors.devDashboard) return;
+  selectors.devDashboard.hidden = false;
+  refreshDevCacheList();
+  if (!devCacheRefreshTimer) {
+    devCacheRefreshTimer = window.setInterval(refreshDevCacheList, 30_000);
+  }
+  updateCurrentCacheDisplay();
+}
+
+function disableDevDashboard() {
+  selectors.devDashboard?.setAttribute("hidden", "true");
+  if (selectors.devCacheList) {
+    selectors.devCacheList.textContent = "Dev mode inactive.";
+  }
+  if (devCacheRefreshTimer) {
+    clearInterval(devCacheRefreshTimer);
+    devCacheRefreshTimer = null;
+  }
+}
+
+async function refreshDevCacheList() {
+  if (!document.body.classList.contains("dev-mode") || !selectors.devCacheList) return;
+  try {
+    const response = await fetch("/dev/cache", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    renderDevCacheEntries(payload);
+  } catch (error) {
+    selectors.devCacheList.textContent = `Failed to load cache list: ${error.message}`;
+  }
+}
+
+function renderDevCacheEntries(entries = []) {
+  if (!selectors.devCacheList) return;
+  if (!entries.length) {
+    selectors.devCacheList.textContent = "No cache entries available.";
+    return;
+  }
+  const fragment = entries
+    .map((entry) => {
+      const expires =
+        entry.expiresAt && Number.isFinite(entry.expiresAt)
+          ? new Date(entry.expiresAt).toLocaleTimeString()
+          : "session";
+      return `<div class="dev-cache-entry" data-cache-key="${entry.key}">
+        <div class="dev-cache-entry__meta">
+          <strong>${entry.key}</strong> · renderer ${entry.renderer || "direct"} · expires ${expires}
+        </div>
+        <div class="dev-cache-entry__actions">
+          <button data-cache-action="kick">Lock once</button>
+          <button data-cache-action="ban">Lock permanently</button>
+          <button data-cache-action="rotate">Allow pass reset</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+  selectors.devCacheList.innerHTML = fragment;
+}
+
+async function sendDevCacheAction(key, action) {
+  try {
+    await fetch(`/dev/cache/${encodeURIComponent(key)}/action`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    refreshDevCacheList();
+  } catch (error) {
+    console.error("[SuperSonic] dev cache action failed", error);
+  }
+}
+
+function handleDevCacheActionClick(event) {
+  const button = event.target.closest("[data-cache-action]");
+  if (!button) return;
+  const container = button.closest(".dev-cache-entry");
+  const key = container?.dataset.cacheKey;
+  const action = button.dataset.cacheAction;
+  if (key && action) {
+    sendDevCacheAction(key, action);
+  }
+}
+
+function updateCurrentCacheDisplay() {
+  if (selectors.devCurrentCache) {
+    selectors.devCurrentCache.textContent = currentCacheTag || "n/a";
+  }
 }
 
 function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
@@ -838,6 +1021,8 @@ function stampNavigationTokens(meta, { renew = false } = {}) {
     } catch {
       /* ignore */
     }
+    currentCacheTag = meta.cacheKey || null;
+    updateCurrentCacheDisplay();
     return;
   }
   if (renew || !meta.sessionId) {
@@ -846,6 +1031,8 @@ function stampNavigationTokens(meta, { renew = false } = {}) {
   if (renew || !meta.cacheKey) {
     meta.cacheKey = createSessionNonce();
   }
+  currentCacheTag = meta.cacheKey || null;
+  updateCurrentCacheDisplay();
 }
 
 function primeAuthenticationCache(force = false) {

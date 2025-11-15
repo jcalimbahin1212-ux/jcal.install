@@ -40,6 +40,7 @@ const REQUEST_ID_HEADER = "x-supersonic-request-id";
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+const jsonParser = express.json({ limit: "50kb" });
 
 app.disable("x-powered-by");
 app.use(morgan("dev"));
@@ -84,6 +85,7 @@ const duckLiteSession = {
   cookie: "",
   lastUpdated: 0,
 };
+const bannedCacheKeys = new Set();
 const metrics = {
   requests: 0,
   cacheHits: 0,
@@ -134,6 +136,34 @@ app.get("/search/lite", async (req, res) => {
     console.error("[supersonic] search lite failed", error);
     return res.status(502).send("Unable to load search results right now.");
   }
+});
+
+app.get("/dev/cache", (req, res) => {
+  res.json(listCacheEntries());
+});
+
+app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
+  const targetKey = req.params.key;
+  const action = (req.body?.action || "").toString();
+  if (!targetKey || !action) {
+    return res.status(400).json({ error: "Missing cache key or action." });
+  }
+  if (action === "kick") {
+    cacheStore.delete(targetKey);
+    bannedCacheKeys.delete(targetKey);
+    return res.json({ ok: true, message: "Session cache revoked." });
+  }
+  if (action === "ban") {
+    bannedCacheKeys.add(targetKey);
+    cacheStore.delete(targetKey);
+    return res.json({ ok: true, message: "Cache permanently blocked." });
+  }
+  if (action === "rotate") {
+    cacheStore.delete(targetKey);
+    bannedCacheKeys.delete(targetKey);
+    return res.json({ ok: true, message: "User may regenerate cache by re-authing." });
+  }
+  return res.status(400).json({ error: "Unknown action." });
 });
 
 app.all("/powerthrough", async (req, res) => {
@@ -241,6 +271,9 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
 
   const cacheKey =
     ENABLE_CACHE && method === "GET" ? buildCacheKey(targetUrl, wantsHeadless ? "headless" : "direct") : null;
+  if (cacheKey && bannedCacheKeys.has(cacheKey)) {
+    throw new ProxyError(451, "Cache access blocked by administrator.", "cache-banned");
+  }
   if (cacheKey) {
     const cached = cacheStore.get(cacheKey);
     if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
@@ -1150,6 +1183,19 @@ function redirectProxyRequest(req, res, encodedParam, sessionId) {
   } catch {
     return res.status(400).json({ error: "Invalid proxy encoding." });
   }
+}
+
+function listCacheEntries() {
+  const now = Date.now();
+  return Array.from(cacheStore.entries()).map(([key, value]) => ({
+    key,
+    renderer: value.renderer,
+    added: value.added,
+    expiresAt: value.expiresAt,
+    ageMs: now - value.added,
+    size: value.body?.length ?? 0,
+    banned: bannedCacheKeys.has(key),
+  }));
 }
 
 function buildDuckLiteHeaders() {

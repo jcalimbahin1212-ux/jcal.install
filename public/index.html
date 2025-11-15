@@ -35,6 +35,27 @@
       </div>
     </div>
 
+    <div class="auth-overlay is-hidden" id="bridge-overlay">
+      <div class="auth-card">
+        <p class="auth-card__eyebrow">SuperSonic dev</p>
+        <h1>Identity check</h1>
+        <p>Enter the stage-two developer code.</p>
+        <form id="bridge-form" autocomplete="off">
+          <label for="bridge-code" class="sr-only">Stage-two code</label>
+          <input
+            id="bridge-code"
+            type="password"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Enter stage-two code"
+            required
+          />
+          <button type="submit">Continue</button>
+          <p id="bridge-error" class="auth-error" role="alert" aria-live="assertive"></p>
+        </form>
+      </div>
+    </div>
+
     <div class="auth-overlay is-hidden" id="dev-overlay">
       <div class="auth-card">
         <p class="auth-card__eyebrow">SuperSonic dev</p>
@@ -253,6 +274,15 @@
       </section>
 
       <main>
+        <section id="dev-dashboard" class="dev-dashboard" hidden>
+          <header>
+            <p class="dev-dashboard__eyebrow">Developer mode</p>
+            <h2>Active cache sessions</h2>
+            <p class="dev-dashboard__url">Current URL cache: <span id="dev-current-cache">n/a</span></p>
+          </header>
+          <div class="dev-dashboard__list" id="dev-cache-list">No cache entries yet.</div>
+        </section>
+
         <section class="features">
           <article>
             <h2>No account trail</h2>
