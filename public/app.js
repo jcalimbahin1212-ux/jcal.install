@@ -376,7 +376,7 @@ function initializeAuthGate() {
 
 function handleAuthSubmit(event) {
   event.preventDefault();
-  const provided = selectors.authInput?.value?.trim() || "";
+  const provided = normalizeAuthInput(selectors.authInput?.value || "");
   if (provided === AUTH_PASSCODE) {
     authUnlocked = true;
     localStorage.setItem(authStorageKey, "yes");
@@ -697,6 +697,14 @@ function normalizeTransportPref(value) {
 
 function createSessionNonce() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeAuthInput(value) {
+  if (!value) return "";
+  return value
+    .normalize("NFKD")
+    .replace(/[^0-9a-zA-Z-]/g, "")
+    .toUpperCase();
 }
 
 function stampNavigationTokens(meta, { renew = false } = {}) {
