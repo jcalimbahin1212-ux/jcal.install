@@ -202,6 +202,22 @@ img {
   }
 }
 
+@keyframes lockoutFlash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  70% {
+    opacity: 0.2;
+  }
+}
+
 .hero {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
