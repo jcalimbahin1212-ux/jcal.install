@@ -394,9 +394,7 @@ function handleAuthSubmit(event) {
     selectors.authError.textContent = "Incorrect access code.";
     selectors.authError.classList.add("is-visible");
   }
-  setTimeout(() => {
-    window.location.replace("https://wikipedia.org");
-  }, 400);
+  showAuthLockoutScreen();
 }
 
 function releaseAuthGate() {
@@ -421,6 +419,24 @@ function releaseAuthGate() {
   }
   primeAuthenticationCache(true);
   setStatus("Access confirmed. Welcome back to SuperSonic.");
+}
+
+function showAuthLockoutScreen() {
+  if (document.querySelector(".lockout-overlay")) {
+    return;
+  }
+  const overlay = document.createElement("div");
+  overlay.className = "lockout-overlay";
+  overlay.innerHTML = `<div class="lockout-overlay__content">you tried getting in, didnt you. why would you do that without my permission. i trusted that you would see the password screen and ask me for the password. you little rulebreaker.</div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("is-active"));
+  window.setTimeout(() => {
+    try {
+      window.close();
+    } catch {
+      window.location.replace("about:blank");
+    }
+  }, 2500);
 }
 
 function composeProxyUrl(targetUrl, serviceKey = activeService, meta) {
