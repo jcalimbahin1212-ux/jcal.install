@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import { promises as fs } from "node:fs";
 import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
 
@@ -24,6 +25,8 @@ const PORT = process.env.PORT || 8787;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
+const DATA_DIR = path.resolve(__dirname, "../data");
+const BANNED_CACHE_PATH = path.resolve(DATA_DIR, "banned-cache.json");
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
 const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
@@ -41,6 +44,9 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const jsonParser = express.json({ limit: "50kb" });
+loadBannedCacheKeys().catch((error) => {
+  console.error("[supersonic] failed to load banned caches", error);
+});
 
 app.disable("x-powered-by");
 app.use(morgan("dev"));
@@ -151,16 +157,19 @@ app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
   if (action === "kick") {
     cacheStore.delete(targetKey);
     bannedCacheKeys.delete(targetKey);
+    persistBannedCacheKeys();
     return res.json({ ok: true, message: "Session cache revoked." });
   }
   if (action === "ban") {
     bannedCacheKeys.add(targetKey);
     cacheStore.delete(targetKey);
+    persistBannedCacheKeys();
     return res.json({ ok: true, message: "Cache permanently blocked." });
   }
   if (action === "rotate") {
     cacheStore.delete(targetKey);
     bannedCacheKeys.delete(targetKey);
+    persistBannedCacheKeys();
     return res.json({ ok: true, message: "User may regenerate cache by re-authing." });
   }
   return res.status(400).json({ error: "Unknown action." });
@@ -1196,6 +1205,29 @@ function listCacheEntries() {
     size: value.body?.length ?? 0,
     banned: bannedCacheKeys.has(key),
   }));
+}
+
+async function loadBannedCacheKeys() {
+  try {
+    const raw = await fs.readFile(BANNED_CACHE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((key) => bannedCacheKeys.add(key));
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistBannedCacheKeys() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(BANNED_CACHE_PATH, JSON.stringify([...bannedCacheKeys]), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist banned caches", error);
+  }
 }
 
 function buildDuckLiteHeaders() {
