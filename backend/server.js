@@ -35,6 +35,7 @@ const CHAT_LOG_PATH = path.resolve(DATA_DIR, "chat-log.json");
 const DEVICE_COOKIE_NAME = "supersonic_device";
 const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const CHAT_MAX_MESSAGES = Number(process.env.SUPERSONIC_CHAT_MAX ?? 500);
+const USER_REGISTRY_VERSION = "2024-11-reset";
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
 const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
@@ -1703,12 +1704,24 @@ async function loadUserRegistry() {
   try {
     const raw = await fs.readFile(USERS_PATH, "utf8");
     const parsed = JSON.parse(raw);
+    let entries = null;
     if (parsed && typeof parsed === "object") {
-      Object.entries(parsed).forEach(([uid, info]) => {
+      if (parsed.version === USER_REGISTRY_VERSION && parsed.entries && typeof parsed.entries === "object") {
+        entries = parsed.entries;
+      } else if (!parsed.version) {
+        // legacy format -> skip to enforce reset
+        entries = null;
+      }
+    }
+    if (entries) {
+      Object.entries(entries).forEach(([uid, info]) => {
         if (uid && info && typeof info === "object") {
           userRegistry.set(uid, info);
         }
       });
+    }
+    if (!parsed || parsed.version !== USER_REGISTRY_VERSION) {
+      await persistUserRegistry();
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
@@ -1720,7 +1733,10 @@ async function loadUserRegistry() {
 async function persistUserRegistry() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-    const payload = Object.fromEntries(userRegistry.entries());
+    const payload = {
+      version: USER_REGISTRY_VERSION,
+      entries: Object.fromEntries(userRegistry.entries()),
+    };
     await fs.writeFile(USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
     console.error("[supersonic] failed to persist user registry", error);

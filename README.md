@@ -90,6 +90,7 @@ The in-app developer dashboard talks to a small JSON API exposed by the backend:
 - `GET /dev/logs` &ndash; retrieve per-request audit logs (`uid`, `limit`, `since` filters).
 - `GET /dev/panel` &ndash; aggregated payload (caches, users, logs, metrics) for the dashboard.
 - Each browser is fingerprinted via the `supersonic_device` cookie so a ban can lock an entire Chromebook/user profile rather than just a temporary UID or alias.
+- Global chat lives at `/chat/messages`, `/chat/stream`, and `/chat/messages` (POST). Developers can broadcast system notices through `/dev/chat/broadcast`, and `/dev/devices` exposes the list of banned device IDs for quick unblocking.
 
 The API is intentionally lightweight so you can wire your own tooling if needed; add an auth layer or reverse proxy restrictions before exposing it publicly.
 

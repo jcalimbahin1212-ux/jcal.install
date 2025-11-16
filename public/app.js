@@ -154,7 +154,9 @@ const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
 const authStorageKey = "supersonic:auth";
 const devStorageKey = "supersonic:dev-session";
 const authCacheStorageKey = "supersonic:auth-cache";
-const userIdentityKey = "supersonic:user-info";
+const USER_IDENTITY_VERSION = "v2";
+const userIdentityKey = `supersonic:user-info:${USER_IDENTITY_VERSION}`;
+const legacyIdentityKeys = ["supersonic:user-info"];
 const localBanStorageKey = "supersonic:ban-state";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
@@ -656,6 +658,11 @@ function startAuthFlow() {
     promptUsernameCapture();
     return;
   }
+  if (authUnlocked && userIdentity && !userIdentity.username) {
+    selectors.authOverlay?.classList.add("is-hidden");
+    promptUsernameCapture();
+    return;
+  }
   if (authUnlocked) {
     releaseAuthGate();
     primeAuthenticationCache();
@@ -883,6 +890,7 @@ function promptUsernameCapture() {
 }
 
 function loadUserIdentity() {
+  purgeLegacyIdentityKeys();
   try {
     const stored = localStorage.getItem(userIdentityKey);
     if (!stored) return null;
@@ -1025,6 +1033,17 @@ function readLocalBanState() {
   return null;
 }
 
+function purgeLegacyIdentityKeys() {
+  try {
+    legacyIdentityKeys.forEach((key) => {
+      if (key !== userIdentityKey) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+}
 function persistLocalBanState(identity, message = LOCKOUT_TEXT_BANNED) {
   const payload = {
     uid: identity?.uid || null,
