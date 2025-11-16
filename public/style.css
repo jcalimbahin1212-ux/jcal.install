@@ -239,7 +239,7 @@ body:not(.auth-locked) .dev-launcher {
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  background-image: url("data:image/svg+xml,%3csvg+xmlns%3d%27http%3a%2f%2fwww.w3.org%2f2000%2fsvg%27+viewBox%3d%270+0+120+120%27%3e%0a++%3crect+width%3d%27120%27+height%3d%27120%27+fill%3d%27none%27%2f%3e%0a++%3crect+x%3d%2710%27+y%3d%2710%27+width%3d%27100%27+height%3d%27100%27+rx%3d%2712%27+fill%3d%27%235d2bff%27%2f%3e%0a++%3crect+x%3d%2720%27+y%3d%2720%27+width%3d%2780%27+height%3d%2780%27+rx%3d%2710%27+fill%3d%27%23854bff%27%2f%3e%0a++%3crect+x%3d%2732%27+y%3d%2742%27+width%3d%2712%27+height%3d%2714%27+fill%3d%27%230b0217%27%2f%3e%0a++%3crect+x%3d%2776%27+y%3d%2742%27+width%3d%2712%27+height%3d%2714%27+fill%3d%27%230b0217%27%2f%3e%0a++%3crect+x%3d%2730%27+y%3d%2778%27+width%3d%2760%27+height%3d%2712%27+fill%3d%27%232c0a46%27%2f%3e%0a++%3crect+x%3d%2734%27+y%3d%2782%27+width%3d%2752%27+height%3d%276%27+fill%3d%27%230b0217%27%2f%3e%0a%3c%2fsvg%3e");
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMjAgMTIwJz48cmVjdCB3aWR0aD0nMTIwJyBoZWlnaHQ9JzEyMCcgZmlsbD0nbm9uZScvPjxyZWN0IHg9JzEwJyB5PScxMCcgd2lkdGg9JzEwMCcgaGVpZ2h0PScxMDAnIHJ4PScxMicgZmlsbD0nIzVkMmJmZicvPjxyZWN0IHg9JzIwJyB5PScyMCcgd2lkdGg9JzgwJyBoZWlnaHQ9JzgwJyByeD0nMTAnIGZpbGw9JyM4NTRiZmYnLz48cmVjdCB4PSczMicgeT0nNDInIHdpZHRoPScxMicgaGVpZ2h0PScxNCcgZmlsbD0nIzBiMDIxNycvPjxyZWN0IHg9Jzc2JyB5PSc0Micgd2lkdGg9JzEyJyBoZWlnaHQ9JzE0JyBmaWxsPScjMGIwMjE3Jy8+PHJlY3QgeD0nMzAnIHk9Jzc4JyB3aWR0aD0nNjAnIGhlaWdodD0nMTInIGZpbGw9JyMyYzBhNDYnLz48cmVjdCB4PSczNCcgeT0nODInIHdpZHRoPSc1MicgaGVpZ2h0PSc2JyBmaWxsPScjMGIwMjE3Jy8+PC9zdmc+");
 }
 
 .lockout-overlay__sonic::after {
