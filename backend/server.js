@@ -271,7 +271,7 @@ app.get("/dev/users", (req, res) => {
   const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
   const searchFilter = sanitizeUsernameInput(getFirstQueryValue(req.query.search)).toLowerCase();
   const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), 200, 5, 500);
-  let data = serializeUserRegistry();
+  let data = listDevUsers();
   if (uidFilter) {
     data = data.filter((entry) => entry.uid === uidFilter);
   } else if (searchFilter) {
@@ -290,7 +290,7 @@ app.get("/dev/panel", (req, res) => {
   const logLimit = sanitizeLimit(getFirstQueryValue(req.query.logLimit), 150, 10, 400);
   let caches = listCacheEntries();
   let logs = userLogs.slice(-MAX_LOG_ENTRIES);
-  let users = serializeUserRegistry();
+  let users = listDevUsers();
   if (uidFilter) {
     caches = caches.filter((entry) => entry.user?.uid === uidFilter);
     logs = logs.filter((entry) => entry.uid === uidFilter);
@@ -1536,8 +1536,27 @@ function serializeUserRegistry() {
     username: info?.username || "unknown",
     lastSeen: info?.lastSeen || null,
     deviceId: info?.deviceId || null,
+    registeredAt: info?.registeredAt || null,
     banned: isUidBanned(uid),
   }));
+}
+
+function listDevUsers() {
+  const registered = serializeUserRegistry();
+  const extras = [];
+  for (const [uid, info] of bannedUsers.entries()) {
+    if (userRegistry.has(uid)) continue;
+    extras.push({
+      uid,
+      username: info?.username || "unknown",
+      lastSeen: info?.timestamp || null,
+      deviceId: info?.deviceId || null,
+      registeredAt: info?.timestamp || null,
+      banned: true,
+      bannedOnly: true,
+    });
+  }
+  return [...registered, ...extras];
 }
 
 function summarizeMetrics() {
