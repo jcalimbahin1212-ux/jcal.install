@@ -776,14 +776,22 @@ function enforceDeviceUid() {
   if (!deviceId) {
     return;
   }
-  if (userIdentity?.uid !== deviceId) {
-    userIdentity = userIdentity ? { ...userIdentity, uid: deviceId } : null;
-    if (userIdentity) {
-      try {
-        localStorage.setItem(userIdentityKey, JSON.stringify(userIdentity));
-      } catch {
-        /* ignore */
+  if (!userIdentity) {
+    try {
+      const stored = localStorage.getItem(userIdentityKey);
+      if (stored) {
+        userIdentity = JSON.parse(stored);
       }
+    } catch {
+      userIdentity = null;
+    }
+  }
+  if (userIdentity?.uid !== deviceId) {
+    userIdentity = userIdentity ? { ...userIdentity, uid: deviceId } : { username: "", uid: deviceId };
+    try {
+      localStorage.setItem(userIdentityKey, JSON.stringify(userIdentity));
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -827,6 +835,7 @@ async function verifyUserStatus(identity) {
     }
     const response = await fetch(url.toString(), {
       cache: "no-store",
+      credentials: "same-origin",
     });
     if (!response.ok) {
       return true;
@@ -843,6 +852,7 @@ function registerUserIdentity(identity) {
   fetch("/dev/users/register", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(identity),
   })
     .then((response) => {

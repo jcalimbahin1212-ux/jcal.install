@@ -255,6 +255,9 @@ app.post("/dev/users/register", jsonParser, (req, res) => {
     return res.status(451).json({ error: "User banned." });
   }
   const entry = userRegistry.get(uid) || {};
+  if (entry.username && entry.username !== username) {
+    return res.status(409).json({ error: "Username locked for this UID." });
+  }
   entry.username = username;
   entry.lastSeen = Date.now();
   entry.deviceId = deviceId;
