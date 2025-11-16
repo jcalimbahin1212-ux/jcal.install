@@ -1,16 +1,18 @@
 :root {
   color-scheme: dark;
-  --purple-900: #000512;
-  --purple-800: #03132a;
-  --purple-700: #042c5a;
-  --purple-500: #0d6df0;
-  --purple-300: #7cc9ff;
-  --lavender: #e7f1ff;
-  --grey-box: #1c2736;
-  --text-primary: #f4fbff;
-  --text-muted: rgba(228, 239, 255, 0.75);
-  --card-bg: rgba(7, 20, 44, 0.75);
-  --border: rgba(124, 201, 255, 0.18);
+  --purple-900: #150b05;
+  --purple-800: #1f1108;
+  --purple-700: #2c1a10;
+  --purple-500: #a86a3a;
+  --purple-300: #f2c68f;
+  --lavender: #f8e9d7;
+  --grey-box: rgba(36, 20, 12, 0.8);
+  --text-primary: #f8ecdc;
+  --text-muted: rgba(248, 236, 220, 0.75);
+  --card-bg: rgba(32, 19, 12, 0.85);
+  --border: rgba(242, 201, 150, 0.25);
+  --accent-1: #c8884a;
+  --accent-2: #8a4b24;
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
@@ -23,13 +25,26 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 20% 20%, rgba(21, 87, 187, 0.35), transparent 45%),
-    radial-gradient(circle at 85% 12%, rgba(0, 140, 210, 0.25), transparent 40%),
-    linear-gradient(150deg, #01030d 0%, #020c1f 35%, #031a38 65%, #041f4e 100%);
+  background: radial-gradient(circle at 20% 20%, rgba(200, 140, 74, 0.28), transparent 45%),
+    radial-gradient(circle at 85% 12%, rgba(84, 43, 24, 0.35), transparent 40%),
+    linear-gradient(160deg, #110703 0%, #1b0d06 35%, #2b160c 70%, #1b0c05 100%);
   color: var(--text-primary);
   font-family: var(--font, "Inter", "Segoe UI", sans-serif);
   line-height: 1.6;
   padding-bottom: 140px;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyMDAgMjAwJz4KICA8ZyBmaWxsPScjMjAxMzBjJz4KICAgIDxwYXRoIGQ9J005NCAyMDBoMTJ2LTcwaC0xMnonLz4KICAgIDxwYXRoIGQ9J00xMDAgMTMwYy0yMC0yNS01NS0yNS02OCA1IDE4IDEyIDMyIDcgMzYgNC0zIDE3IDIgMzEgMjAgMzEgMTcgMCAyMi0xNCAyMC0zMSA0IDMgMTggOCAzNi00LTEzLTMwLTQ4LTMwLTY4LTV6Jy8+CiAgICA8Y2lyY2xlIGN4PSc2NScgY3k9Jzg1JyByPSczNScvPgogICAgPGNpcmNsZSBjeD0nMTIwJyBjeT0nNzUnIHI9JzM4Jy8+CiAgICA8Y2lyY2xlIGN4PSc5MCcgY3k9JzQ1JyByPScyOCcvPgogICAgPGNpcmNsZSBjeD0nMTQwJyBjeT0nMTE1JyByPSczMicvPgogICAgPGNpcmNsZSBjeD0nNDAnIGN5PScxMjAnIHI9JzI4Jy8+CiAgPC9nPgo8L3N2Zz4=");
+  background-repeat: repeat-x;
+  background-size: 220px auto;
+  background-position: left bottom;
+  opacity: 0.18;
+  mix-blend-mode: multiply;
 }
 
 body.auth-locked #app-shell {
@@ -39,9 +54,9 @@ body.auth-locked #app-shell {
 }
 
 body.dev-mode {
-  background: radial-gradient(circle at 30% 20%, rgba(146, 73, 214, 0.4), transparent 50%),
-    radial-gradient(circle at 80% 10%, rgba(63, 20, 79, 0.4), transparent 45%),
-    linear-gradient(160deg, #080010 0%, #120021 40%, #2f0b4f 80%, #200038 100%);
+  background: radial-gradient(circle at 30% 20%, rgba(210, 140, 82, 0.35), transparent 50%),
+    radial-gradient(circle at 80% 10%, rgba(73, 34, 15, 0.5), transparent 45%),
+    linear-gradient(160deg, #150802 0%, #1f0c04 40%, #2e160b 80%, #1a0904 100%);
 }
 
 img {
@@ -120,7 +135,7 @@ img {
   border: none;
   border-radius: 999px;
   padding: 0.9rem 1.2rem;
-  background: linear-gradient(120deg, #0d6df0, #00c2ff);
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
   color: #fff;
   font-weight: 600;
   cursor: pointer;
@@ -150,7 +165,7 @@ img {
   top: 1.5rem;
   right: 1.5rem;
   border: none;
-  background: linear-gradient(135deg, #7a3cff, #b26bff);
+  background: linear-gradient(135deg, rgba(164, 96, 45, 0.9), rgba(83, 38, 17, 0.95));
   border-radius: 50%;
   width: 48px;
   height: 48px;
@@ -189,7 +204,7 @@ body:not(.auth-locked) .dev-launcher {
   opacity: 0;
   transition: opacity 220ms ease;
   font-family: "Press Start 2P", "Courier New", monospace;
-  color: #f5e8ff;
+  color: #f8ecdc;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   overflow: hidden;
@@ -216,10 +231,10 @@ body:not(.auth-locked) .dev-launcher {
 .lockout-overlay__inner {
   position: relative;
   padding: clamp(1.5rem, 3vw, 2.5rem);
-  border: 3px solid rgba(203, 157, 255, 0.4);
+  border: 3px solid rgba(242, 201, 150, 0.45);
   border-radius: 1.5rem;
-  background: rgba(5, 0, 15, 0.85);
-  box-shadow: 0 0 60px rgba(122, 60, 255, 0.45);
+  background: rgba(33, 18, 11, 0.92);
+  box-shadow: 0 0 60px rgba(45, 21, 9, 0.65);
   text-align: center;
   max-width: 640px;
   width: min(90vw, 640px);
@@ -249,7 +264,7 @@ body:not(.auth-locked) .dev-launcher {
 }
 
 .broadcast-banner__inner {
-  background: linear-gradient(120deg, rgba(134, 64, 255, 0.95), rgba(60, 10, 120, 0.92));
+  background: linear-gradient(120deg, rgba(182, 112, 54, 0.95), rgba(72, 34, 13, 0.92));
   border-radius: 1.2rem;
   border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 1rem 1.5rem;
@@ -344,15 +359,15 @@ body:not(.auth-locked) .dev-launcher {
   padding: 0.75rem 1.5rem;
   font-size: 0.95rem;
   font-weight: 600;
-  background: linear-gradient(120deg, var(--purple-500), var(--purple-300));
-  color: #1a032e;
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  color: #fffdf4;
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 .portal button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 25px rgba(145, 76, 255, 0.4);
+  box-shadow: 0 12px 25px rgba(48, 24, 9, 0.6);
 }
 
 .portal__status {
@@ -436,7 +451,7 @@ body:not(.auth-locked) .dev-launcher {
 }
 
 .toggle input {
-  accent-color: var(--purple-300);
+  accent-color: var(--accent-1);
 }
 
 .relay-panel {
@@ -485,15 +500,15 @@ body:not(.auth-locked) .dev-launcher {
 }
 
 .relay-chip.is-active {
-  background: rgba(199, 157, 255, 0.2);
-  border-color: rgba(199, 157, 255, 0.7);
+  background: rgba(200, 136, 74, 0.2);
+  border-color: rgba(200, 136, 74, 0.75);
 }
 
 .relay-panel__status {
   margin-top: 2rem;
   padding: 1.25rem;
   border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(20, 11, 6, 0.55);
 }
 
 .relay-panel__status-title {
@@ -566,7 +581,7 @@ main {
   padding: 1.5rem;
   border: 1px solid var(--border);
   border-radius: 1.75rem;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(26, 13, 6, 0.65);
   backdrop-filter: blur(12px);
   box-shadow: 0 20px 45px rgba(8, 0, 16, 0.45);
 }
@@ -585,7 +600,7 @@ main {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.4rem 1rem;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -743,13 +758,13 @@ main {
 .mission {
   margin: 5rem auto 4rem;
   max-width: 720px;
-  background: linear-gradient(135deg, rgba(4, 28, 61, 0.88), rgba(2, 10, 26, 0.92));
+  background: linear-gradient(135deg, rgba(66, 37, 19, 0.9), rgba(28, 14, 7, 0.95));
   color: var(--lavender);
   border-radius: 1.25rem;
   padding: 2rem;
   font-size: 1.05rem;
-  box-shadow: 0 40px 90px rgba(1, 6, 20, 0.75);
-  border: 1px solid rgba(124, 201, 255, 0.25);
+  box-shadow: 0 40px 90px rgba(8, 4, 2, 0.65);
+  border: 1px solid var(--border);
   backdrop-filter: blur(22px);
   opacity: 0;
   transform: translateY(40px);
@@ -762,7 +777,7 @@ main {
 }
 
 .mission a {
-  color: var(--purple-300);
+  color: var(--accent-1);
   font-weight: 600;
 }
 
@@ -771,7 +786,7 @@ main {
 }
 
 .how-it-works {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(29, 14, 6, 0.55);
   border: 1px solid var(--border);
   border-radius: 1.5rem;
   padding: 2rem;
@@ -1155,8 +1170,8 @@ body.history-track .portal__status::after {
   border: none;
   border-radius: 999px;
   padding: 0.6rem 1.4rem;
-  background: linear-gradient(120deg, #7b3bff, #ff5ec2);
-  color: #fff;
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  color: #fffdf4;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1168,8 +1183,8 @@ body.history-track .portal__status::after {
   border: none;
   border-radius: 999px;
   padding: 0.55rem 1.5rem;
-  background: rgba(7, 2, 18, 0.85);
-  color: #f6edff;
+  background: linear-gradient(120deg, var(--accent-2), var(--accent-1));
+  color: #fffdf2;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
@@ -1197,8 +1212,8 @@ body.history-track .portal__status::after {
   border: none;
   border-radius: 999px;
   padding: 0.45rem 1.2rem;
-  background: linear-gradient(120deg, #9b45ff, #ff478a);
-  color: #fff;
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  color: #fffdf4;
   cursor: pointer;
 }
 

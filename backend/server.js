@@ -32,9 +32,9 @@ const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
 const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
 const BANNED_DEVICES_PATH = path.resolve(DATA_DIR, "banned-devices.json");
 const CHAT_LOG_PATH = path.resolve(DATA_DIR, "chat-log.json");
-const DEVICE_COOKIE_NAME = "supersonic_device";
+const DEVICE_COOKIE_NAME = "coffeeshop_device";
 const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-const CHAT_MAX_MESSAGES = Number(process.env.SUPERSONIC_CHAT_MAX ?? 500);
+const CHAT_MAX_MESSAGES = Number(process.env.COFFEESHOP_CHAT_MAX ?? process.env.SUPERSONIC_CHAT_MAX ?? 500);
 const USER_REGISTRY_VERSION = "2024-11-reset";
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
@@ -46,8 +46,8 @@ const DOMAIN_FAILURE_THRESHOLD = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_THR
 const DOMAIN_FAILURE_WINDOW = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_WINDOW ?? 30_000);
 const DOMAIN_FAILURE_COOLDOWN = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_COOLDOWN ?? 45_000);
 const ADMIN_TOKEN = process.env.POWERTHROUGH_ADMIN_TOKEN || "";
-const ADMIN_HEADER = "x-supersonic-admin";
-const REQUEST_ID_HEADER = "x-supersonic-request-id";
+const ADMIN_HEADER = "x-coffeeshop-admin";
+const REQUEST_ID_HEADER = "x-coffeeshop-request-id";
 
 const app = express();
 const server = createServer(app);
@@ -55,22 +55,22 @@ const wss = new WebSocketServer({ noServer: true });
 const jsonParser = express.json({ limit: "50kb" });
 fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
 loadBannedCacheKeys().catch((error) => {
-  console.error("[supersonic] failed to load banned caches", error);
+  console.error("[coffeeshop] failed to load banned caches", error);
 });
 loadUserRegistry().catch((error) => {
-  console.error("[supersonic] failed to load user registry", error);
+  console.error("[coffeeshop] failed to load user registry", error);
 });
 loadUserLogs().catch((error) => {
-  console.error("[supersonic] failed to load user logs", error);
+  console.error("[coffeeshop] failed to load user logs", error);
 });
 loadBannedUsers().catch((error) => {
-  console.error("[supersonic] failed to load banned users", error);
+  console.error("[coffeeshop] failed to load banned users", error);
 });
 loadBannedDeviceIds().catch((error) => {
-  console.error("[supersonic] failed to load banned devices", error);
+  console.error("[coffeeshop] failed to load banned devices", error);
 });
 loadChatMessages().catch((error) => {
-  console.error("[supersonic] failed to load chat log", error);
+  console.error("[coffeeshop] failed to load chat log", error);
 });
 
 app.disable("x-powered-by");
@@ -84,7 +84,7 @@ app.use((req, res, next) => {
     deviceId = generateDeviceId();
     issued = true;
   }
-  req.supersonicDeviceId = deviceId;
+  req.coffeeDeviceId = deviceId;
   if (issued) {
     appendSetCookie(res, buildDeviceCookie(deviceId));
   }
@@ -186,12 +186,12 @@ app.get("/search/lite", async (req, res) => {
     const username = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
-    res.setHeader("x-supersonic-renderer", "search-lite");
+    res.setHeader("x-coffeeshop-renderer", "search-lite");
     if (uid) {
       recordUserLog({
         uid,
         username,
-        deviceId: req.supersonicDeviceId,
+        deviceId: req.coffeeDeviceId,
         target: upstreamUrl.toString(),
         intent: "search",
         renderer: "search-lite",
@@ -200,7 +200,7 @@ app.get("/search/lite", async (req, res) => {
     }
     return res.send(rewritten);
   } catch (error) {
-    console.error("[supersonic] search lite failed", error);
+    console.error("[coffeeshop] search lite failed", error);
     return res.status(502).send("Unable to load search results right now.");
   }
 });
@@ -220,15 +220,15 @@ app.post("/chat/messages", jsonParser, (req, res) => {
     return res.status(400).json({ error: "Message required." });
   }
   const username = sanitizeUsernameInput(req.body?.username) || getRegistryUsername(req.body?.uid) || "anonymous";
-  const uid = sanitizeUid(req.body?.uid || req.supersonicDeviceId);
-  if (isDeviceBanned(req.supersonicDeviceId) || isUidBanned(uid) || isUsernameBanned(username)) {
+  const uid = sanitizeUid(req.body?.uid || req.coffeeDeviceId);
+  if (isDeviceBanned(req.coffeeDeviceId) || isUidBanned(uid) || isUsernameBanned(username)) {
     return res.status(451).json({ error: "Sender banned." });
   }
   const message = appendChatMessage({
     uid,
     username,
     text,
-    deviceId: req.supersonicDeviceId,
+    deviceId: req.coffeeDeviceId,
   });
   res.json({ ok: true, message });
 });
@@ -300,9 +300,9 @@ app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
 });
 
 app.post("/dev/users/register", jsonParser, (req, res) => {
-  const uid = sanitizeUid(req.body?.uid || req.supersonicDeviceId);
+  const uid = sanitizeUid(req.body?.uid || req.coffeeDeviceId);
   const username = sanitizeUsernameInput(req.body?.username);
-  const deviceId = sanitizeUid(req.supersonicDeviceId);
+  const deviceId = sanitizeUid(req.coffeeDeviceId);
   if (!uid || !username) {
     return res.status(400).json({ error: "uid and username are required." });
   }
@@ -388,7 +388,7 @@ app.get("/dev/users/status/:uid", (req, res) => {
   const username = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
   const blockedUid = isUidBanned(uid);
   const blockedAlias = isUsernameBanned(username);
-  const blockedDevice = isDeviceBanned(req.supersonicDeviceId);
+  const blockedDevice = isDeviceBanned(req.coffeeDeviceId);
   return res.json({
     allowed: !(blockedUid || blockedAlias || blockedDevice),
     reason: blockedDevice ? "device" : blockedUid ? "uid" : blockedAlias ? "alias" : null,
@@ -448,7 +448,7 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
     const overrideName = sanitizeUsernameInput(req.body?.username);
     const registryName = getRegistryUsername(uid);
     const finalName = overrideName || registryName;
-    const deviceId = getRegistryDeviceId(uid) || req.supersonicDeviceId || null;
+    const deviceId = getRegistryDeviceId(uid) || req.coffeeDeviceId || null;
     rememberBanEntry(uid, finalName, deviceId);
     return res.json({ ok: true, message: "User banned." });
   }
@@ -498,7 +498,7 @@ app.all("/powerthrough", async (req, res) => {
   const renderHint = extractRenderHint(req);
   const requestId = createRequestId("http");
   res.setHeader(REQUEST_ID_HEADER, requestId);
-  const deviceId = sanitizeUid(req.supersonicDeviceId);
+  const deviceId = sanitizeUid(req.coffeeDeviceId);
   const uidParam = deviceId || sanitizeUid(getFirstQueryValue(req.query.uid));
   const usernameParam = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
   const intentParam = getFirstQueryValue(req.query.intent) || "url";
@@ -529,7 +529,7 @@ app.all("/powerthrough", async (req, res) => {
     const isProxyError = error instanceof ProxyError;
     if (!isProxyError || error.status >= 500) {
       metrics.upstreamErrors += 1;
-    console.error("[supersonic] proxy error", error);
+    console.error("[coffeeshop] proxy error", error);
     }
     const status = isProxyError ? error.status : 502;
     const payload = {
@@ -807,7 +807,7 @@ function applyProxyResult(res, result) {
 
 function extractRenderHint(req) {
   const queryValue = Array.isArray(req.query.render) ? req.query.render[0] : req.query.render;
-  const headerValueRaw = req.headers["x-supersonic-render"];
+  const headerValueRaw = req.headers["x-coffeeshop-render"];
   const headerValue = Array.isArray(headerValueRaw) ? headerValueRaw[0] : headerValueRaw;
   return queryValue || headerValue || undefined;
 }
@@ -816,7 +816,7 @@ function setupSafezoneConnection(ws, request) {
   const channels = new Map();
   if (request?.headers?.cookie) {
     const cookies = parseCookies(request.headers.cookie);
-    ws.supersonicDeviceId = sanitizeUid(cookies[DEVICE_COOKIE_NAME]);
+    ws.coffeeDeviceId = sanitizeUid(cookies[DEVICE_COOKIE_NAME]);
   }
 
   ws.on("message", (data, isBinary) => {
@@ -934,7 +934,7 @@ async function processSafezoneOpen(ws, channels, channelId, frame) {
 
   const requestContext = {
     requestId: createRequestId("safezone"),
-    deviceId: ws.supersonicDeviceId || null,
+    deviceId: ws.coffeeDeviceId || null,
   };
 
   try {
@@ -1160,7 +1160,7 @@ app.use((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`SuperSonic backend online at http://localhost:${PORT}`);
+  console.log(`Coffee Shop backend online at http://localhost:${PORT}`);
 });
 
 function requireAdminToken(req, res, next) {
@@ -1481,9 +1481,9 @@ function rewriteHtmlDocument(html, baseUrl, context = {}) {
   }
   const head = $("head").first();
   const headMeta = [
-    ["supersonic-request-id", context.requestId],
-    ["supersonic-renderer", context.renderer || "direct"],
-    ["supersonic-target", baseUrl?.toString?.() ?? ""],
+    ["coffeeshop-request-id", context.requestId],
+    ["coffeeshop-renderer", context.renderer || "direct"],
+    ["coffeeshop-target", baseUrl?.toString?.() ?? ""],
   ];
   headMeta.forEach(([name, value]) => {
     if (!value) return;
@@ -1533,7 +1533,7 @@ function rewriteCssUrls(css, baseUrl) {
     }
     try {
       const resolved = new URL(url, baseUrl);
-      return `url(${buildSupersonicUrl(resolved.toString())})`;
+      return `url(${buildCoffeeShopUrl(resolved.toString())})`;
     } catch {
       return match;
     }
@@ -1544,7 +1544,7 @@ function rewriteAttribute($, element, attribute, baseUrl) {
   let value = $(element).attr(attribute);
   if (!value) {
     if (attribute === "action") {
-      $(element).attr(attribute, buildSupersonicUrl(baseUrl.toString()));
+      $(element).attr(attribute, buildCoffeeShopUrl(baseUrl.toString()));
     }
     return;
   }
@@ -1559,7 +1559,7 @@ function rewriteAttribute($, element, attribute, baseUrl) {
   }
   try {
     const resolved = new URL(value, baseUrl);
-    $(element).attr(attribute, buildSupersonicUrl(resolved.toString()));
+    $(element).attr(attribute, buildCoffeeShopUrl(resolved.toString()));
   } catch {
     // Ignore rewrites that fail URL resolution.
   }
@@ -1579,7 +1579,7 @@ function rewriteSrcset($, element, baseUrl) {
       }
       try {
         const resolved = new URL(url, baseUrl);
-        const proxied = buildSupersonicUrl(resolved.toString());
+        const proxied = buildCoffeeShopUrl(resolved.toString());
         return descriptor ? `${proxied} ${descriptor}` : proxied;
       } catch {
         return entry;
@@ -1696,7 +1696,7 @@ async function persistBannedCacheKeys() {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(BANNED_CACHE_PATH, JSON.stringify([...bannedCacheKeys]), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist banned caches", error);
+    console.error("[coffeeshop] failed to persist banned caches", error);
   }
 }
 
@@ -1739,7 +1739,7 @@ async function persistUserRegistry() {
     };
     await fs.writeFile(USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist user registry", error);
+    console.error("[coffeeshop] failed to persist user registry", error);
   }
 }
 
@@ -1766,7 +1766,7 @@ async function persistUserLogs() {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(LOGS_PATH, JSON.stringify(userLogs.slice(-MAX_LOG_ENTRIES)), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist user logs", error);
+    console.error("[coffeeshop] failed to persist user logs", error);
   }
 }
 
@@ -1801,7 +1801,7 @@ async function persistBannedUsers() {
     }));
     await fs.writeFile(BANNED_USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist banned users", error);
+    console.error("[coffeeshop] failed to persist banned users", error);
   }
 }
 
@@ -1829,7 +1829,7 @@ async function persistBannedDeviceIds() {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(BANNED_DEVICES_PATH, JSON.stringify([...bannedDeviceIds]), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist banned devices", error);
+    console.error("[coffeeshop] failed to persist banned devices", error);
   }
 }
 
@@ -1856,7 +1856,7 @@ async function persistChatMessages() {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.writeFile(CHAT_LOG_PATH, JSON.stringify(chatMessages.slice(-CHAT_MAX_MESSAGES)), "utf8");
   } catch (error) {
-    console.error("[supersonic] failed to persist chat messages", error);
+    console.error("[coffeeshop] failed to persist chat messages", error);
   }
 }
 
@@ -1896,7 +1896,7 @@ async function fetchDuckLiteResults(term, attempt = 0) {
   const upstreamUrl = new URL("https://html.duckduckgo.com/html/");
   upstreamUrl.searchParams.set("q", term);
   upstreamUrl.searchParams.set("ia", "web");
-  upstreamUrl.searchParams.set("t", "supersonic");
+  upstreamUrl.searchParams.set("t", "coffeeshop");
   upstreamUrl.searchParams.set("kl", "us-en");
   const response = await fetch(upstreamUrl, {
     headers: buildDuckLiteHeaders(),
@@ -1914,7 +1914,7 @@ async function fetchDuckLiteResults(term, attempt = 0) {
   return { html, upstreamUrl };
 }
 
-function buildSupersonicUrl(target) {
+function buildCoffeeShopUrl(target) {
   return `/powerthrough?url=${encodeURIComponent(target)}`;
 }
 
@@ -2303,7 +2303,7 @@ async function loadChromium() {
       .then((mod) => mod.chromium)
       .catch((error) => {
         console.error(
-          "[supersonic] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
+          "[coffeeshop] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
           error
         );
         return null;

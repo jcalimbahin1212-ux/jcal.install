@@ -4,12 +4,12 @@
  */
 
 const services = {
-  supersonic: {
-    name: "SuperSonic Balanced",
-    description: "Balanced rewrite mode for everyday browsing.",
+  coffeeshop: {
+    name: "Coffee Shop Balanced",
+    description: "House blend rewrite mode for everyday browsing.",
     mode: "standard",
     compose(targetUrl, meta = {}) {
-      return buildSuperSonicLink(targetUrl, {
+      return buildCoffeeShopLink(targetUrl, {
         mode: this.mode,
         intent: meta?.intent,
         transport: meta?.transport,
@@ -18,13 +18,13 @@ const services = {
       });
     },
   },
-  supersonic_headless: {
-    name: "SuperSonic Headless",
+  coffeeshop_headless: {
+    name: "Coffee Shop Espresso",
     description: "Routes through the headless renderer for complex sites.",
     mode: "headless",
     render: "headless",
     compose(targetUrl, meta = {}) {
-      return buildSuperSonicLink(targetUrl, {
+      return buildCoffeeShopLink(targetUrl, {
         mode: this.mode,
         render: this.render,
         intent: meta?.intent,
@@ -34,12 +34,12 @@ const services = {
       });
     },
   },
-  supersonic_lite: {
-    name: "SuperSonic Lite",
+  coffeeshop_lite: {
+    name: "Coffee Shop Iced",
     description: "Lightweight mode optimized for speed.",
     mode: "lite",
     compose(targetUrl, meta = {}) {
-      return buildSuperSonicLink(targetUrl, {
+      return buildCoffeeShopLink(targetUrl, {
         mode: this.mode,
         intent: meta?.intent,
         transport: meta?.transport,
@@ -50,8 +50,8 @@ const services = {
   },
 };
 const SERVICE_KEYS = Object.keys(services);
-const SERVICE_PRIORITY_DEFAULT = ["supersonic", "supersonic_headless", "supersonic_lite"];
-const SERVICE_PRIORITY_SEARCH = ["supersonic", "supersonic_lite", "supersonic_headless"];
+const SERVICE_PRIORITY_DEFAULT = ["coffeeshop", "coffeeshop_headless", "coffeeshop_lite"];
+const SERVICE_PRIORITY_SEARCH = ["coffeeshop", "coffeeshop_lite", "coffeeshop_headless"];
 const SERVICE_METRICS = SERVICE_KEYS.reduce((acc, key) => {
   acc[key] = {
     url: createMetricBucket(),
@@ -66,9 +66,8 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_WRONG =
-  "There is no room for people like you here in SuperSonic. Leave or get the password right.";
-const LOCKOUT_TEXT_BANNED = "I know who you are. And you do not deserve such privelege.";
+const LOCKOUT_TEXT_WRONG = "This blend isn't for you. Come back when you know the password.";
+const LOCKOUT_TEXT_BANNED = "Banned from the Coffee Shop.";
 const LOCKOUT_TEXT_DEV =
   "You saw. I trusted you and you saw that this was not for you yet you still tried. You do not always need to explore beyond what you are given.";
 const DEFAULT_LOCKOUT_MESSAGE = LOCKOUT_TEXT_WRONG;
@@ -148,21 +147,21 @@ const selectors = {
   broadcastBannerText: document.querySelector("#broadcast-banner-text"),
 };
 
-const DEVICE_COOKIE_NAME = "supersonic_device";
+const DEVICE_COOKIE_NAME = "coffeeshop_device";
 const deviceFingerprint = readDeviceFingerprint();
 
 const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
 const autoBlankPref = "unidentified:auto-blank";
-const autoBlankResetFlag = "supersonic:auto-blank-reset-v2";
-const authStorageKey = "supersonic:auth";
-const devStorageKey = "supersonic:dev-session";
-const authCacheStorageKey = "supersonic:auth-cache";
+const autoBlankResetFlag = "coffeeshop:auto-blank-reset-v2";
+const authStorageKey = "coffeeshop:auth";
+const devStorageKey = "coffeeshop:dev-session";
+const authCacheStorageKey = "coffeeshop:auth-cache";
 const USER_IDENTITY_VERSION = "v2";
-const userIdentityKey = `supersonic:user-info:${USER_IDENTITY_VERSION}`;
-const legacyIdentityKeys = ["supersonic:user-info"];
-const localBanStorageKey = "supersonic:ban-state";
+const userIdentityKey = `coffeeshop:user-info:${USER_IDENTITY_VERSION}`;
+const legacyIdentityKeys = ["coffeeshop:user-info"];
+const localBanStorageKey = "coffeeshop:ban-state";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const DEV_ENTRY_CODE = "uG45373098!";
@@ -173,8 +172,8 @@ const DEV_ENTRY_CODE_NORMALIZED = normalizeAuthInput(DEV_ENTRY_CODE);
 const DEV_PASSCODE_NORMALIZED = normalizeAuthInput(DEV_PASSCODE);
 const DEV_ENTRY_WINDOW_MS = 180_000;
 const USER_STATUS_INTERVAL_MS = 10_000;
-const transportPrefKey = "supersonic:transport-pref";
-const userScriptPrefKey = "supersonic:user-script";
+const transportPrefKey = "coffeeshop:transport-pref";
+const userScriptPrefKey = "coffeeshop:user-script";
 const realTitle = document.title;
 const cloakTitleFallback = "Class Notes - Google Docs";
 const cloakFavicon = "https://ssl.gstatic.com/docs/doclist/images/infinite_arrow_favicon_5.ico";
@@ -184,7 +183,7 @@ const realFaviconHref = faviconLink?.href || "";
 const isCloakedContext = window.name === "unidentified-cloak";
 const isAboutBlankContext = window.location.protocol === "about:";
 
-let activeService = "supersonic";
+let activeService = "coffeeshop";
 let userSelectedService = activeService;
 let panicPrimed = false;
 let panicTimer = null;
@@ -551,7 +550,7 @@ function registerEventHandlers() {
     }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Page loaded inside SuperSonic.");
+    setStatus("Coffee Shop workspace poured.");
     injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
@@ -797,7 +796,7 @@ function releaseAuthGate() {
     attemptAutoBlank(true);
   }
   primeAuthenticationCache(true);
-  setStatus("Access confirmed. Welcome back to SuperSonic.");
+  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
 }
 
 function triggerBridgeHandshake() {
@@ -1330,7 +1329,7 @@ async function sendDevCacheAction(key, action) {
     });
     refreshDevCacheList();
   } catch (error) {
-    console.error("[SuperSonic] dev cache action failed", error);
+    console.error("[CoffeeShop] dev cache action failed", error);
   }
 }
 
@@ -1471,7 +1470,7 @@ async function sendDevUserAction(uid, action, payload = {}) {
     });
     refreshDevUserList();
   } catch (error) {
-    console.error("[SuperSonic] dev user action failed", error);
+    console.error("[CoffeeShop] dev user action failed", error);
   }
 }
 
@@ -1681,7 +1680,7 @@ function watchMissionBox() {
   observer.observe(selectors.missionBox);
 }
 
-function buildSuperSonicLink(targetUrl, config = {}, renderOverride) {
+function buildCoffeeShopLink(targetUrl, config = {}, renderOverride) {
   const encoded = encodeURIComponent(targetUrl);
   const params = new URLSearchParams();
   const modeValue = typeof config === "string" ? config : config.mode;
@@ -1922,7 +1921,7 @@ function primeAuthenticationCache(force = false) {
   } catch {
     /* ignore storage errors */
   }
-  const warmUrl = buildSuperSonicLink("https://duckduckgo.com/?q=SuperSonic+Safezone", {
+const warmUrl = buildCoffeeShopLink("https://duckduckgo.com/?q=Coffee+Shop+Proxy", {
     session: tokens.sessionId,
     cacheTag: tokens.cacheKey,
     intent: "url",
@@ -2143,12 +2142,12 @@ function registerServiceWorker() {
   }
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("/sw-supersonic.js", { scope: "/" })
+      .register("/sw-coffeeshop.js", { scope: "/" })
       .then(() => {
-        console.info("[SuperSonic] service worker registered");
+        console.info("[CoffeeShop] service worker registered");
       })
       .catch((error) => {
-        console.warn("[SuperSonic] failed to register service worker", error);
+        console.warn("[CoffeeShop] failed to register service worker", error);
       });
   });
 }
@@ -2159,7 +2158,7 @@ function listenForSwMessages() {
   }
   navigator.serviceWorker.addEventListener("message", (event) => {
     const payload = event.data;
-    if (!payload || payload.source !== "supersonic-sw") return;
+    if (!payload || payload.source !== "coffeeshop-sw") return;
     if (payload.type === "safezone-state") {
       updateSafezoneState(payload);
       return;
@@ -2410,9 +2409,9 @@ function renderProxyMetadataFromFrame() {
 function readProxyMetadata(doc) {
   try {
     const getMeta = (name) => doc.querySelector(`meta[name='${name}']`)?.getAttribute("content") || null;
-    const requestId = getMeta("supersonic-request-id");
-    const renderer = getMeta("supersonic-renderer");
-    const target = getMeta("supersonic-target");
+    const requestId = getMeta("coffeeshop-request-id");
+    const renderer = getMeta("coffeeshop-renderer");
+    const target = getMeta("coffeeshop-target");
     if (!requestId && !renderer && !target) {
       return null;
     }
@@ -2440,7 +2439,7 @@ function describeTargetForLog(targetUrl) {
 }
 const SEARCH_PROVIDERS = [
   {
-    label: "SuperSonic Lite",
+    label: "Coffee Shop Lite",
     type: "local",
     buildUrl: (term) => `/search/lite?q=${encodeURIComponent(term)}`,
   },
@@ -2501,22 +2500,22 @@ function injectUserScriptIntoFrame() {
   if (!selectors.frame || !selectors.frame.contentDocument) return;
   try {
     const doc = selectors.frame.contentDocument;
-    let node = doc.getElementById("supersonic-userscript");
+    let node = doc.getElementById("coffeeshop-userscript");
     if (node) {
       node.remove();
     }
     node = doc.createElement("script");
-    node.id = "supersonic-userscript";
+    node.id = "coffeeshop-userscript";
     node.type = "text/javascript";
     node.textContent = script;
     (doc.head || doc.documentElement).appendChild(node);
   } catch (error) {
-    console.warn("[SuperSonic] failed to inject user script", error);
+    console.warn("[CoffeeShop] failed to inject user script", error);
   }
 }
 
 function clearInjectedUserScript() {
   if (!selectors.frame || !selectors.frame.contentDocument) return;
-  const existing = selectors.frame.contentDocument.getElementById("supersonic-userscript");
+  const existing = selectors.frame.contentDocument.getElementById("coffeeshop-userscript");
   existing?.remove();
 }

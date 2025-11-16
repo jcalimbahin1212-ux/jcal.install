@@ -1,10 +1,10 @@
 {
-  "name": "SuperSonic Safezone",
-  "short_name": "SuperSonic",
+  "name": "Coffee Shop Safezone",
+  "short_name": "Coffee Shop",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#010b1c",
-  "theme_color": "#021635",
+  "background_color": "#1b0d05",
+  "theme_color": "#3a2010",
   "icons": [
     {
       "src": "assets/logo.svg",

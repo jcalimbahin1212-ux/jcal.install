@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="SuperSonic is a Sonic-themed Safezone proxy that cloaks your browsing and outruns school firewalls."
+      content="Coffee Shop is a cozy caramel proxy lounge that cloaks your browsing with comfort-first Safezone relays."
     />
-    <meta name="theme-color" content="#020b1f" />
-    <title>SuperSonic | Safezone Proxy Portal</title>
+    <meta name="theme-color" content="#3a2010" />
+    <title>Coffee Shop | Cozy Proxy Lounge</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
@@ -16,9 +16,9 @@
   <body class="auth-locked">
     <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">SuperSonic Safezone</p>
+        <p class="auth-card__eyebrow">Coffee Shop Access</p>
         <h1 id="auth-title">Access required</h1>
-        <p class="auth-card__lead">Enter the SuperSonic access code to continue.</p>
+        <p class="auth-card__lead">Enter the Coffee Shop access code to continue.</p>
         <form id="auth-form" autocomplete="off">
           <label for="auth-code" class="sr-only">Access code</label>
           <input
@@ -37,7 +37,7 @@
 
     <div class="auth-overlay is-hidden" id="username-overlay" role="dialog" aria-modal="true">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">SuperSonic ID</p>
+        <p class="auth-card__eyebrow">Coffee Shop ID</p>
         <h1>Choose a username</h1>
         <p class="auth-card__lead">Pick a unique name so we can build your private workspace.</p>
         <form id="username-form" autocomplete="off">
@@ -51,7 +51,7 @@
 
     <div class="auth-overlay is-hidden" id="bridge-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">SuperSonic dev</p>
+        <p class="auth-card__eyebrow">Coffee Shop dev</p>
         <h1>Identity check</h1>
         <p>Enter the stage-two developer code.</p>
         <form id="bridge-form" autocomplete="off">
@@ -72,7 +72,7 @@
 
     <div class="auth-overlay is-hidden" id="dev-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">SuperSonic dev</p>
+        <p class="auth-card__eyebrow">Coffee Shop dev</p>
         <h1>Developer console</h1>
         <p>Enter the developer access code to continue.</p>
         <form id="dev-form" autocomplete="off">
@@ -99,11 +99,11 @@
       </div>
       <header class="hero">
         <div class="hero__content">
-        <img src="assets/logo.svg" class="hero__logo" alt="SuperSonic Safezone logo" width="120" height="120" />
-        <p class="hero__eyebrow">Reliable Web Proxy</p>
-        <h1 class="hero__title">SuperSonic</h1>
+        <img src="assets/logo.svg" class="hero__logo" alt="Coffee Shop proxy logo" width="140" height="140" />
+        <p class="hero__eyebrow">Quiet proxy lounge</p>
+        <h1 class="hero__title">Coffee Shop</h1>
         <p class="hero__lead">
-          A Sonic-inspired Safezone tunnel built to finally end annoying internet censorship at school.
+          A hazel-toned hideout that pours every request through our Safezone roastery. Slow-sip comfort, fast escapes.
         </p>
 
         <form id="portal-form" class="portal" autocomplete="off">
@@ -113,10 +113,10 @@
             name="destination"
             type="text"
             inputmode="url"
-            placeholder="Type a URL or search anything..."
+            placeholder="Order a site or search anything..."
             required
           />
-          <button type="submit">Engage Safezone</button>
+          <button type="submit">Pour a connection</button>
         </form>
 
         <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
@@ -166,23 +166,23 @@
 
       </div>
 
-      <div class="relay-panel" aria-live="polite">
+        <div class="relay-panel" aria-live="polite">
         <p class="relay-panel__label">Active engine</p>
-        <p id="active-service-name" class="relay-panel__name">SuperSonic Balanced</p>
+        <p id="active-service-name" class="relay-panel__name">Coffee Shop Balanced</p>
         <p id="active-service-desc" class="relay-panel__desc">
-          Sonic-speed rewrite engine that balances stealth, compatibility, and performance.
+          House blend rewrite that balances warmth, compatibility, and stealth.
         </p>
         <div class="relay-panel__choices" role="group" aria-label="Relay choice">
-          <button class="relay-chip is-active" data-service="supersonic">Balanced</button>
-          <button class="relay-chip" data-service="supersonic_headless">Headless</button>
-          <button class="relay-chip" data-service="supersonic_lite">Lite</button>
+          <button class="relay-chip is-active" data-service="coffeeshop">Balanced</button>
+          <button class="relay-chip" data-service="coffeeshop_headless">Espresso (headless)</button>
+          <button class="relay-chip" data-service="coffeeshop_lite">Iced (lite)</button>
         </div>
 
         <div class="relay-panel__status">
-          <p class="relay-panel__status-title">Quick status</p>
+          <p class="relay-panel__status-title">Brew status</p>
           <dl>
             <div>
-              <dt>Encryption</dt>
+              <dt>Roast</dt>
               <dd>Auto-select</dd>
             </div>
             <div>
@@ -191,14 +191,14 @@
             </div>
             <div>
               <dt>Comfort rating</dt>
-              <dd>Ultra plush</dd>
+              <dd>Fireside plush</dd>
             </div>
           </dl>
         </div>
         <div class="transport-controls" aria-label="Transport controls">
           <div class="transport-controls__summary">
             <p class="transport-controls__label">Transport</p>
-            <p id="transport-state-label" class="transport-controls__state">Safezone tunnel: unknown</p>
+            <p id="transport-state-label" class="transport-controls__state">Coffee line: unknown</p>
           </div>
           <div class="relay-panel__choices transport-controls__choices" role="group" aria-label="Transport preference">
             <button class="transport-chip relay-chip is-active" data-transport="auto">Auto</button>
@@ -231,7 +231,7 @@
         <img src="assets/logo.svg" alt="Developer console launcher" />
       </button>
 
-      <section class="workspace" aria-label="SuperSonic Safezone workspace">
+      <section class="workspace" aria-label="Coffee Shop Safezone workspace">
         <div class="workspace__chrome">
           <p id="workspace-status">Awaiting secure session.</p>
           <button type="button" id="workspace-reset">Reset view</button>
@@ -243,14 +243,14 @@
           </div>
           <iframe
             id="proxy-frame"
-            title="SuperSonic Safezone session"
+            title="Coffee Shop Safezone session"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             loading="lazy"
           ></iframe>
         </div>
       </section>
 
-      <section class="diagnostics" aria-label="SuperSonic diagnostics">
+      <section class="diagnostics" aria-label="Coffee Shop diagnostics">
         <header class="diagnostics__header">
           <div>
             <p class="diagnostics__eyebrow">Relay telemetry</p>
@@ -343,27 +343,27 @@
             <p>Browser-grade privacy without the sign-in baggage. Everything is ephemeral unless you say otherwise.</p>
           </article>
           <article>
-            <h2>Pure SuperSonic</h2>
-            <p>Everything runs through a single, hardened SuperSonic relay so you always know exactly what stack cloaks you.</p>
+            <h2>Single-origin routing</h2>
+            <p>Every sip runs through one carefully tuned Safezone roast so you always know what stack shields you.</p>
           </article>
           <article>
-            <h2>Comfort-first UX</h2>
-            <p>A centered search bar, generous spacing, and deep blue gradients keep things calm even when traffic spikes.</p>
+            <h2>Warm ambience</h2>
+            <p>Caramel gradients, quiet toggles, and little rituals keep the experience calm even when traffic spikes.</p>
           </article>
         </section>
 
         <section class="mission" id="mission">
           <p>
-            The goal of SuperSonic is to finally end annoying internet censorships, especially at school. Solo made by
+            The goal of Coffee Shop is to finally end annoying internet censorships, especially at school. Solo made by
             @1d3nt1ty. Visit the TN Discord at <a href="https://discord.gg/unblock" target="_blank" rel="noreferrer">discord.gg/unblock</a>.
           </p>
         </section>
 
         <section class="how-it-works">
-          <h2>How SuperSonic works</h2>
+          <h2>How Coffee Shop works</h2>
           <ol>
             <li>Paste a URL or type anything to search privately.</li>
-            <li>SuperSonic launches a cloaked tab through our native Safezone rewrite backend.</li>
+            <li>Coffee Shop launches a cloaked tab through our native Safezone rewrite backend.</li>
           </ol>
           <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
         </section>
@@ -373,11 +373,11 @@
         </section>
       </main>
       <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
-      <section class="chat-bar" aria-label="SuperSonic global chat">
-        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Loading chat…</div>
+      <section class="chat-bar" aria-label="Coffee Shop global chat">
+        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat…</div>
         <form id="chat-form" class="chat-bar__form" autocomplete="off">
           <label for="chat-input" class="sr-only">Chat message</label>
-          <input id="chat-input" type="text" placeholder="Say something to SuperSonic…" maxlength="280" />
+          <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop…" maxlength="280" />
           <button type="submit">Send</button>
         </form>
       </section>

@@ -1,46 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
-  <title>SuperSonic Safezone Logo</title>
+  <title>Coffee Shop Proxy Logo</title>
   <defs>
-    <radialGradient id="supersonic-glow" cx="35%" cy="30%" r="80%">
-      <stop offset="0%" stop-color="#6dd7ff" stop-opacity="1" />
-      <stop offset="55%" stop-color="#2f83ff" stop-opacity="0.9" />
-      <stop offset="100%" stop-color="#021033" stop-opacity="1" />
+    <radialGradient id="coffee-glow" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fbe3c3" />
+      <stop offset="60%" stop-color="#d29d63" />
+      <stop offset="100%" stop-color="#4b2a14" />
     </radialGradient>
-    <linearGradient id="supersonic-edge" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#81e1ff" stop-opacity="0.85" />
-      <stop offset="100%" stop-color="#0a275d" stop-opacity="0.45" />
+    <linearGradient id="coffee-foam" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff5e6" />
+      <stop offset="100%" stop-color="#f5d7b0" />
     </linearGradient>
-    <linearGradient id="supersonic-body" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0c5cff" />
-      <stop offset="100%" stop-color="#0830a8" />
+    <linearGradient id="coffee-cup" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f4e3d1" />
+      <stop offset="100%" stop-color="#d9c1a6" />
     </linearGradient>
-    <filter id="supersonic-shadow" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#010b26" flood-opacity="0.65" />
+    <filter id="coffee-shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#1c0f07" flood-opacity="0.55" />
     </filter>
   </defs>
 
-  <circle cx="120" cy="120" r="108" fill="url(#supersonic-glow)" stroke="#0a2d6f" stroke-width="3" filter="url(#supersonic-shadow)" />
-  <circle cx="120" cy="120" r="90" fill="none" stroke="url(#supersonic-edge)" stroke-width="14" stroke-linecap="round" opacity="0.85" />
+  <circle cx="120" cy="120" r="108" fill="url(#coffee-glow)" stroke="#7a4a20" stroke-width="4" filter="url(#coffee-shadow)" />
+  <circle cx="120" cy="120" r="86" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="10" stroke-dasharray="6 18" opacity="0.7" />
 
-  <path
-    d="M66 150c28 18 68 20 90-10 6-8 5-16-2-20-5-3-12-4-22-7-21-7-30-26-16-38 20-17 60-20 92-1-13-24-41-39-83-33-31 4-52 19-61 42-9 22-4 39 2 49 7 11 17 16 0 18z"
-    fill="url(#supersonic-body)"
-  />
-  <path
-    d="M148 92c13-4 26-3 38 6 11 8 15 22 8 35-8 14-24 19-41 12"
-    fill="none"
-    stroke="#9de8ff"
-    stroke-width="7"
-    stroke-linecap="round"
-    opacity="0.85"
-  />
-  <path
-    d="M140 154c-16 12-36 14-52 5"
-    fill="none"
-    stroke="#6ec9ff"
-    stroke-width="8"
-    stroke-linecap="round"
-    opacity="0.7"
-  />
-  <circle cx="175" cy="112" r="11" fill="#f6fbff" opacity="0.85" />
+  <g transform="translate(45 70)">
+    <path
+      d="M30 40h90c8 0 14 6 13 14l-6 44c-2 15-14 26-29 26H47c-15 0-27-11-29-26l-6-44c-1-8 5-14 13-14z"
+      fill="url(#coffee-cup)"
+      stroke="#caa57e"
+      stroke-width="5"
+      stroke-linecap="round"
+    />
+    <path
+      d="M120 52c20 0 34 14 32 32s-18 28-40 24"
+      fill="none"
+      stroke="#f4d6b3"
+      stroke-width="12"
+      stroke-linecap="round"
+      opacity="0.7"
+    />
+    <rect x="32" y="52" width="86" height="34" rx="16" fill="#3a1f12" />
+    <rect x="38" y="58" width="74" height="20" rx="10" fill="url(#coffee-foam)" opacity="0.9" />
+    <path
+      d="M58 25c-8-10-4-18 4-20m24 20c-8-10-4-18 4-20m24 20c-8-10-4-18 4-20"
+      fill="none"
+      stroke="#f9d7a5"
+      stroke-width="6"
+      stroke-linecap="round"
+    />
+    <ellipse cx="75" cy="124" rx="55" ry="10" fill="rgba(0,0,0,0.25)" />
+  </g>
 </svg>
