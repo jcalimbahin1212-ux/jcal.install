@@ -180,94 +180,103 @@ body:not(.auth-locked) .dev-launcher {
 .lockout-overlay {
   position: fixed;
   inset: 0;
-  background: #000;
-  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.04), transparent 55%);
+  background: radial-gradient(circle at top, #0a0016 0%, #05010c 60%, #010105 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 4000;
   opacity: 0;
   transition: opacity 220ms ease;
-  animation: lockoutPulse 3s ease-in-out infinite;
-}
-
-.lockout-overlay::before,
-.lockout-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.lockout-overlay::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23000'/%3E%3Cellipse cx='62' cy='72' rx='18' ry='26' fill='%23fff'/%3E%3Cellipse cx='138' cy='72' rx='18' ry='26' fill='%23fff'/%3E%3Cpath d='M30 118 Q100 168 170 118' stroke='%23fff' stroke-width='12' fill='none' stroke-linecap='round'/%3E%3Cpath d='M30 118 Q100 144 170 118' stroke='%23fff' stroke-width='6' fill='none' stroke-linecap='round'/%3E%3Cg stroke='%23000' stroke-width='5' stroke-linecap='round'%3E%3Cpath d='M46 118 v36'/%3E%3Cpath d='M60 123 v34'/%3E%3Cpath d='M74 128 v32'/%3E%3Cpath d='M88 133 v28'/%3E%3Cpath d='M102 135 v28'/%3E%3Cpath d='M116 133 v28'/%3E%3Cpath d='M130 128 v32'/%3E%3Cpath d='M144 123 v34'/%3E%3Cpath d='M158 118 v36'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 220px 200px;
-  background-repeat: repeat;
-  mix-blend-mode: screen;
-  opacity: 0;
-  animation: lockoutFlash 5s ease-in-out infinite;
-}
-
-.lockout-overlay::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 400'%3E%3CradialGradient id='g' cx='50%25' cy='40%25' r='55%25'%3E%3Cstop offset='0%25' stop-color='rgba(0,0,0,0)'/%3E%3Cstop offset='100%25' stop-color='rgba(0,0,0,0.9)'/%3E%3C/radialGradient%3E%3Ccircle cx='200' cy='200' r='200' fill='url(%23g)'/%3E%3Cpath d='M90 170c40-70 180-70 220 0m-170 90c50 30 120 30 170 0' stroke='rgba(255,255,255,0.08)' stroke-width='18' fill='none' stroke-linecap='round'/%3E%3Cellipse cx='150' cy='170' rx='18' ry='25' fill='rgba(255,255,255,0.15)'/%3E%3Cellipse cx='250' cy='170' rx='18' ry='25' fill='rgba(255,255,255,0.15)'/%3E%3C/svg%3E");
-  background-size: cover;
-  mix-blend-mode: screen;
-  opacity: 0.45;
-  animation: lockoutShake 2.4s ease-in-out infinite;
+  font-family: "Press Start 2P", "Courier New", monospace;
+  color: #f5e8ff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  overflow: hidden;
 }
 
 .lockout-overlay.is-active {
   opacity: 1;
 }
 
-.lockout-overlay__content {
-  color: #fff;
-  font-family: "Arial", "Helvetica Neue", sans-serif;
-  font-size: clamp(1rem, 3vw, 1.35rem);
-  text-align: center;
-  line-height: 1.6;
-  max-width: 520px;
-  padding: 2rem;
-  text-transform: lowercase;
+.lockout-overlay__scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.06) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  animation: lockoutScan 5s linear infinite;
+  opacity: 0.3;
+}
+
+.lockout-overlay__inner {
   position: relative;
-  z-index: 2;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  border: 3px solid rgba(203, 157, 255, 0.4);
+  border-radius: 1.5rem;
+  background: rgba(5, 0, 15, 0.85);
+  box-shadow: 0 0 60px rgba(122, 60, 255, 0.45);
+  text-align: center;
+  max-width: 640px;
+  width: min(90vw, 640px);
 }
 
-@keyframes lockoutPulse {
+.lockout-overlay__sonic {
+  width: clamp(180px, 30vw, 240px);
+  height: clamp(180px, 30vw, 240px);
+  margin: 0 auto 1.5rem;
+  position: relative;
+  filter: drop-shadow(0 0 25px rgba(115, 76, 255, 0.7));
+}
+
+.lockout-overlay__sonic::before,
+.lockout-overlay__sonic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  animation: lockoutSonic 1.2s steps(1) infinite;
+}
+
+.lockout-overlay__sonic::before {
+  background-image: url("data:image/svg+xml,%3csvg+xmlns%3d%27http%3a%2f%2fwww.w3.org%2f2000%2fsvg%27+viewBox%3d%270+0+160+160%27%3e%0a%3crect+width%3d%27160%27+height%3d%27160%27+fill%3d%27none%27%2f%3e%0a%3cg+fill%3d%27%235d2bff%27%3e%0a++%3cellipse+cx%3d%2780%27+cy%3d%27105%27+rx%3d%2730%27+ry%3d%2728%27%2f%3e%0a++%3ccircle+cx%3d%2782%27+cy%3d%2752%27+r%3d%2728%27%2f%3e%0a++%3cpath+d%3d%27M54+52+L20+32+L32+74+Z%27%2f%3e%0a++%3cpath+d%3d%27M110+50+L142+44+L126+84+Z%27%2f%3e%0a++%3cpath+d%3d%27M98+84+L138+46+L140+96+Z%27%2f%3e%0a%3c%2fg%3e%0a%3cg+fill%3d%27%23ffffff%27%3e%0a++%3ccircle+cx%3d%2790%27+cy%3d%2748%27+r%3d%278%27%2f%3e%0a++%3ccircle+cx%3d%2774%27+cy%3d%2748%27+r%3d%278%27%2f%3e%0a++%3crect+x%3d%27120%27+y%3d%2710%27+width%3d%2710%27+height%3d%2752%27+rx%3d%273%27%2f%3e%0a++%3crect+x%3d%27118%27+y%3d%273%27+width%3d%2714%27+height%3d%2712%27+rx%3d%272%27%2f%3e%0a%3c%2fg%3e%0a%3cg+fill%3d%27%230b0217%27%3e%0a++%3ccircle+cx%3d%2792%27+cy%3d%2748%27+r%3d%273%27%2f%3e%0a++%3ccircle+cx%3d%2776%27+cy%3d%2748%27+r%3d%273%27%2f%3e%0a%3c%2fg%3e%0a%3cpath+fill%3d%27%238e5dff%27+d%3d%27M62+120+h36+v26+h-36z%27%2f%3e%0a%3cpath+fill%3d%27%2342158c%27+d%3d%27M82+26+Q90+10+112+14+Q94+26+82+26Z%27%2f%3e%0a%3c%2fsvg%3e");
+  animation-timing-function: steps(1, end);
+}
+
+.lockout-overlay__sonic::after {
+  background-image: url("data:image/svg+xml,%3csvg+xmlns%3d%27http%3a%2f%2fwww.w3.org%2f2000%2fsvg%27+viewBox%3d%270+0+160+160%27%3e%0a%3crect+width%3d%27160%27+height%3d%27160%27+fill%3d%27none%27%2f%3e%0a%3cg+fill%3d%27%235d2bff%27%3e%0a++%3cellipse+cx%3d%2782%27+cy%3d%27108%27+rx%3d%2732%27+ry%3d%2728%27%2f%3e%0a++%3ccircle+cx%3d%2778%27+cy%3d%2754%27+r%3d%2728%27%2f%3e%0a++%3cpath+d%3d%27M52+56+L18+34+L32+78+Z%27%2f%3e%0a++%3cpath+d%3d%27M106+52+L138+46+L122+88+Z%27%2f%3e%0a++%3cpath+d%3d%27M92+86+L130+52+L134+100+Z%27%2f%3e%0a%3c%2fg%3e%0a%3cg+fill%3d%27%23ffffff%27%3e%0a++%3ccircle+cx%3d%2786%27+cy%3d%2750%27+r%3d%278%27%2f%3e%0a++%3ccircle+cx%3d%2770%27+cy%3d%2750%27+r%3d%278%27%2f%3e%0a++%3crect+x%3d%27118%27+y%3d%2718%27+width%3d%2712%27+height%3d%2748%27+rx%3d%273%27+transform%3d%27rotate(-6+124+42)%27%2f%3e%0a++%3crect+x%3d%27123%27+y%3d%276%27+width%3d%2712%27+height%3d%2712%27+rx%3d%272%27%2f%3e%0a%3c%2fg%3e%0a%3cg+fill%3d%27%230b0217%27%3e%0a++%3ccircle+cx%3d%2788%27+cy%3d%2750%27+r%3d%273%27%2f%3e%0a++%3ccircle+cx%3d%2772%27+cy%3d%2750%27+r%3d%273%27%2f%3e%0a%3c%2fg%3e%0a%3cpath+fill%3d%27%238e5dff%27+d%3d%27M60+122+h38+v26+h-38z%27%2f%3e%0a%3cpath+fill%3d%27%2342158c%27+d%3d%27M78+30+Q86+12+108+18+Q90+30+78+30Z%27%2f%3e%0a%3c%2fsvg%3e");
+  animation: lockoutSonic 1.2s steps(1) infinite;
+  animation-delay: 0.6s;
+}
+
+.lockout-overlay__text {
+  font-size: clamp(0.85rem, 2.2vw, 1.2rem);
+  line-height: 1.8;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes lockoutScan {
   0% {
-    background-color: #040404;
-  }
-  50% {
-    background-color: #0f0f0f;
+    transform: translateY(-100%);
   }
   100% {
-    background-color: #040404;
+    transform: translateY(100%);
   }
 }
 
-@keyframes lockoutShake {
+@keyframes lockoutSonic {
   0%,
-  100% {
-    transform: translate(0, 0);
+  49% {
+    opacity: 1;
   }
-  50% {
-    transform: translate(6px, -4px) scale(1.02);
-  }
-}
-
-@keyframes lockoutFlash {
-  0%,
+  50%,
   100% {
     opacity: 0;
-  }
-  30% {
-    opacity: 0.2;
-  }
-  50% {
-    opacity: 0.4;
-  }
-  70% {
-    opacity: 0.2;
   }
 }
 

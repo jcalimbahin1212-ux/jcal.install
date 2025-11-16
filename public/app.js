@@ -66,6 +66,12 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
+const LOCKOUT_TEXT_WRONG =
+  "There is no room for people like you here in SuperSonic. Leave or get the password right.";
+const LOCKOUT_TEXT_BANNED = "I know who you are. And you do not deserve such privelege.";
+const LOCKOUT_TEXT_DEV =
+  "You saw. I trusted you and you saw that this was not for you yet you still tried. You do not always need to explore beyond what you are given.";
+const DEFAULT_LOCKOUT_MESSAGE = LOCKOUT_TEXT_WRONG;
 let activeAttempt = null;
 let transportState = { safezone: "unknown", lastUpdate: 0, info: null };
 
@@ -153,8 +159,6 @@ const DEV_ENTRY_CODE_NORMALIZED = normalizeAuthInput(DEV_ENTRY_CODE);
 const DEV_PASSCODE_NORMALIZED = normalizeAuthInput(DEV_PASSCODE);
 const DEV_ENTRY_WINDOW_MS = 180_000;
 const USER_STATUS_INTERVAL_MS = 10_000;
-const DEFAULT_LOCKOUT_MESSAGE =
-  "you tried getting in, didnt you. why would you do that without my permission. i trusted that you would see the password screen and ask me for the password. you little rulebreaker.";
 const transportPrefKey = "supersonic:transport-pref";
 const userScriptPrefKey = "supersonic:user-script";
 const realTitle = document.title;
@@ -612,7 +616,7 @@ function handleBridgeSubmit(event) {
     selectors.bridgeError.classList.add("is-visible");
   }
   resetDevProcess();
-  showAuthLockoutScreen();
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
 }
 
 function triggerDevHandshake() {
@@ -644,7 +648,7 @@ function handleDevAuthSubmit(event) {
     selectors.devError.classList.add("is-visible");
   }
   resetDevProcess();
-  showAuthLockoutScreen();
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
 }
 
 function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
@@ -653,7 +657,13 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   }
   const overlay = document.createElement("div");
   overlay.className = "lockout-overlay";
-  overlay.innerHTML = `<div class="lockout-overlay__content">${message}</div>`;
+  overlay.innerHTML = `
+    <div class="lockout-overlay__scan" aria-hidden="true"></div>
+    <div class="lockout-overlay__inner">
+      <div class="lockout-overlay__sonic" aria-hidden="true"></div>
+      <p class="lockout-overlay__text">${escapeHtml(message)}</p>
+    </div>
+  `;
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("is-active"));
   window.setTimeout(() => {
@@ -682,7 +692,7 @@ function handleUsernameSubmit(event) {
   };
   verifyUserStatus(identity).then((allowed) => {
     if (!allowed) {
-      handleUserBan("banned.", identity);
+      handleUserBan(LOCKOUT_TEXT_BANNED, identity);
       return;
     }
     saveUserIdentity(identity);
@@ -857,7 +867,7 @@ function registerUserIdentity(identity) {
   })
     .then((response) => {
       if (!response.ok && response.status === 451) {
-        handleUserBan("banned.", identity);
+        handleUserBan(LOCKOUT_TEXT_BANNED, identity);
       }
     })
     .catch(() => {});
@@ -902,11 +912,12 @@ function clearLocalBanState() {
   }
 }
 
-function handleUserBan(message = "banned.", identity = userIdentity) {
-  persistLocalBanState(identity, message);
+function handleUserBan(message = LOCKOUT_TEXT_BANNED, identity = userIdentity) {
+  const finalMessage = message || LOCKOUT_TEXT_BANNED;
+  persistLocalBanState(identity, finalMessage);
   cancelUserStatusMonitor();
   resetUserIdentity();
-  showAuthLockoutScreen(message);
+  showAuthLockoutScreen(finalMessage);
 }
 
 function startUserStatusMonitor(immediate = false) {
@@ -919,7 +930,7 @@ function startUserStatusMonitor(immediate = false) {
     if (allowed) {
       return;
     }
-    handleUserBan("banned.", userIdentity);
+    handleUserBan(LOCKOUT_TEXT_BANNED, userIdentity);
   };
   if (immediate) {
     checkStatus();
@@ -967,7 +978,7 @@ function startDevEntryTimer() {
   cancelDevEntryTimer();
   devEntryTimer = window.setTimeout(() => {
     resetDevProcess();
-    showAuthLockoutScreen("did you just.. make an attempt to access my dev server..? quit doing that.");
+    showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
   }, DEV_ENTRY_WINDOW_MS);
 }
 
