@@ -30,6 +30,9 @@ const BANNED_CACHE_PATH = path.resolve(DATA_DIR, "banned-cache.json");
 const USERS_PATH = path.resolve(DATA_DIR, "users.json");
 const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
 const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
+const BANNED_DEVICES_PATH = path.resolve(DATA_DIR, "banned-devices.json");
+const DEVICE_COOKIE_NAME = "supersonic_device";
+const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
 const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
@@ -60,10 +63,27 @@ loadUserLogs().catch((error) => {
 loadBannedUsers().catch((error) => {
   console.error("[supersonic] failed to load banned users", error);
 });
+loadBannedDeviceIds().catch((error) => {
+  console.error("[supersonic] failed to load banned devices", error);
+});
 
 app.disable("x-powered-by");
 app.use(morgan("dev"));
 app.use(compression());
+app.use((req, res, next) => {
+  const cookies = parseCookies(req.headers.cookie);
+  let deviceId = sanitizeUid(cookies[DEVICE_COOKIE_NAME]);
+  let issued = false;
+  if (!deviceId) {
+    deviceId = generateDeviceId();
+    issued = true;
+  }
+  req.supersonicDeviceId = deviceId;
+  if (issued) {
+    appendSetCookie(res, buildDeviceCookie(deviceId));
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -108,6 +128,7 @@ const bannedCacheKeys = new Set();
 const userRegistry = new Map();
 const userLogs = [];
 const bannedUsers = new Map();
+const bannedDeviceIds = new Set();
 const bannedAliases = new Set();
 const MAX_LOG_ENTRIES = 1000;
 const metrics = {
@@ -161,6 +182,7 @@ app.get("/search/lite", async (req, res) => {
       recordUserLog({
         uid,
         username,
+        deviceId: req.supersonicDeviceId,
         target: upstreamUrl.toString(),
         intent: "search",
         renderer: "search-lite",
@@ -223,17 +245,20 @@ app.post("/dev/cache/:key/action", jsonParser, (req, res) => {
 });
 
 app.post("/dev/users/register", jsonParser, (req, res) => {
-  const uid = sanitizeUid(req.body?.uid);
+  const uid = sanitizeUid(req.body?.uid || req.supersonicDeviceId);
   const username = sanitizeUsernameInput(req.body?.username);
+  const deviceId = sanitizeUid(req.supersonicDeviceId);
   if (!uid || !username) {
     return res.status(400).json({ error: "uid and username are required." });
   }
-  if (isUidBanned(uid) || isUsernameBanned(username)) {
+  if (isUidBanned(uid) || isUsernameBanned(username) || isDeviceBanned(deviceId)) {
     return res.status(451).json({ error: "User banned." });
   }
   const entry = userRegistry.get(uid) || {};
   entry.username = username;
   entry.lastSeen = Date.now();
+  entry.deviceId = deviceId;
+  entry.registeredAt = entry.registeredAt || Date.now();
   userRegistry.set(uid, entry);
   persistUserRegistry();
   return res.json({ ok: true });
@@ -289,6 +314,7 @@ app.get("/dev/panel", (req, res) => {
     summary: {
       bannedCacheCount: bannedCacheKeys.size,
       bannedUserCount: bannedUsers.size,
+      bannedDeviceCount: bannedDeviceIds.size,
       cacheCount: caches.length,
       userCount: users.length,
     },
@@ -304,9 +330,10 @@ app.get("/dev/users/status/:uid", (req, res) => {
   const username = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
   const blockedUid = isUidBanned(uid);
   const blockedAlias = isUsernameBanned(username);
+  const blockedDevice = isDeviceBanned(req.supersonicDeviceId);
   return res.json({
-    allowed: !(blockedUid || blockedAlias),
-    reason: blockedUid ? "uid" : blockedAlias ? "alias" : null,
+    allowed: !(blockedUid || blockedAlias || blockedDevice),
+    reason: blockedDevice ? "device" : blockedUid ? "uid" : blockedAlias ? "alias" : null,
   });
 });
 
@@ -320,7 +347,8 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
     const overrideName = sanitizeUsernameInput(req.body?.username);
     const registryName = getRegistryUsername(uid);
     const finalName = overrideName || registryName;
-    rememberBanEntry(uid, finalName);
+    const deviceId = getRegistryDeviceId(uid) || req.supersonicDeviceId || null;
+    rememberBanEntry(uid, finalName, deviceId);
     return res.json({ ok: true, message: "User banned." });
   }
   if (action === "unban") {
@@ -340,7 +368,7 @@ app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
     userRegistry.set(uid, entry);
     persistUserRegistry();
     if (bannedUsers.has(uid)) {
-      rememberBanEntry(uid, newName);
+      rememberBanEntry(uid, newName, entry.deviceId || null);
     }
     return res.json({ ok: true, message: "Username updated." });
   }
@@ -369,10 +397,11 @@ app.all("/powerthrough", async (req, res) => {
   const renderHint = extractRenderHint(req);
   const requestId = createRequestId("http");
   res.setHeader(REQUEST_ID_HEADER, requestId);
-  const uidParam = sanitizeUid(getFirstQueryValue(req.query.uid));
+  const deviceId = sanitizeUid(req.supersonicDeviceId);
+  const uidParam = deviceId || sanitizeUid(getFirstQueryValue(req.query.uid));
   const usernameParam = sanitizeUsernameInput(getFirstQueryValue(req.query.uname));
   const intentParam = getFirstQueryValue(req.query.intent) || "url";
-  if (isUidBanned(uidParam) || isUsernameBanned(usernameParam)) {
+  if (isDeviceBanned(deviceId) || isUidBanned(uidParam) || isUsernameBanned(usernameParam)) {
     return res.status(451).json({ error: "User banned.", details: "user-banned" });
   }
 
@@ -385,7 +414,12 @@ app.all("/powerthrough", async (req, res) => {
         headers: req.headers,
         bodyStream: req,
       },
-    }, { requestId, user: uidParam ? { uid: uidParam, username: usernameParam } : null, intent: intentParam });
+    }, {
+      requestId,
+      user: uidParam ? { uid: uidParam, username: usernameParam, deviceId } : null,
+      intent: intentParam,
+      deviceId,
+    });
     if (!res.headersSent && result?.requestId && result.requestId !== requestId) {
       res.setHeader(REQUEST_ID_HEADER, result.requestId);
     }
@@ -432,8 +466,8 @@ server.on("upgrade", (request, socket, head) => {
   }
 });
 
-wss.on("connection", (ws) => {
-  setupSafezoneConnection(ws);
+wss.on("connection", (ws, request) => {
+  setupSafezoneConnection(ws, request);
 });
 
 async function executeProxyCall(params, context = {}) {
@@ -677,8 +711,12 @@ function extractRenderHint(req) {
   return queryValue || headerValue || undefined;
 }
 
-function setupSafezoneConnection(ws) {
+function setupSafezoneConnection(ws, request) {
   const channels = new Map();
+  if (request?.headers?.cookie) {
+    const cookies = parseCookies(request.headers.cookie);
+    ws.supersonicDeviceId = sanitizeUid(cookies[DEVICE_COOKIE_NAME]);
+  }
 
   ws.on("message", (data, isBinary) => {
     handleSafezoneMessage(ws, channels, data, isBinary).catch((error) => {
@@ -793,7 +831,10 @@ async function processSafezoneOpen(ws, channels, channelId, frame) {
     normalizedHeaders["content-length"] = String(bodyLength);
   }
 
-  const requestContext = { requestId: createRequestId("safezone") };
+  const requestContext = {
+    requestId: createRequestId("safezone"),
+    deviceId: ws.supersonicDeviceId || null,
+  };
 
   try {
     const result = await executeProxyCall(
@@ -1052,6 +1093,7 @@ function respondWithContext(payload, targetUrl, context = {}, extra = {}) {
     recordUserLog({
       uid: context.user.uid,
       username: context.user.username,
+      deviceId: context.user.deviceId || context.deviceId || null,
       target: targetUrl?.toString?.() ?? "",
       intent: context.intent || "url",
       renderer: payload.renderer || extra.renderer || "direct",
@@ -1490,6 +1532,7 @@ function serializeUserRegistry() {
     uid,
     username: info?.username || "unknown",
     lastSeen: info?.lastSeen || null,
+    deviceId: info?.deviceId || null,
     banned: isUidBanned(uid),
   }));
 }
@@ -1601,7 +1644,7 @@ async function loadBannedUsers() {
         if (typeof entry === "string") {
           ingestBanEntry(entry, null, Date.now());
         } else if (entry && entry.uid) {
-          ingestBanEntry(entry.uid, entry.username || null, entry.timestamp || Date.now());
+          ingestBanEntry(entry.uid, entry.username || null, entry.timestamp || Date.now(), entry.deviceId || null);
         }
       });
     }
@@ -1619,10 +1662,39 @@ async function persistBannedUsers() {
       uid: entry.uid,
       username: entry.username || null,
       timestamp: entry.timestamp || Date.now(),
+      deviceId: entry.deviceId || null,
     }));
     await fs.writeFile(BANNED_USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
     console.error("[supersonic] failed to persist banned users", error);
+  }
+}
+
+async function loadBannedDeviceIds() {
+  try {
+    const raw = await fs.readFile(BANNED_DEVICES_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((value) => {
+        const deviceId = sanitizeUid(value);
+        if (deviceId) {
+          bannedDeviceIds.add(deviceId);
+        }
+      });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistBannedDeviceIds() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(BANNED_DEVICES_PATH, JSON.stringify([...bannedDeviceIds]), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist banned devices", error);
   }
 }
 
@@ -1702,6 +1774,40 @@ function getFirstQueryValue(value) {
   return value;
 }
 
+function generateDeviceId() {
+  return `dev-${Math.random().toString(36).slice(2, 7)}${Date.now().toString(36).slice(-5)}`;
+}
+
+function parseCookies(header = "") {
+  return header
+    .split(";")
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .reduce((acc, pair) => {
+      const [key, ...rest] = pair.split("=");
+      if (!key) return acc;
+      acc[key.trim()] = rest.join("=").trim();
+      return acc;
+    }, {});
+}
+
+function appendSetCookie(res, cookie) {
+  if (!cookie) return;
+  const existing = res.getHeader("Set-Cookie");
+  if (!existing) {
+    res.setHeader("Set-Cookie", cookie);
+  } else if (Array.isArray(existing)) {
+    existing.push(cookie);
+    res.setHeader("Set-Cookie", existing);
+  } else {
+    res.setHeader("Set-Cookie", [existing, cookie]);
+  }
+}
+
+function buildDeviceCookie(deviceId) {
+  return `${DEVICE_COOKIE_NAME}=${deviceId}; Path=/; Max-Age=${DEVICE_COOKIE_MAX_AGE}; SameSite=Lax`;
+}
+
 function sanitizeLimit(value, defaultValue = null, min = 1, max = 500) {
   if (value === undefined || value === null || value === "") {
     return defaultValue;
@@ -1756,18 +1862,23 @@ function isUsernameBanned(username) {
   return bannedAliases.has(alias);
 }
 
-function ingestBanEntry(uid, username, timestamp = Date.now()) {
+function ingestBanEntry(uid, username, timestamp = Date.now(), deviceId = null) {
   if (!uid) return;
   const sanitized = sanitizeUsernameInput(username);
   const alias = normalizedAliasFromSanitized(sanitized);
+  const normalizedDevice = deviceId ? sanitizeUid(deviceId) : null;
   bannedUsers.set(uid, {
     uid,
     username: sanitized || null,
     alias: alias || null,
     timestamp,
+    deviceId: normalizedDevice,
   });
   if (alias) {
     bannedAliases.add(alias);
+  }
+  if (normalizedDevice) {
+    bannedDeviceIds.add(normalizedDevice);
   }
 }
 
@@ -1775,14 +1886,20 @@ function normalizedAliasFromSanitized(value) {
   return value ? value.toLowerCase() : "";
 }
 
-function rememberBanEntry(uid, username) {
-  ingestBanEntry(uid, username, Date.now());
+function rememberBanEntry(uid, username, deviceId) {
+  ingestBanEntry(uid, username, Date.now(), deviceId);
   persistBannedUsers();
+  if (deviceId) {
+    banDeviceId(deviceId);
+  }
 }
 
 function forgetBanEntry(uid) {
   const entry = bannedUsers.get(uid);
-  if (entry?.alias) {
+  if (!entry) {
+    return;
+  }
+  if (entry.alias) {
     let aliasStillUsed = false;
     for (const other of bannedUsers.values()) {
       if (other.uid !== uid && other.alias === entry.alias) {
@@ -1796,11 +1913,52 @@ function forgetBanEntry(uid) {
   }
   bannedUsers.delete(uid);
   persistBannedUsers();
+  maybeUnbanDeviceId(entry.deviceId);
+}
+
+function maybeUnbanDeviceId(deviceId) {
+  if (!deviceId) return;
+  for (const entry of bannedUsers.values()) {
+    if (entry.deviceId === deviceId) {
+      return;
+    }
+  }
+  unbanDeviceId(deviceId);
 }
 
 function getRegistryUsername(uid) {
   const entry = userRegistry.get(uid);
   return entry?.username || null;
+}
+
+function getRegistryDeviceId(uid) {
+  const entry = userRegistry.get(uid);
+  return entry?.deviceId || null;
+}
+
+function isDeviceBanned(deviceId) {
+  if (!deviceId) {
+    return false;
+  }
+  return bannedDeviceIds.has(deviceId);
+}
+
+function banDeviceId(deviceId) {
+  const normalized = sanitizeUid(deviceId);
+  if (!normalized) {
+    return;
+  }
+  bannedDeviceIds.add(normalized);
+  persistBannedDeviceIds();
+}
+
+function unbanDeviceId(deviceId) {
+  const normalized = sanitizeUid(deviceId);
+  if (!normalized) {
+    return;
+  }
+  bannedDeviceIds.delete(normalized);
+  persistBannedDeviceIds();
 }
 
 function recordUserLog(entry) {
@@ -1811,6 +1969,7 @@ function recordUserLog(entry) {
     uid: entry.uid,
     username:
       entry.username || userRegistry.get(entry.uid)?.username || "unknown",
+    deviceId: entry.deviceId || userRegistry.get(entry.uid)?.deviceId || null,
     target: entry.target || "",
     intent: entry.intent || "url",
     renderer: entry.renderer || "direct",
@@ -1824,6 +1983,7 @@ function recordUserLog(entry) {
   persistUserLogs();
   const registryEntry = userRegistry.get(entry.uid) || {};
   registryEntry.username = logEntry.username;
+  registryEntry.deviceId = logEntry.deviceId || registryEntry.deviceId || null;
   registryEntry.lastSeen = logEntry.timestamp;
   userRegistry.set(entry.uid, registryEntry);
   persistUserRegistry();

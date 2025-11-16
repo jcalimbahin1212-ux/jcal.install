@@ -130,6 +130,9 @@ const selectors = {
   userScriptStatus: document.querySelector("#userscript-status"),
 };
 
+const DEVICE_COOKIE_NAME = "supersonic_device";
+const deviceFingerprint = readDeviceFingerprint();
+
 const historyKey = "unidentified:last-query";
 const historyPrefKey = "unidentified:history-pref";
 const panicKeyPref = "unidentified:panic-key";
@@ -183,6 +186,7 @@ let devUnlocked = sessionStorage.getItem(devStorageKey) === "yes";
 let devEntryTimer = null;
 let primedNavigationTokens = restorePrimedNavigationTokens();
 let userIdentity = loadUserIdentity();
+enforceDeviceUid();
 let currentCacheTag = new URLSearchParams(window.location.search).get("cache");
 let lastNavigation = null;
 let devCacheRefreshTimer = null;
@@ -674,7 +678,7 @@ function handleUsernameSubmit(event) {
   }
   const identity = {
     username: sanitized,
-    uid: userIdentity?.uid || generateUserUid(),
+    uid: getDeviceUid() || userIdentity?.uid || generateUserUid(),
   };
   verifyUserStatus(identity).then((allowed) => {
     if (!allowed) {
@@ -748,8 +752,45 @@ function loadUserIdentity() {
   return null;
 }
 
+function getDeviceUid() {
+  return deviceFingerprint || readDeviceFingerprint();
+}
+
+function readDeviceFingerprint() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const cookies = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const target = cookies.find((entry) => entry.startsWith(`${DEVICE_COOKIE_NAME}=`));
+  if (!target) {
+    return null;
+  }
+  return target.split("=")[1] || null;
+}
+
+function enforceDeviceUid() {
+  const deviceId = getDeviceUid();
+  if (!deviceId) {
+    return;
+  }
+  if (userIdentity?.uid !== deviceId) {
+    userIdentity = userIdentity ? { ...userIdentity, uid: deviceId } : null;
+    if (userIdentity) {
+      try {
+        localStorage.setItem(userIdentityKey, JSON.stringify(userIdentity));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 function saveUserIdentity(identity) {
   if (!identity) return;
+  identity.uid = getDeviceUid() || identity.uid;
   userIdentity = identity;
   try {
     localStorage.setItem(userIdentityKey, JSON.stringify(identity));
