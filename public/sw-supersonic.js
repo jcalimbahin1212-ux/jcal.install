@@ -153,13 +153,17 @@ function shouldCache(request, url) {
 
 async function cacheFirst(request) {
   const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match(request);
-  if (cached) {
-    return cached;
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) {
+      return cached;
+    }
+    throw error;
   }
-  const response = await fetch(request);
-  cache.put(request, response.clone());
-  return response;
 }
 
 function extractProxyComponents(pathname) {

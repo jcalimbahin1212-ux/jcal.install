@@ -255,6 +255,7 @@ async function enforceLocalBanGate() {
   if (!banState) {
     return false;
   }
+  const message = banState.message || LOCKOUT_TEXT_BANNED;
   if (banState.uid) {
     try {
       const url = new URL(`/dev/users/status/${encodeURIComponent(banState.uid)}`, window.location.origin);
@@ -263,6 +264,7 @@ async function enforceLocalBanGate() {
       }
       const response = await fetch(url.toString(), {
         cache: "no-store",
+        credentials: "same-origin",
       });
       if (response.ok) {
         const payload = await response.json();
@@ -275,7 +277,7 @@ async function enforceLocalBanGate() {
       // fail closed
     }
   }
-  showAuthLockoutScreen(banState.message || "banned.");
+  showAuthLockoutScreen(message);
   return true;
 }
 
@@ -874,7 +876,7 @@ function readLocalBanState() {
       return {
         uid: parsed.uid || null,
         username: parsed.username || null,
-        message: parsed.message || "banned.",
+        message: parsed.message || LOCKOUT_TEXT_BANNED,
       };
     }
   } catch {
@@ -883,7 +885,7 @@ function readLocalBanState() {
   return null;
 }
 
-function persistLocalBanState(identity, message = "banned.") {
+function persistLocalBanState(identity, message = LOCKOUT_TEXT_BANNED) {
   const payload = {
     uid: identity?.uid || null,
     username: identity?.username ? sanitizeUsername(identity.username) : null,
