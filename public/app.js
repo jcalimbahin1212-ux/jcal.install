@@ -660,19 +660,11 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   overlay.innerHTML = `
     <div class="lockout-overlay__scan" aria-hidden="true"></div>
     <div class="lockout-overlay__inner">
-      <div class="lockout-overlay__sonic" aria-hidden="true"></div>
       <p class="lockout-overlay__text">${escapeHtml(message)}</p>
     </div>
   `;
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("is-active"));
-  window.setTimeout(() => {
-    try {
-      window.close();
-    } catch {
-      window.location.replace("about:blank");
-    }
-  }, 5000);
 }
 
 function handleUsernameSubmit(event) {
