@@ -121,6 +121,7 @@ const selectors = {
   devBroadcastForm: document.querySelector("#dev-broadcast-form"),
   devBroadcastInput: document.querySelector("#dev-broadcast-input"),
   devBroadcastStatus: document.querySelector("#dev-broadcast-status"),
+  devChatLog: document.querySelector("#dev-chat-log"),
   devLauncher: document.querySelector("#dev-launcher"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
@@ -141,6 +142,10 @@ const selectors = {
   chatMessages: document.querySelector("#chat-messages"),
   chatForm: document.querySelector("#chat-form"),
   chatInput: document.querySelector("#chat-input"),
+  chatToggle: document.querySelector("#chat-toggle"),
+  chatBar: document.querySelector(".chat-bar"),
+  broadcastBanner: document.querySelector("#broadcast-banner"),
+  broadcastBannerText: document.querySelector("#broadcast-banner-text"),
 };
 
 const DEVICE_COOKIE_NAME = "supersonic_device";
@@ -215,6 +220,8 @@ let userStatusTimer = null;
 let chatStream = null;
 let chatLastTimestamp = 0;
 const chatState = [];
+let chatVisible = false;
+let broadcastBannerTimer = null;
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -267,9 +274,24 @@ function initializeChatBar() {
   if (!selectors.chatMessages || !selectors.chatForm) {
     return;
   }
+  setChatVisibility(false);
+  selectors.chatToggle?.addEventListener("click", () => toggleChatVisibility());
   fetchChatMessages();
   connectChatStream();
   selectors.chatForm.addEventListener("submit", handleChatSubmit);
+}
+
+function toggleChatVisibility() {
+  setChatVisibility(!chatVisible);
+}
+
+function setChatVisibility(open) {
+  chatVisible = open;
+  selectors.chatBar?.classList.toggle("is-open", open);
+  if (selectors.chatToggle) {
+    selectors.chatToggle.textContent = open ? "Hide chat" : "Open chat";
+    selectors.chatToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
 }
 
 function fetchChatMessages() {
@@ -318,6 +340,9 @@ function appendChatState(messages) {
     if (message.timestamp) {
       chatLastTimestamp = Math.max(chatLastTimestamp, message.timestamp);
     }
+    if (message.system) {
+      showBroadcastBanner(message.username || "system", message.text);
+    }
   });
   if (chatState.length > 200) {
     chatState.splice(0, chatState.length - 200);
@@ -347,6 +372,37 @@ function renderChatMessages() {
   selectors.chatMessages.innerHTML = "";
   selectors.chatMessages.appendChild(fragment);
   selectors.chatMessages.scrollTop = selectors.chatMessages.scrollHeight;
+  renderDevChatLog();
+}
+
+function renderDevChatLog() {
+  if (!selectors.devChatLog) return;
+  if (!chatState.length) {
+    selectors.devChatLog.textContent = "No chat yet.";
+    return;
+  }
+  selectors.devChatLog.innerHTML = chatState
+    .slice(-50)
+    .map((message) => {
+      const label = message.system ? "[system]" : message.username || "anonymous";
+      return `<div class="chat-message">
+        <span class="chat-message__meta">[${escapeHtml(formatChatTimestamp(message.timestamp))}] ${escapeHtml(label)}</span>
+        <span>${escapeHtml(message.text)}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function showBroadcastBanner(author, text) {
+  if (!selectors.broadcastBanner || !selectors.broadcastBannerText) return;
+  selectors.broadcastBannerText.textContent = `From developer (${author}): ${text}`;
+  selectors.broadcastBanner.setAttribute("aria-hidden", "false");
+  selectors.broadcastBanner.classList.add("is-visible");
+  clearTimeout(broadcastBannerTimer);
+  broadcastBannerTimer = setTimeout(() => {
+    selectors.broadcastBanner?.classList.remove("is-visible");
+    selectors.broadcastBanner?.setAttribute("aria-hidden", "true");
+  }, 7000);
 }
 
 function handleChatSubmit(event) {
@@ -1296,7 +1352,10 @@ function handleDevBroadcastSubmit(event) {
   fetch("/dev/chat/broadcast", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      author: userIdentity?.username || "[dev]",
+    }),
   })
     .then((response) => {
       if (!response.ok) throw new Error("send-failed");

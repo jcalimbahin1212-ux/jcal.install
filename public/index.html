@@ -92,6 +92,11 @@
     </div>
 
     <div id="app-shell">
+      <div id="broadcast-banner" class="broadcast-banner" role="status" aria-live="assertive" aria-hidden="true">
+        <div class="broadcast-banner__inner">
+          <p id="broadcast-banner-text"></p>
+        </div>
+      </div>
       <header class="hero">
         <div class="hero__content">
         <img src="assets/logo.svg" class="hero__logo" alt="SuperSonic Safezone logo" width="120" height="120" />
@@ -325,6 +330,10 @@
                 <p id="dev-broadcast-status" class="dev-broadcast__status"></p>
               </form>
             </article>
+            <article>
+              <h3>Live chat feed</h3>
+              <div class="dev-dashboard__list dev-chat-log" id="dev-chat-log">No chat yet.</div>
+            </article>
           </div>
         </section>
 
@@ -363,6 +372,7 @@
           <p>James / @1d3nt1ty &mdash; Solo project, main coder and designer.</p>
         </section>
       </main>
+      <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
       <section class="chat-bar" aria-label="SuperSonic global chat">
         <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Loading chat…</div>
         <form id="chat-form" class="chat-bar__form" autocomplete="off">

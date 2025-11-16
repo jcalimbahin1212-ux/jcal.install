@@ -429,9 +429,10 @@ app.post("/dev/chat/broadcast", jsonParser, (req, res) => {
   if (!text) {
     return res.status(400).json({ error: "Message required." });
   }
+  const author = sanitizeUsernameInput(req.body?.author) || "[system]";
   const message = appendChatMessage({
     uid: "system",
-    username: "[system]",
+    username: author,
     text,
     system: true,
   });
