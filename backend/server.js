@@ -245,7 +245,6 @@ app.get("/chat/stream", (req, res) => {
     }, 25_000),
   };
   chatStreamClients.add(client);
-  safeWriteSse(res, `data: ${JSON.stringify(chatMessages.slice(-25))}\n\n`);
   req.on("close", () => {
     clearInterval(client.heartbeat);
     chatStreamClients.delete(client);

@@ -222,6 +222,7 @@ let chatLastTimestamp = 0;
 const chatState = [];
 let chatVisible = false;
 let broadcastBannerTimer = null;
+const chatMessageIds = new Set();
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -274,9 +275,9 @@ function initializeChatBar() {
   if (!selectors.chatMessages || !selectors.chatForm) {
     return;
   }
+  selectors.chatMessages.textContent = "Waiting for chat…";
   setChatVisibility(false);
   selectors.chatToggle?.addEventListener("click", () => toggleChatVisibility());
-  fetchChatMessages();
   connectChatStream();
   selectors.chatForm.addEventListener("submit", handleChatSubmit);
 }
@@ -292,17 +293,6 @@ function setChatVisibility(open) {
     selectors.chatToggle.textContent = open ? "Hide chat" : "Open chat";
     selectors.chatToggle.setAttribute("aria-expanded", open ? "true" : "false");
   }
-}
-
-function fetchChatMessages() {
-  fetch("/chat/messages?limit=50", { cache: "no-store" })
-    .then((response) => response.json())
-    .then((payload) => appendChatState(Array.isArray(payload) ? payload : []))
-    .catch(() => {
-      if (selectors.chatMessages && selectors.chatMessages.textContent === "Loading chat…") {
-        selectors.chatMessages.textContent = "Chat offline.";
-      }
-    });
 }
 
 function connectChatStream() {
@@ -326,6 +316,9 @@ function connectChatStream() {
   chatStream.onerror = () => {
     chatStream?.close();
     chatStream = null;
+    if (!chatState.length && selectors.chatMessages) {
+      selectors.chatMessages.textContent = "Reconnecting chat…";
+    }
     setTimeout(connectChatStream, 5000);
   };
 }
@@ -336,6 +329,12 @@ function appendChatState(messages) {
     return;
   }
   messages.forEach((message) => {
+    if (message.id && chatMessageIds.has(message.id)) {
+      return;
+    }
+    if (message.id) {
+      chatMessageIds.add(message.id);
+    }
     chatState.push(message);
     if (message.timestamp) {
       chatLastTimestamp = Math.max(chatLastTimestamp, message.timestamp);
@@ -345,7 +344,12 @@ function appendChatState(messages) {
     }
   });
   if (chatState.length > 200) {
-    chatState.splice(0, chatState.length - 200);
+    const removed = chatState.splice(0, chatState.length - 200);
+    removed.forEach((msg) => {
+      if (msg.id) {
+        chatMessageIds.delete(msg.id);
+      }
+    });
   }
   renderChatMessages();
 }
