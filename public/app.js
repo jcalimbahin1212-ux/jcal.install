@@ -117,6 +117,10 @@ const selectors = {
   devCurrentCache: document.querySelector("#dev-current-cache"),
   devUserList: document.querySelector("#dev-user-list"),
   devLogList: document.querySelector("#dev-log-list"),
+  devDeviceList: document.querySelector("#dev-device-list"),
+  devBroadcastForm: document.querySelector("#dev-broadcast-form"),
+  devBroadcastInput: document.querySelector("#dev-broadcast-input"),
+  devBroadcastStatus: document.querySelector("#dev-broadcast-status"),
   devLauncher: document.querySelector("#dev-launcher"),
   transportChips: document.querySelectorAll(".transport-chip"),
   transportStateLabel: document.querySelector("#transport-state-label"),
@@ -134,6 +138,9 @@ const selectors = {
   userScriptSave: document.querySelector("#userscript-save"),
   userScriptClear: document.querySelector("#userscript-clear"),
   userScriptStatus: document.querySelector("#userscript-status"),
+  chatMessages: document.querySelector("#chat-messages"),
+  chatForm: document.querySelector("#chat-form"),
+  chatInput: document.querySelector("#chat-input"),
 };
 
 const DEVICE_COOKIE_NAME = "supersonic_device";
@@ -203,6 +210,9 @@ let diagnosticsTimer = null;
 const diagnosticsLogEntries = [];
 let lastDiagnosticsStats = null;
 let userStatusTimer = null;
+let chatStream = null;
+let chatLastTimestamp = 0;
+const chatState = [];
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -248,6 +258,130 @@ function continueSessionBootstrap() {
   hydrateUserScriptSettings();
   startDiagnosticsPanel();
   initializeAuthGate();
+  initializeChatBar();
+}
+
+function initializeChatBar() {
+  if (!selectors.chatMessages || !selectors.chatForm) {
+    return;
+  }
+  fetchChatMessages();
+  connectChatStream();
+  selectors.chatForm.addEventListener("submit", handleChatSubmit);
+}
+
+function fetchChatMessages() {
+  fetch("/chat/messages?limit=50", { cache: "no-store" })
+    .then((response) => response.json())
+    .then((payload) => appendChatState(Array.isArray(payload) ? payload : []))
+    .catch(() => {
+      if (selectors.chatMessages && selectors.chatMessages.textContent === "Loading chat…") {
+        selectors.chatMessages.textContent = "Chat offline.";
+      }
+    });
+}
+
+function connectChatStream() {
+  if (typeof EventSource === "undefined" || !selectors.chatMessages) {
+    return;
+  }
+  if (chatStream) {
+    chatStream.close();
+  }
+  chatStream = new EventSource("/chat/stream", { withCredentials: true });
+  chatStream.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (Array.isArray(payload)) {
+        appendChatState(payload);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+  chatStream.onerror = () => {
+    chatStream?.close();
+    chatStream = null;
+    setTimeout(connectChatStream, 5000);
+  };
+}
+
+function appendChatState(messages) {
+  if (!messages || !messages.length) {
+    renderChatMessages();
+    return;
+  }
+  messages.forEach((message) => {
+    chatState.push(message);
+    if (message.timestamp) {
+      chatLastTimestamp = Math.max(chatLastTimestamp, message.timestamp);
+    }
+  });
+  if (chatState.length > 200) {
+    chatState.splice(0, chatState.length - 200);
+  }
+  renderChatMessages();
+}
+
+function renderChatMessages() {
+  if (!selectors.chatMessages) return;
+  if (!chatState.length) {
+    selectors.chatMessages.textContent = "Nobody chatting yet.";
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  chatState.slice(-120).forEach((message) => {
+    const line = document.createElement("div");
+    line.className = "chat-message";
+    const meta = document.createElement("span");
+    meta.className = "chat-message__meta";
+    const label = message.system ? "[system]" : message.username || "anonymous";
+    meta.textContent = `[${formatChatTimestamp(message.timestamp)}] ${label}`;
+    const text = document.createElement("span");
+    text.textContent = ` ${message.text}`;
+    line.append(meta, text);
+    fragment.appendChild(line);
+  });
+  selectors.chatMessages.innerHTML = "";
+  selectors.chatMessages.appendChild(fragment);
+  selectors.chatMessages.scrollTop = selectors.chatMessages.scrollHeight;
+}
+
+function handleChatSubmit(event) {
+  event.preventDefault();
+  const value = selectors.chatInput?.value.trim();
+  if (!value) {
+    return;
+  }
+  if (!userIdentity?.username) {
+    setStatus("Pick a username before chatting.", true);
+    promptUsernameCapture();
+    return;
+  }
+  const payload = {
+    text: value,
+    username: userIdentity.username,
+    uid: userIdentity.uid,
+  };
+  fetch("/chat/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(payload),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("send-failed");
+      }
+      selectors.chatInput && (selectors.chatInput.value = "");
+    })
+    .catch(() => setStatus("Unable to send chat message right now.", true));
+}
+
+function formatChatTimestamp(value) {
+  if (!value) return "--:--";
+  const date = new Date(value);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 async function enforceLocalBanGate() {
@@ -460,6 +594,8 @@ function registerEventHandlers() {
   selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
   selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
   selectors.devUserList?.addEventListener("click", handleDevUserActionClick);
+  selectors.devDeviceList?.addEventListener("click", handleDevDeviceActionClick);
+  selectors.devBroadcastForm?.addEventListener("submit", handleDevBroadcastSubmit);
   selectors.usernameForm?.addEventListener("submit", handleUsernameSubmit);
   selectors.devLauncher?.addEventListener("click", () => {
     if (document.body.classList.contains("dev-mode")) {
@@ -483,6 +619,10 @@ function registerEventHandlers() {
     if (diagnosticsTimer) {
       clearInterval(diagnosticsTimer);
       diagnosticsTimer = null;
+    }
+    if (chatStream) {
+      chatStream.close();
+      chatStream = null;
     }
   });
 }
@@ -1004,6 +1144,7 @@ function enableDevDashboard() {
   refreshDevCacheList();
   refreshDevUserList();
   refreshDevLogList();
+  refreshDevDeviceList();
   if (!devCacheRefreshTimer) {
     devCacheRefreshTimer = window.setInterval(refreshDevCacheList, DEV_CACHE_REFRESH_MS);
   }
@@ -1012,6 +1153,9 @@ function enableDevDashboard() {
   }
   if (!devLogRefreshTimer) {
     devLogRefreshTimer = window.setInterval(refreshDevLogList, DEV_LOG_REFRESH_MS);
+  }
+  if (!devDeviceRefreshTimer) {
+    devDeviceRefreshTimer = window.setInterval(refreshDevDeviceList, DEV_USER_REFRESH_MS);
   }
   updateCurrentCacheDisplay();
 }
@@ -1027,6 +1171,12 @@ function disableDevDashboard() {
   if (selectors.devLogList) {
     selectors.devLogList.textContent = "Dev mode inactive.";
   }
+  if (selectors.devDeviceList) {
+    selectors.devDeviceList.textContent = "Dev mode inactive.";
+  }
+  if (selectors.devBroadcastStatus) {
+    selectors.devBroadcastStatus.textContent = "";
+  }
   if (devCacheRefreshTimer) {
     clearInterval(devCacheRefreshTimer);
     devCacheRefreshTimer = null;
@@ -1038,6 +1188,10 @@ function disableDevDashboard() {
   if (devLogRefreshTimer) {
     clearInterval(devLogRefreshTimer);
     devLogRefreshTimer = null;
+  }
+  if (devDeviceRefreshTimer) {
+    clearInterval(devDeviceRefreshTimer);
+    devDeviceRefreshTimer = null;
   }
 }
 
@@ -1110,6 +1264,76 @@ function handleDevCacheActionClick(event) {
   if (key && action) {
     sendDevCacheAction(key, action);
   }
+}
+
+function handleDevBroadcastSubmit(event) {
+  event.preventDefault();
+  if (!selectors.devBroadcastInput) return;
+  const text = selectors.devBroadcastInput.value.trim();
+  if (!text) {
+    selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Enter a message first.");
+    return;
+  }
+  fetch("/dev/chat/broadcast", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("send-failed");
+      selectors.devBroadcastInput.value = "";
+      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast sent.");
+    })
+    .catch(() => {
+      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast failed.");
+    });
+}
+
+async function refreshDevDeviceList() {
+  if (!selectors.devDeviceList || !document.body.classList.contains("dev-mode")) return;
+  try {
+    const response = await fetch("/dev/devices", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    renderDevDeviceEntries(payload);
+  } catch (error) {
+    selectors.devDeviceList.textContent = `Failed to load devices: ${error.message}`;
+  }
+}
+
+function renderDevDeviceEntries(entries = []) {
+  if (!selectors.devDeviceList) return;
+  if (!entries.length) {
+    selectors.devDeviceList.textContent = "No devices banned.";
+    return;
+  }
+  selectors.devDeviceList.innerHTML = entries
+    .map((entry) => {
+      const users = entry.linkedUsers?.join(", ") || "none";
+      return `<div class="dev-device-entry">
+        <div class="dev-device-entry__meta">Device ID: ${escapeHtml(entry.deviceId)}</div>
+        <div class="dev-device-entry__meta">Linked UID(s): ${escapeHtml(users)}</div>
+        <div class="dev-device-entry__actions">
+          <button data-device-action="unban" data-device-id="${escapeHtml(entry.deviceId)}">Unban</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function handleDevDeviceActionClick(event) {
+  const button = event.target.closest("[data-device-action]");
+  if (!button) return;
+  const deviceId = button.dataset.deviceId;
+  const action = button.dataset.deviceAction;
+  if (!deviceId || !action) return;
+  fetch(`/dev/devices/${encodeURIComponent(deviceId)}/action`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  })
+    .then(() => refreshDevDeviceList())
+    .catch(() => setStatus("Device action failed.", true));
 }
 
 async function refreshDevUserList() {

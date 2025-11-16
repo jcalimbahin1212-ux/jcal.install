@@ -31,8 +31,10 @@ const USERS_PATH = path.resolve(DATA_DIR, "users.json");
 const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
 const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
 const BANNED_DEVICES_PATH = path.resolve(DATA_DIR, "banned-devices.json");
+const CHAT_LOG_PATH = path.resolve(DATA_DIR, "chat-log.json");
 const DEVICE_COOKIE_NAME = "supersonic_device";
 const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const CHAT_MAX_MESSAGES = Number(process.env.SUPERSONIC_CHAT_MAX ?? 500);
 const CACHE_TTL = Number(process.env.POWERTHROUGH_CACHE_TTL ?? 15_000);
 const CACHE_MAX_ENTRIES = Math.max(50, Number(process.env.POWERTHROUGH_CACHE_MAX ?? 400));
 const CACHE_RESPECT_CONTROL = process.env.POWERTHROUGH_CACHE_RESPECT !== "false";
@@ -65,6 +67,9 @@ loadBannedUsers().catch((error) => {
 });
 loadBannedDeviceIds().catch((error) => {
   console.error("[supersonic] failed to load banned devices", error);
+});
+loadChatMessages().catch((error) => {
+  console.error("[supersonic] failed to load chat log", error);
 });
 
 app.disable("x-powered-by");
@@ -129,6 +134,9 @@ const userRegistry = new Map();
 const userLogs = [];
 const bannedUsers = new Map();
 const bannedDeviceIds = new Set();
+const chatMessages = [];
+const chatStreamClients = new Set();
+let chatMessageCounter = Date.now();
 const bannedAliases = new Set();
 const MAX_LOG_ENTRIES = 1000;
 const metrics = {
@@ -194,6 +202,53 @@ app.get("/search/lite", async (req, res) => {
     console.error("[supersonic] search lite failed", error);
     return res.status(502).send("Unable to load search results right now.");
   }
+});
+
+app.get("/chat/messages", (req, res) => {
+  const since = Number(getFirstQueryValue(req.query.since)) || 0;
+  const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), 50, 1, 200);
+  const recent = since
+    ? chatMessages.filter((entry) => entry.timestamp > since)
+    : chatMessages.slice(-limit);
+  res.json(recent);
+});
+
+app.post("/chat/messages", jsonParser, (req, res) => {
+  const text = sanitizeChatMessage(req.body?.text || req.body?.message);
+  if (!text) {
+    return res.status(400).json({ error: "Message required." });
+  }
+  const username = sanitizeUsernameInput(req.body?.username) || getRegistryUsername(req.body?.uid) || "anonymous";
+  const uid = sanitizeUid(req.body?.uid || req.supersonicDeviceId);
+  if (isDeviceBanned(req.supersonicDeviceId) || isUidBanned(uid) || isUsernameBanned(username)) {
+    return res.status(451).json({ error: "Sender banned." });
+  }
+  const message = appendChatMessage({
+    uid,
+    username,
+    text,
+    deviceId: req.supersonicDeviceId,
+  });
+  res.json({ ok: true, message });
+});
+
+app.get("/chat/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  const client = {
+    res,
+    heartbeat: setInterval(() => {
+      safeWriteSse(res, ":heartbeat\n\n");
+    }, 25_000),
+  };
+  chatStreamClients.add(client);
+  safeWriteSse(res, `data: ${JSON.stringify(chatMessages.slice(-25))}\n\n`);
+  req.on("close", () => {
+    clearInterval(client.heartbeat);
+    chatStreamClients.delete(client);
+  });
 });
 
 app.get("/dev/cache", (req, res) => {
@@ -338,6 +393,48 @@ app.get("/dev/users/status/:uid", (req, res) => {
     allowed: !(blockedUid || blockedAlias || blockedDevice),
     reason: blockedDevice ? "device" : blockedUid ? "uid" : blockedAlias ? "alias" : null,
   });
+});
+
+app.get("/dev/devices", (req, res) => {
+  const users = listDevUsers();
+  const data = Array.from(bannedDeviceIds.values()).map((deviceId) => ({
+    deviceId,
+    banned: true,
+    linkedUsers: users.filter((user) => user.deviceId === deviceId).map((user) => user.uid),
+  }));
+  res.json(data);
+});
+
+app.post("/dev/devices/:deviceId/action", jsonParser, (req, res) => {
+  const deviceId = sanitizeUid(req.params.deviceId);
+  const action = (req.body?.action || "").toString();
+  if (!deviceId || !action) {
+    return res.status(400).json({ error: "Missing device id or action." });
+  }
+  if (action === "unban") {
+    unbanDeviceId(deviceId);
+    forgetDeviceOnlyBan(deviceId);
+    return res.json({ ok: true });
+  }
+  if (action === "ban") {
+    banDeviceId(deviceId);
+    return res.json({ ok: true });
+  }
+  return res.status(400).json({ error: "Unknown action." });
+});
+
+app.post("/dev/chat/broadcast", jsonParser, (req, res) => {
+  const text = sanitizeChatMessage(req.body?.text || req.body?.message);
+  if (!text) {
+    return res.status(400).json({ error: "Message required." });
+  }
+  const message = appendChatMessage({
+    uid: "system",
+    username: "[system]",
+    text,
+    system: true,
+  });
+  res.json({ ok: true, message });
 });
 
 app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
@@ -1720,6 +1817,33 @@ async function persistBannedDeviceIds() {
   }
 }
 
+async function loadChatMessages() {
+  try {
+    const raw = await fs.readFile(CHAT_LOG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((entry) => {
+        if (entry && entry.text) {
+          chatMessages.push(entry);
+        }
+      });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistChatMessages() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(CHAT_LOG_PATH, JSON.stringify(chatMessages.slice(-CHAT_MAX_MESSAGES)), "utf8");
+  } catch (error) {
+    console.error("[supersonic] failed to persist chat messages", error);
+  }
+}
+
 function buildDuckLiteHeaders() {
   const headers = {
     "user-agent":
@@ -1828,6 +1952,43 @@ function appendSetCookie(res, cookie) {
 
 function buildDeviceCookie(deviceId) {
   return `${DEVICE_COOKIE_NAME}=${deviceId}; Path=/; Max-Age=${DEVICE_COOKIE_MAX_AGE}; SameSite=Lax`;
+}
+
+function safeWriteSse(res, payload) {
+  try {
+    res.write(payload);
+  } catch {
+    // ignore broken connection
+  }
+}
+
+function sanitizeChatMessage(value) {
+  if (!value) return "";
+  return value.toString().trim().replace(/\s+/g, " ").slice(0, 320);
+}
+
+function appendChatMessage(entry) {
+  const message = {
+    id: entry.id || `chat-${Date.now().toString(36)}-${(chatMessageCounter += 1).toString(16)}`,
+    uid: entry.uid || null,
+    username: entry.username || "anonymous",
+    text: entry.text,
+    deviceId: entry.deviceId || null,
+    system: Boolean(entry.system),
+    timestamp: Date.now(),
+  };
+  chatMessages.push(message);
+  if (chatMessages.length > CHAT_MAX_MESSAGES) {
+    chatMessages.splice(0, chatMessages.length - CHAT_MAX_MESSAGES);
+  }
+  persistChatMessages();
+  broadcastChatMessage(message);
+  return message;
+}
+
+function broadcastChatMessage(message) {
+  const payload = `data: ${JSON.stringify([message])}\n\n`;
+  chatStreamClients.forEach((client) => safeWriteSse(client.res, payload));
 }
 
 function sanitizeLimit(value, defaultValue = null, min = 1, max = 500) {
@@ -1981,6 +2142,20 @@ function unbanDeviceId(deviceId) {
   }
   bannedDeviceIds.delete(normalized);
   persistBannedDeviceIds();
+}
+
+function forgetDeviceOnlyBan(deviceId) {
+  if (!deviceId) return;
+  let changed = false;
+  for (const [uid, info] of bannedUsers.entries()) {
+    if (info.deviceId === deviceId) {
+      bannedUsers.delete(uid);
+      changed = true;
+    }
+  }
+  if (changed) {
+    persistBannedUsers();
+  }
 }
 
 function recordUserLog(entry) {

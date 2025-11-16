@@ -312,6 +312,19 @@
               <h3>Recent activity</h3>
               <div class="dev-dashboard__list" id="dev-log-list">No activity logged.</div>
             </article>
+            <article>
+              <h3>Banned devices</h3>
+              <div class="dev-dashboard__list" id="dev-device-list">No devices banned.</div>
+            </article>
+            <article>
+              <h3>Broadcast</h3>
+              <form id="dev-broadcast-form" class="dev-broadcast">
+                <label class="sr-only" for="dev-broadcast-input">Broadcast message</label>
+                <textarea id="dev-broadcast-input" placeholder="Type system message…" rows="3"></textarea>
+                <button type="submit">Send broadcast</button>
+                <p id="dev-broadcast-status" class="dev-broadcast__status"></p>
+              </form>
+            </article>
           </div>
         </section>
 
@@ -350,6 +363,14 @@
           <p>James / @1d3nt1ty &mdash; Solo project, main coder and designer.</p>
         </section>
       </main>
+      <section class="chat-bar" aria-label="SuperSonic global chat">
+        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Loading chat…</div>
+        <form id="chat-form" class="chat-bar__form" autocomplete="off">
+          <label for="chat-input" class="sr-only">Chat message</label>
+          <input id="chat-input" type="text" placeholder="Say something to SuperSonic…" maxlength="280" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
     </div>
 
     <script type="module" src="app.js"></script>

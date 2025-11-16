@@ -29,6 +29,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font, "Inter", "Segoe UI", sans-serif);
   line-height: 1.6;
+  padding-bottom: 140px;
 }
 
 body.auth-locked #app-shell {
@@ -1054,4 +1055,120 @@ body.history-track .portal__status::after {
   border-bottom: none;
   margin-bottom: 0;
   padding-bottom: 0;
+}
+
+.chat-bar {
+  position: fixed;
+  inset: auto 0 0 0;
+  background: rgba(2, 3, 12, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.75rem clamp(1rem, 4vw, 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.55);
+  z-index: 3900;
+}
+
+.chat-bar__messages {
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: "JetBrains Mono", "Roboto Mono", monospace;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  padding-right: 0.5rem;
+}
+
+.chat-bar__messages .chat-message {
+  margin: 0.1rem 0;
+}
+
+.chat-message__meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-right: 0.4rem;
+}
+
+.chat-bar__form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-bar__form input {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  padding: 0.6rem 1rem;
+}
+
+.chat-bar__form button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
+  background: linear-gradient(120deg, #7b3bff, #ff5ec2);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dev-broadcast {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dev-broadcast textarea {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  padding: 0.6rem 0.9rem;
+  resize: vertical;
+}
+
+.dev-broadcast button {
+  align-self: flex-end;
+  border: none;
+  border-radius: 999px;
+  padding: 0.45rem 1.2rem;
+  background: linear-gradient(120deg, #9b45ff, #ff478a);
+  color: #fff;
+  cursor: pointer;
+}
+
+.dev-broadcast__status {
+  min-height: 1rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.dev-device-entry {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.dev-device-entry__meta {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dev-device-entry__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.dev-device-entry__actions button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  cursor: pointer;
 }
