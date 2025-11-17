@@ -871,6 +871,20 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   if (textNode) {
     textNode.textContent = message;
   }
+  authUnlocked = false;
+  devUnlocked = false;
+  document.body.classList.remove("dev-mode");
+  disableDevDashboard();
+  try {
+    localStorage.removeItem(authStorageKey);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(devStorageKey);
+  } catch {
+    /* ignore */
+  }
   selectors.authOverlay?.classList.add("is-hidden");
   selectors.bridgeOverlay?.classList.add("is-hidden");
   selectors.devOverlay?.classList.add("is-hidden");
