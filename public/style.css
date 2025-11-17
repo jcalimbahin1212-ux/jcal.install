@@ -216,6 +216,15 @@ body.auth-locked .dev-launcher {
   opacity: 1;
 }
 
+body.lockout-active #app-shell {
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+body.lockout-active .lockout-overlay {
+  pointer-events: all;
+}
+
 .lockout-overlay__scan {
   position: absolute;
   inset: 0;

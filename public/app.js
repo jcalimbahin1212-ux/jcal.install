@@ -755,6 +755,7 @@ function handleAuthSubmit(event) {
 }
 
 function releaseAuthGate() {
+  clearLockoutScreen();
   selectors.authForm?.removeEventListener("submit", handleAuthSubmit);
   const overlayNode = selectors.authOverlay;
   if (overlayNode) {
@@ -870,8 +871,20 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   if (textNode) {
     textNode.textContent = message;
   }
+  selectors.authOverlay?.classList.add("is-hidden");
+  selectors.bridgeOverlay?.classList.add("is-hidden");
+  selectors.devOverlay?.classList.add("is-hidden");
+  document.body.classList.add("lockout-active");
   overlay.classList.remove("is-active");
   requestAnimationFrame(() => overlay.classList.add("is-active"));
+}
+
+function clearLockoutScreen() {
+  document.body.classList.remove("lockout-active");
+  const overlay = document.querySelector(".lockout-overlay");
+  if (overlay) {
+    overlay.classList.remove("is-active");
+  }
 }
 
 function handleUsernameSubmit(event) {
