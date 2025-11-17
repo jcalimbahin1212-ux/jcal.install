@@ -819,12 +819,9 @@ function handleBridgeSubmit(event) {
     triggerDevHandshake();
     return;
   }
-  if (selectors.bridgeError) {
-    selectors.bridgeError.textContent = "Stage-two code incorrect.";
-    selectors.bridgeError.classList.add("is-visible");
-  }
   showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
   resetDevProcess();
+  return;
 }
 
 function triggerDevHandshake() {
@@ -850,10 +847,6 @@ function handleDevAuthSubmit(event) {
     releaseAuthGate();
     setStatus("Developer workspace ready.");
     return;
-  }
-  if (selectors.devError) {
-    selectors.devError.textContent = "Developer access denied.";
-    selectors.devError.classList.add("is-visible");
   }
   showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
   resetDevProcess();
