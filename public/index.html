@@ -92,6 +92,29 @@
     </div>
 
     <div id="app-shell">
+      <button id="barista-toggle" class="barista-toggle" type="button" aria-expanded="false">
+        Meet The Barista
+      </button>
+      <section id="barista-panel" class="barista-panel" aria-live="polite" hidden>
+        <header class="barista-panel__header">
+          <div>
+            <p class="barista-panel__eyebrow">Coffee Shop AI</p>
+            <h2>The Barista</h2>
+          </div>
+          <button id="barista-close" class="barista-panel__close" type="button" aria-label="Close Barista chat">
+            &times;
+          </button>
+        </header>
+        <div id="barista-messages" class="barista-messages" aria-live="polite">
+          Tap out your first order to start chatting.
+        </div>
+        <form id="barista-form" class="barista-form" autocomplete="off">
+          <label for="barista-input" class="sr-only">Message The Barista</label>
+          <input id="barista-input" type="text" placeholder="Ask The Barista anything…" maxlength="320" />
+          <button type="submit">Send</button>
+        </form>
+        <p id="barista-status" class="barista-status" aria-live="polite"></p>
+      </section>
       <div id="broadcast-banner" class="broadcast-banner" role="status" aria-live="assertive" aria-hidden="true">
         <div class="broadcast-banner__inner">
           <p id="broadcast-banner-text"></p>
@@ -301,7 +324,7 @@
           <header>
             <p class="dev-dashboard__eyebrow">Developer mode</p>
             <h2>Active sessions</h2>
-            <p class="dev-dashboard__welcome">Welcome to the panel, James.</p>
+            <p class="dev-dashboard__welcome">Welcome to the Barista Station, James. What would you like to do here?</p>
             <p class="dev-dashboard__url">Current URL cache: <span id="dev-current-cache">n/a</span></p>
           </header>
           <div class="dev-dashboard__grid">

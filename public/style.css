@@ -193,6 +193,170 @@ body.auth-locked .dev-launcher {
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
 }
 
+.barista-toggle {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  padding: 0.65rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 236, 220, 0.4);
+  background: rgba(20, 11, 6, 0.85);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 3600;
+  backdrop-filter: blur(12px);
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.barista-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+body.barista-visible .barista-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.barista-panel {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  width: min(360px, calc(100% - 2.5rem));
+  max-height: 80vh;
+  background: rgba(18, 11, 7, 0.96);
+  border: 1px solid rgba(248, 236, 220, 0.2);
+  border-radius: 1.5rem;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 35px 60px rgba(0, 0, 0, 0.55);
+  z-index: 3650;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.barista-panel:not(.is-open) {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.barista-panel[hidden] {
+  display: none;
+}
+
+.barista-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.barista-panel__eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.4em;
+  color: var(--text-muted);
+}
+
+.barista-panel__header h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.4rem;
+}
+
+.barista-panel__close {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.barista-messages {
+  flex: 1;
+  min-height: 220px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.barista-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.barista-message__bubble {
+  padding: 0.65rem 0.9rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.barista-message--user .barista-message__bubble {
+  background: rgba(168, 106, 58, 0.25);
+  border-color: rgba(200, 136, 74, 0.5);
+}
+
+.barista-message__meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.barista-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.barista-form input {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 236, 220, 0.35);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+  padding: 0.65rem 1rem;
+}
+
+.barista-form button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1.4rem;
+  background: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.barista-status {
+  min-height: 1.2rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .barista-toggle {
+    top: auto;
+    bottom: 1rem;
+  }
+
+  .barista-panel {
+    top: auto;
+    bottom: 1rem;
+    left: 1rem;
+    width: calc(100% - 2rem);
+  }
+}
+
 
 
 .lockout-overlay {

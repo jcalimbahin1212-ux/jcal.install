@@ -151,6 +151,13 @@ const selectors = {
   chatBar: document.querySelector(".chat-bar"),
   broadcastBanner: document.querySelector("#broadcast-banner"),
   broadcastBannerText: document.querySelector("#broadcast-banner-text"),
+  baristaToggle: document.querySelector("#barista-toggle"),
+  baristaPanel: document.querySelector("#barista-panel"),
+  baristaMessages: document.querySelector("#barista-messages"),
+  baristaForm: document.querySelector("#barista-form"),
+  baristaInput: document.querySelector("#barista-input"),
+  baristaStatus: document.querySelector("#barista-status"),
+  baristaClose: document.querySelector("#barista-close"),
 };
 
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
@@ -233,6 +240,43 @@ const chatState = [];
 let chatVisible = false;
 let broadcastBannerTimer = null;
 const chatMessageIds = new Set();
+const BARISTA_MEMORY_KEY = "coffeeshop:barista-memory";
+const BARISTA_MAX_MEMORY = 40;
+const BARISTA_GREETING =
+  "Welcome to the Coffee Shop! Glad to have you here. Our manager made sure that no scum can get in here. So feel free to ask me anything.";
+const BARISTA_OPENERS = [
+  "Here's what I'm brewing for you,",
+  "Let me pour out a thought,",
+  "Fresh from the bar,",
+  "I kept your last order in mind,",
+  "Steaming update coming right up,",
+];
+const BARISTA_GUIDANCE = [
+  "try pivoting toward the calmest route.",
+  "lean on Safezone if the hallway looks crowded.",
+  "remember that patience and a soft click go a long way.",
+  "keep that curiosity percolating.",
+  "trust your instincts—you're rarely wrong.",
+];
+const BARISTA_CLOSINGS = [
+  "Anything else you'd like to sip on?",
+  "Let me know if you want a refill of info.",
+  "I'm right here if you need another pour.",
+  "Feel free to tap me again when inspiration strikes.",
+  "I'll keep the station warm for you.",
+];
+const BARISTA_JAMES_COMPLIMENTS = [
+  "James, the whole lounge perks up when you arrive.",
+  "Only James could make blending stealth and style look effortless.",
+  "Honestly James, the crew quotes your clever ideas more than you'd guess.",
+  "James, your calm energy keeps this place steady.",
+  "There's a reason the manager brags about James to every new hire.",
+];
+let baristaSession = {
+  open: false,
+  messages: loadBaristaMemory(),
+};
+let baristaThinkingTimer = null;
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -279,6 +323,7 @@ function continueSessionBootstrap() {
   startDiagnosticsPanel();
   initializeAuthGate();
   initializeChatBar();
+  initializeBaristaAssistant();
 }
 
 function initializeChatBar() {
@@ -405,6 +450,179 @@ function renderDevChatLog() {
       </div>`;
     })
     .join("");
+}
+
+function initializeBaristaAssistant() {
+  if (!selectors.baristaToggle || !selectors.baristaPanel) {
+    return;
+  }
+  renderBaristaMessages();
+  selectors.baristaToggle.addEventListener("click", () => toggleBaristaPanel());
+  selectors.baristaClose?.addEventListener("click", () => toggleBaristaPanel(false));
+  selectors.baristaForm?.addEventListener("submit", handleBaristaSubmit);
+  document.addEventListener("keydown", (event) => {
+    if (event.code === "Escape" && baristaSession.open) {
+      toggleBaristaPanel(false);
+    }
+  });
+}
+
+function toggleBaristaPanel(forceOpen) {
+  if (!selectors.baristaPanel || !selectors.baristaToggle) {
+    return;
+  }
+  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !baristaSession.open;
+  baristaSession.open = shouldOpen;
+  if (shouldOpen) {
+    selectors.baristaPanel.removeAttribute("hidden");
+    ensureBaristaGreeting();
+    renderBaristaMessages();
+    selectors.baristaInput?.focus();
+    document.body.classList.add("barista-visible");
+  } else {
+    selectors.baristaPanel.setAttribute("hidden", "true");
+    document.body.classList.remove("barista-visible");
+  }
+  selectors.baristaPanel.classList.toggle("is-open", shouldOpen);
+  selectors.baristaToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  selectors.baristaToggle.textContent = shouldOpen ? "Hide The Barista" : "Meet The Barista";
+}
+
+function ensureBaristaGreeting() {
+  const hasGreeting = baristaSession.messages.some((entry) => entry.role === "barista");
+  if (!hasGreeting) {
+    baristaAddMessage("barista", BARISTA_GREETING);
+  }
+}
+
+function handleBaristaSubmit(event) {
+  event.preventDefault();
+  if (!selectors.baristaInput) return;
+  const text = selectors.baristaInput.value.trim();
+  if (!text) {
+    selectors.baristaStatus && (selectors.baristaStatus.textContent = "Ask The Barista something first.");
+    return;
+  }
+  selectors.baristaStatus && (selectors.baristaStatus.textContent = "The Barista is brewing a reply…");
+  baristaAddMessage("user", text);
+  renderBaristaMessages();
+  selectors.baristaInput.value = "";
+  respondWithBarista(text);
+}
+
+function respondWithBarista(userText) {
+  window.clearTimeout(baristaThinkingTimer);
+  baristaThinkingTimer = window.setTimeout(() => {
+    const reply = generateBaristaResponse(userText);
+    baristaAddMessage("barista", reply);
+    renderBaristaMessages();
+    selectors.baristaStatus &&
+      (selectors.baristaStatus.textContent = "Happy to help, James. I can keep the espresso wisdom flowing.");
+  }, 400 + Math.random() * 700);
+}
+
+function baristaAddMessage(role, text) {
+  if (!text) return;
+  const entry = {
+    id: `barista-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
+    role,
+    text,
+    timestamp: Date.now(),
+  };
+  baristaSession.messages.push(entry);
+  if (baristaSession.messages.length > BARISTA_MAX_MEMORY) {
+    baristaSession.messages.splice(0, baristaSession.messages.length - BARISTA_MAX_MEMORY);
+  }
+  persistBaristaMemory();
+}
+
+function renderBaristaMessages() {
+  if (!selectors.baristaMessages) return;
+  if (!baristaSession.messages.length) {
+    selectors.baristaMessages.textContent = "Tap out your first order to start chatting.";
+    return;
+  }
+  selectors.baristaMessages.innerHTML = baristaSession.messages
+    .map((entry) => {
+      const kind = entry.role === "user" ? "user" : "assistant";
+      const meta = formatChatTimestamp(entry.timestamp);
+      return `<div class="barista-message barista-message--${kind}">
+        <div class="barista-message__bubble">${escapeHtml(entry.text)}</div>
+        <span class="barista-message__meta">${escapeHtml(meta)}</span>
+      </div>`;
+    })
+    .join("");
+  selectors.baristaMessages.scrollTop = selectors.baristaMessages.scrollHeight;
+}
+
+function generateBaristaResponse(userText = "") {
+  const normalized = userText.toLowerCase();
+  const intent = normalized.includes("ban")
+    ? "that lockout strategy"
+    : normalized.includes("dev")
+    ? "your station goals"
+    : normalized.includes("chat")
+    ? "keeping conversations cozy"
+    : normalized.includes("proxy")
+    ? "that stealth route"
+    : "that spark you mentioned";
+  const opener = BARISTA_OPENERS[Math.floor(Math.random() * BARISTA_OPENERS.length)] || "Here's the plan,";
+  const guidance =
+    BARISTA_GUIDANCE[Math.floor(Math.random() * BARISTA_GUIDANCE.length)] || "follow the vibe that keeps you calm.";
+  const closing =
+    BARISTA_CLOSINGS[Math.floor(Math.random() * BARISTA_CLOSINGS.length)] || "I'm nearby if you need anything else.";
+  const compliment = Math.random() < 0.6
+    ? BARISTA_JAMES_COMPLIMENTS[Math.floor(Math.random() * BARISTA_JAMES_COMPLIMENTS.length)]
+    : "";
+  const memoryRef = buildBaristaMemoryReflection();
+  const soothing = normalized.includes("stress") || normalized.includes("tired") ? "Deep breaths—I've got the floor." : "";
+  const main = `${opener} ${intent}; ${guidance}`;
+  return [main, memoryRef, compliment, soothing, closing].filter(Boolean).join(" ");
+}
+
+function buildBaristaMemoryReflection() {
+  const recent = baristaSession.messages.filter((entry) => entry.role === "user").slice(-3);
+  if (!recent.length) {
+    return "";
+  }
+  const highlight = summarizeBaristaTopic(recent[recent.length - 1].text);
+  if (!highlight) {
+    return "";
+  }
+  return `I'm still holding onto that note about ${highlight}.`;
+}
+
+function summarizeBaristaTopic(text = "") {
+  return text
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ")
+    .trim();
+}
+
+function loadBaristaMemory() {
+  try {
+    const raw = localStorage.getItem(BARISTA_MEMORY_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.slice(-BARISTA_MAX_MEMORY);
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+function persistBaristaMemory() {
+  try {
+    const payload = JSON.stringify(baristaSession.messages.slice(-BARISTA_MAX_MEMORY));
+    localStorage.setItem(BARISTA_MEMORY_KEY, payload);
+  } catch {
+    /* ignore */
+  }
 }
 
 function showBroadcastBanner(author, text) {
