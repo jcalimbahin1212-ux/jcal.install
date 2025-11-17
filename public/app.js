@@ -69,7 +69,7 @@ const DEV_LOG_REFRESH_MS = 20_000;
 const LOCKOUT_TEXT_WRONG = "This blend isn't for you. Come back when you know the password.";
 const LOCKOUT_TEXT_BANNED = "Banned from the Coffee Shop.";
 const LOCKOUT_TEXT_DEV =
-  "You saw. I trusted you and you saw that this was not for you yet you still tried. You do not always need to explore beyond what you are given.";
+  "Filthy little sneaks like you dont deserve a place in the Coffee Shop. The gall that you had to try acting like a developer? You disgust me.";
 const DEFAULT_LOCKOUT_MESSAGE = LOCKOUT_TEXT_WRONG;
 let activeAttempt = null;
 let transportState = { safezone: "unknown", lastUpdate: 0, info: null };
