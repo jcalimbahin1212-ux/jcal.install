@@ -823,8 +823,8 @@ function handleBridgeSubmit(event) {
     selectors.bridgeError.textContent = "Stage-two code incorrect.";
     selectors.bridgeError.classList.add("is-visible");
   }
-  resetDevProcess();
   showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
+  resetDevProcess();
 }
 
 function triggerDevHandshake() {
@@ -855,8 +855,8 @@ function handleDevAuthSubmit(event) {
     selectors.devError.textContent = "Developer access denied.";
     selectors.devError.classList.add("is-visible");
   }
-  resetDevProcess();
   showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
+  resetDevProcess();
 }
 
 function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
@@ -1250,7 +1250,8 @@ function resetDevProcess(options = {}) {
   cancelDevEntryTimer();
   selectors.bridgeOverlay?.classList.add("is-hidden");
   selectors.devOverlay?.classList.add("is-hidden");
-  if (!authUnlocked || forceAccessOverlay) {
+  const shouldShowAccessOverlay = forceAccessOverlay || (!authUnlocked && !lockoutActive);
+  if (shouldShowAccessOverlay) {
     selectors.authOverlay?.classList.remove("is-hidden");
   }
   selectors.bridgeInput && (selectors.bridgeInput.value = "");
