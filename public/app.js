@@ -167,6 +167,8 @@ const USER_IDENTITY_VERSION = "v2";
 const userIdentityKey = `coffeeshop:user-info:${USER_IDENTITY_VERSION}`;
 const legacyIdentityKeys = ["coffeeshop:user-info"];
 const localBanStorageKey = "coffeeshop:ban-state";
+const banShadowStorageKey = "coffeeshop:ban-shadow";
+const banCookieName = "coffeeshop_ban";
 const AUTH_PASSCODE = "12273164-JC";
 const AUTH_PASSCODE_NORMALIZED = normalizeAuthInput(AUTH_PASSCODE);
 const DEV_ENTRY_CODE = "uG45373098!";
@@ -480,7 +482,7 @@ async function enforceLocalBanGate() {
       // fail closed
     }
   }
-  showAuthLockoutScreen(message, "ban");
+  showAuthLockoutScreen(message, "ban", { revokeAuth: true, permanent: true });
   return true;
 }
 
@@ -762,7 +764,7 @@ function handleAuthSubmit(event) {
     selectors.authError.textContent = "Incorrect access code.";
     selectors.authError.classList.add("is-visible");
   }
-  showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access");
+  showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access", { revokeAuth: true });
 }
 
 function releaseAuthGate() {
@@ -792,7 +794,6 @@ function releaseAuthGate() {
     document.body.classList.remove("dev-mode");
     disableDevDashboard();
   }
-  clearLocalBanState();
   if (userIdentity?.uid) {
     startUserStatusMonitor();
   } else {
@@ -825,7 +826,7 @@ function handleBridgeSubmit(event) {
     triggerDevHandshake();
     return;
   }
-  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev", { revokeAuth: false });
   resetDevProcess();
   return;
 }
@@ -854,12 +855,17 @@ function handleDevAuthSubmit(event) {
     setStatus("Developer workspace ready.");
     return;
   }
-  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev", { revokeAuth: false });
   resetDevProcess();
 }
 
-function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "access") {
+function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "access", options = {}) {
   const normalizedReason = LOCKOUT_REASON_LABELS[reason] ? reason : "access";
+  const {
+    revokeAuth = normalizedReason === "access" || normalizedReason === "ban",
+    resume,
+    permanent = normalizedReason === "ban",
+  } = options;
   let overlay = document.getElementById("lockout-overlay") || document.querySelector(".lockout-overlay");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -890,19 +896,21 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "acce
   overlay.setAttribute("aria-hidden", "false");
   overlay.classList.remove("is-hidden");
   overlay.classList.remove("is-active");
-  authUnlocked = false;
-  devUnlocked = false;
-  document.body.classList.remove("dev-mode");
-  disableDevDashboard();
-  try {
-    localStorage.removeItem(authStorageKey);
-  } catch {
-    /* ignore */
-  }
-  try {
-    sessionStorage.removeItem(devStorageKey);
-  } catch {
-    /* ignore */
+  if (revokeAuth) {
+    authUnlocked = false;
+    devUnlocked = false;
+    document.body.classList.remove("dev-mode");
+    disableDevDashboard();
+    try {
+      localStorage.removeItem(authStorageKey);
+    } catch {
+      /* ignore */
+    }
+    try {
+      sessionStorage.removeItem(devStorageKey);
+    } catch {
+      /* ignore */
+    }
   }
   selectors.authOverlay?.classList.add("is-hidden");
   selectors.bridgeOverlay?.classList.add("is-hidden");
@@ -915,9 +923,17 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "acce
   if (lockoutTimer) {
     clearTimeout(lockoutTimer);
   }
+  if (permanent) {
+    lockoutTimer = null;
+    return;
+  }
   lockoutTimer = window.setTimeout(() => {
     clearLockoutScreen();
-    startAuthFlow();
+    if (revokeAuth) {
+      startAuthFlow();
+    } else if (typeof resume === "function") {
+      resume();
+    }
   }, 5000);
 }
 
@@ -1136,19 +1152,50 @@ function registerUserIdentity(identity) {
 }
 
 function readLocalBanState() {
+  const sources = [];
   try {
     const raw = localStorage.getItem(localBanStorageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      return {
-        uid: parsed.uid || null,
-        username: parsed.username || null,
-        message: parsed.message || LOCKOUT_TEXT_BANNED,
-      };
-    }
+    if (raw) sources.push(raw);
   } catch {
     /* ignore */
+  }
+  if (!sources.length) {
+    try {
+      const raw = sessionStorage.getItem(localBanStorageKey);
+      if (raw) sources.push(raw);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!sources.length) {
+    const cookieValue = readBanCookie();
+    if (cookieValue) {
+      sources.push(cookieValue);
+    }
+  }
+  if (!sources.length) {
+    try {
+      const shadow = localStorage.getItem(banShadowStorageKey);
+      if (shadow === "1") {
+        sources.push(JSON.stringify({ message: LOCKOUT_TEXT_BANNED }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const raw of sources) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return {
+          uid: parsed.uid || null,
+          username: parsed.username || null,
+          message: parsed.message || LOCKOUT_TEXT_BANNED,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
   }
   return null;
 }
@@ -1170,18 +1217,56 @@ function persistLocalBanState(identity, message = LOCKOUT_TEXT_BANNED) {
     username: identity?.username ? sanitizeUsername(identity.username) : null,
     message,
   };
+  const serialized = JSON.stringify(payload);
   try {
-    localStorage.setItem(localBanStorageKey, JSON.stringify(payload));
+    localStorage.setItem(localBanStorageKey, serialized);
+    localStorage.setItem(banShadowStorageKey, "1");
   } catch {
     /* ignore */
   }
+  try {
+    sessionStorage.setItem(localBanStorageKey, serialized);
+  } catch {
+    /* ignore */
+  }
+  writeBanCookie(serialized);
 }
 
 function clearLocalBanState() {
   try {
     localStorage.removeItem(localBanStorageKey);
+    localStorage.removeItem(banShadowStorageKey);
   } catch {
     /* ignore */
+  }
+  try {
+    sessionStorage.removeItem(localBanStorageKey);
+  } catch {
+    /* ignore */
+  }
+  writeBanCookie("", { expire: true });
+}
+
+function writeBanCookie(value, options = {}) {
+  const { expire = false, ttlDays = 365 } = options;
+  try {
+    const maxAge = expire ? 0 : Math.max(1, Math.floor(ttlDays * 86400));
+    const encoded = value ? encodeURIComponent(value) : "";
+    document.cookie = `${banCookieName}=${encoded}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+function readBanCookie() {
+  try {
+    const cookieSource = document.cookie || "";
+    if (!cookieSource) return null;
+    const match = cookieSource.match(new RegExp(`${banCookieName}=([^;]+)`));
+    if (!match) return null;
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
   }
 }
 
@@ -1190,7 +1275,7 @@ function handleUserBan(message = LOCKOUT_TEXT_BANNED, identity = userIdentity) {
   persistLocalBanState(identity, finalMessage);
   cancelUserStatusMonitor();
   resetUserIdentity();
-  showAuthLockoutScreen(finalMessage, "ban");
+  showAuthLockoutScreen(finalMessage, "ban", { revokeAuth: true, permanent: true });
 }
 
 function startUserStatusMonitor(immediate = false) {
@@ -1251,7 +1336,7 @@ function startDevEntryTimer() {
   cancelDevEntryTimer();
   devEntryTimer = window.setTimeout(() => {
     resetDevProcess();
-    showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
+    showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev", { revokeAuth: false });
   }, DEV_ENTRY_WINDOW_MS);
 }
 
