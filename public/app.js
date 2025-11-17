@@ -66,8 +66,9 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
+const DEV_BANNED_REFRESH_MS = 60_000;
 const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
-const LOCKOUT_TEXT_BANNED = "You are a disgusting waste of air. Leave IMMEDIATELY.";
+const LOCKOUT_TEXT_BANNED = "You are disgusting. Get out of our Coffee Shop.";
 const LOCKOUT_TEXT_DEV =
   "The gall you have to try accessing MY developer console? You scum dont belong in this coffee shop.";
 const LOCKOUT_REASON_LABELS = {
@@ -122,6 +123,7 @@ const selectors = {
   devUserList: document.querySelector("#dev-user-list"),
   devLogList: document.querySelector("#dev-log-list"),
   devDeviceList: document.querySelector("#dev-device-list"),
+  devBannedList: document.querySelector("#dev-banned-list"),
   devBroadcastForm: document.querySelector("#dev-broadcast-form"),
   devBroadcastInput: document.querySelector("#dev-broadcast-input"),
   devBroadcastStatus: document.querySelector("#dev-broadcast-status"),
@@ -219,6 +221,7 @@ let devCacheRefreshTimer = null;
 let devUserRefreshTimer = null;
 let devLogRefreshTimer = null;
 let devDeviceRefreshTimer = null;
+let devBannedRefreshTimer = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
 const DIAGNOSTICS_LOG_LIMIT = 18;
@@ -666,6 +669,7 @@ function registerEventHandlers() {
   selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
   selectors.devUserList?.addEventListener("click", handleDevUserActionClick);
   selectors.devDeviceList?.addEventListener("click", handleDevDeviceActionClick);
+  selectors.devBannedList?.addEventListener("click", handleDevBannedActionClick);
   selectors.devBroadcastForm?.addEventListener("submit", handleDevBroadcastSubmit);
   selectors.usernameForm?.addEventListener("submit", handleUsernameSubmit);
   selectors.devLauncher?.addEventListener("click", () => {
@@ -1373,6 +1377,7 @@ function enableDevDashboard() {
   refreshDevUserList();
   refreshDevLogList();
   refreshDevDeviceList();
+  refreshDevBannedList();
   if (!devCacheRefreshTimer) {
     devCacheRefreshTimer = window.setInterval(refreshDevCacheList, DEV_CACHE_REFRESH_MS);
   }
@@ -1384,6 +1389,9 @@ function enableDevDashboard() {
   }
   if (!devDeviceRefreshTimer) {
     devDeviceRefreshTimer = window.setInterval(refreshDevDeviceList, DEV_USER_REFRESH_MS);
+  }
+  if (!devBannedRefreshTimer) {
+    devBannedRefreshTimer = window.setInterval(refreshDevBannedList, DEV_BANNED_REFRESH_MS);
   }
   updateCurrentCacheDisplay();
 }
@@ -1401,6 +1409,9 @@ function disableDevDashboard() {
   }
   if (selectors.devDeviceList) {
     selectors.devDeviceList.textContent = "Dev mode inactive.";
+  }
+  if (selectors.devBannedList) {
+    selectors.devBannedList.textContent = "Dev mode inactive.";
   }
   if (selectors.devBroadcastStatus) {
     selectors.devBroadcastStatus.textContent = "";
@@ -1420,6 +1431,10 @@ function disableDevDashboard() {
   if (devDeviceRefreshTimer) {
     clearInterval(devDeviceRefreshTimer);
     devDeviceRefreshTimer = null;
+  }
+  if (devBannedRefreshTimer) {
+    clearInterval(devBannedRefreshTimer);
+    devBannedRefreshTimer = null;
   }
 }
 
@@ -1565,6 +1580,63 @@ function handleDevDeviceActionClick(event) {
   })
     .then(() => refreshDevDeviceList())
     .catch(() => setStatus("Device action failed.", true));
+}
+
+async function refreshDevBannedList() {
+  if (!document.body.classList.contains("dev-mode") || !selectors.devBannedList) return;
+  try {
+    const response = await fetch("/dev/bans/users", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    renderDevBannedEntries(payload);
+  } catch (error) {
+    selectors.devBannedList.textContent = `Failed to load banned users: ${error.message}`;
+  }
+}
+
+function renderDevBannedEntries(entries = []) {
+  if (!selectors.devBannedList) return;
+  if (!Array.isArray(entries) || !entries.length) {
+    selectors.devBannedList.textContent = "No users banned.";
+    return;
+  }
+  selectors.devBannedList.innerHTML = entries
+    .map((entry) => {
+      const uid = escapeHtml(entry.uid || "unknown");
+      const username = escapeHtml(entry.username || "unknown");
+      const since = escapeHtml(formatTimestamp(entry.since));
+      const deviceLabel = entry.deviceId ? escapeHtml(entry.deviceId) : "none";
+      const aliasDetails = entry.alias ? `<div class="dev-user-entry__details">Alias: ${escapeHtml(entry.alias)}</div>` : "";
+      const registryLabel = entry.registered ? "Registered profile" : "Unregistered";
+      return `<div class="dev-user-entry dev-banned-entry" data-uid="${uid}">
+        <div class="dev-user-entry__meta">
+          <strong>${username}</strong>
+          <span class="dev-user-entry__uid">${uid}</span>
+        </div>
+        <div class="dev-user-entry__details">Banned since ${since} | device ${deviceLabel} | ${registryLabel}</div>
+        ${aliasDetails}
+        <div class="dev-user-entry__actions">
+          <button data-banned-action="unban">Lift ban</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function handleDevBannedActionClick(event) {
+  const button = event.target.closest("[data-banned-action]");
+  if (!button) return;
+  const container = button.closest(".dev-user-entry");
+  const uid = container?.dataset.uid;
+  const action = button.dataset.bannedAction;
+  if (!uid || !action) {
+    return;
+  }
+  if (action === "unban") {
+    sendDevUserAction(uid, "unban");
+  }
 }
 
 async function refreshDevUserList() {
