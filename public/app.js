@@ -1213,11 +1213,14 @@ function cancelDevEntryTimer() {
   }
 }
 
-function resetDevProcess() {
+function resetDevProcess(options = {}) {
+  const { forceAccessOverlay = false } = options;
   cancelDevEntryTimer();
   selectors.bridgeOverlay?.classList.add("is-hidden");
   selectors.devOverlay?.classList.add("is-hidden");
-  selectors.authOverlay?.classList.remove("is-hidden");
+  if (!authUnlocked || forceAccessOverlay) {
+    selectors.authOverlay?.classList.remove("is-hidden");
+  }
   selectors.bridgeInput && (selectors.bridgeInput.value = "");
   selectors.devInput && (selectors.devInput.value = "");
   selectors.bridgeError?.classList.remove("is-visible");
