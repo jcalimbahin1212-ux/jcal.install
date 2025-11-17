@@ -66,7 +66,6 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const DEV_BANNED_REFRESH_MS = 60_000;
 const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
 const LOCKOUT_TEXT_BANNED = "You are disgusting. Get out of our Coffee Shop.";
 const LOCKOUT_TEXT_DEV =
@@ -221,7 +220,6 @@ let devCacheRefreshTimer = null;
 let devUserRefreshTimer = null;
 let devLogRefreshTimer = null;
 let devDeviceRefreshTimer = null;
-let devBannedRefreshTimer = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
 const DIAGNOSTICS_LOG_LIMIT = 18;
@@ -1377,7 +1375,6 @@ function enableDevDashboard() {
   refreshDevUserList();
   refreshDevLogList();
   refreshDevDeviceList();
-  refreshDevBannedList();
   if (!devCacheRefreshTimer) {
     devCacheRefreshTimer = window.setInterval(refreshDevCacheList, DEV_CACHE_REFRESH_MS);
   }
@@ -1389,9 +1386,6 @@ function enableDevDashboard() {
   }
   if (!devDeviceRefreshTimer) {
     devDeviceRefreshTimer = window.setInterval(refreshDevDeviceList, DEV_USER_REFRESH_MS);
-  }
-  if (!devBannedRefreshTimer) {
-    devBannedRefreshTimer = window.setInterval(refreshDevBannedList, DEV_BANNED_REFRESH_MS);
   }
   updateCurrentCacheDisplay();
 }
@@ -1431,10 +1425,6 @@ function disableDevDashboard() {
   if (devDeviceRefreshTimer) {
     clearInterval(devDeviceRefreshTimer);
     devDeviceRefreshTimer = null;
-  }
-  if (devBannedRefreshTimer) {
-    clearInterval(devBannedRefreshTimer);
-    devBannedRefreshTimer = null;
   }
 }
 
@@ -1582,20 +1572,6 @@ function handleDevDeviceActionClick(event) {
     .catch(() => setStatus("Device action failed.", true));
 }
 
-async function refreshDevBannedList() {
-  if (!document.body.classList.contains("dev-mode") || !selectors.devBannedList) return;
-  try {
-    const response = await fetch("/dev/bans/users", { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const payload = await response.json();
-    renderDevBannedEntries(payload);
-  } catch (error) {
-    selectors.devBannedList.textContent = `Failed to load banned users: ${error.message}`;
-  }
-}
-
 function renderDevBannedEntries(entries = []) {
   if (!selectors.devBannedList) return;
   if (!Array.isArray(entries) || !entries.length) {
@@ -1606,10 +1582,14 @@ function renderDevBannedEntries(entries = []) {
     .map((entry) => {
       const uid = escapeHtml(entry.uid || "unknown");
       const username = escapeHtml(entry.username || "unknown");
-      const since = escapeHtml(formatTimestamp(entry.since));
+      const sinceValue = entry.since ?? entry.lastSeen ?? entry.registeredAt ?? null;
+      const since = escapeHtml(formatTimestamp(sinceValue));
       const deviceLabel = entry.deviceId ? escapeHtml(entry.deviceId) : "none";
-      const aliasDetails = entry.alias ? `<div class="dev-user-entry__details">Alias: ${escapeHtml(entry.alias)}</div>` : "";
-      const registryLabel = entry.registered ? "Registered profile" : "Unregistered";
+      const aliasToken = entry.alias || entry.aliasToken || null;
+      const aliasDetails = aliasToken
+        ? `<div class="dev-user-entry__details">Alias: ${escapeHtml(aliasToken)}</div>`
+        : "";
+      const registryLabel = entry.bannedOnly ? "Unregistered profile" : "Registered profile";
       return `<div class="dev-user-entry dev-banned-entry" data-uid="${uid}">
         <div class="dev-user-entry__meta">
           <strong>${username}</strong>
@@ -1654,12 +1634,14 @@ async function refreshDevUserList() {
 }
 
 function renderDevUserEntries(users = []) {
+  const list = Array.isArray(users) ? users : [];
+  renderDevBannedEntries(list.filter((entry) => entry && entry.banned));
   if (!selectors.devUserList) return;
-  if (!users.length) {
+  if (!list.length) {
     selectors.devUserList.textContent = "No users yet.";
     return;
   }
-  const fragment = users
+  const fragment = list
     .map((user) => {
       const uid = escapeHtml(user.uid || "unknown");
       const username = escapeHtml(user.username || "unknown");
