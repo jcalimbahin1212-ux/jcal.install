@@ -366,6 +366,11 @@ function handleEduLoginClick(event) {
     return;
   }
   authLoginRequested = true;
+  if (authUnlocked) {
+    releaseAuthGate();
+    return;
+  }
+  showAuthOverlay();
   startAuthFlow();
 }
 
