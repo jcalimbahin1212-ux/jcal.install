@@ -854,22 +854,29 @@ function handleDevAuthSubmit(event) {
 }
 
 function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
-  let overlay = document.querySelector(".lockout-overlay");
+  let overlay = document.getElementById("lockout-overlay") || document.querySelector(".lockout-overlay");
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.className = "lockout-overlay";
     overlay.innerHTML = `
       <div class="lockout-overlay__scan" aria-hidden="true"></div>
       <div class="lockout-overlay__inner">
-        <p class="lockout-overlay__text"></p>
+        <p class="lockout-overlay__text" id="lockout-message"></p>
       </div>
     `;
     document.body.appendChild(overlay);
   }
-  const textNode = overlay.querySelector(".lockout-overlay__text");
+  const textNode =
+    overlay.querySelector("#lockout-message") || overlay.querySelector(".lockout-overlay__text") || overlay;
   if (textNode) {
     textNode.textContent = message;
   }
+  overlay.classList.remove("is-hidden");
+  overlay.removeAttribute("aria-hidden");
+  overlay.style.removeProperty("display");
+  overlay.style.removeProperty("pointer-events");
+  overlay.classList.remove("is-active");
+  void overlay.offsetWidth;
   authUnlocked = false;
   devUnlocked = false;
   document.body.classList.remove("dev-mode");
@@ -889,8 +896,7 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   selectors.devOverlay?.classList.add("is-hidden");
   lockoutActive = true;
   document.body.classList.add("lockout-active");
-  overlay.classList.remove("is-active");
-  requestAnimationFrame(() => overlay.classList.add("is-active"));
+  overlay.classList.add("is-active");
   if (lockoutTimer) {
     clearTimeout(lockoutTimer);
   }
@@ -910,6 +916,8 @@ function clearLockoutScreen() {
   const overlay = document.querySelector(".lockout-overlay");
   if (overlay) {
     overlay.classList.remove("is-active");
+    overlay.classList.add("is-hidden");
+    overlay.setAttribute("aria-hidden", "true");
   }
 }
 

@@ -212,6 +212,11 @@ body.auth-locked .dev-launcher {
   letter-spacing: 0.05em;
   overflow: hidden;
   position: fixed;
+  pointer-events: none;
+}
+
+.lockout-overlay.is-hidden {
+  display: none;
 }
 
 .lockout-overlay::before {
@@ -238,6 +243,7 @@ body.auth-locked .dev-launcher {
 
 .lockout-overlay.is-active {
   opacity: 1;
+  pointer-events: all;
 }
 
 body.lockout-active #app-shell {
