@@ -338,6 +338,15 @@ app.get("/dev/users", (req, res) => {
   res.json(data);
 });
 
+app.get("/dev/bans/users", (req, res) => {
+  const limit = sanitizeLimit(getFirstQueryValue(req.query.limit), null, 1, 1000);
+  let data = listBannedUsersDetailed();
+  if (limit) {
+    data = data.slice(0, limit);
+  }
+  res.json(data);
+});
+
 app.get("/dev/panel", (req, res) => {
   const uidFilter = sanitizeUid(getFirstQueryValue(req.query.uid));
   const includeBanned = normalizeBoolean(getFirstQueryValue(req.query.includeBanned));
@@ -436,6 +445,22 @@ app.post("/dev/chat/broadcast", jsonParser, (req, res) => {
     system: true,
   });
   res.json({ ok: true, message });
+});
+
+app.post("/assistant/barista", jsonParser, (req, res) => {
+  const conversation = sanitizeBaristaMessages(req.body?.messages);
+  const summary = sanitizeBaristaSummary(req.body?.summary);
+  if (!conversation.length) {
+    return res.status(400).json({ error: "messages required" });
+  }
+  try {
+    const reply = synthesizeBaristaReply({ conversation, summary });
+    return res.json({ reply });
+  } catch (error) {
+    console.error("[coffeeshop] barista synthesis failed", error);
+    const fallback = generateFallbackBaristaReply(conversation, summary);
+    return res.status(200).json({ reply: fallback, degraded: true });
+  }
 });
 
 app.post("/dev/users/:uid/action", jsonParser, (req, res) => {
@@ -1657,6 +1682,19 @@ function listDevUsers() {
   return [...registered, ...extras];
 }
 
+function listBannedUsersDetailed() {
+  return Array.from(bannedUsers.values())
+    .map((entry) => ({
+      uid: entry.uid,
+      username: entry.username || "unknown",
+      alias: entry.alias || null,
+      deviceId: entry.deviceId || null,
+      since: entry.timestamp || null,
+      registered: userRegistry.has(entry.uid),
+    }))
+    .sort((a, b) => (b.since || 0) - (a.since || 0));
+}
+
 function summarizeMetrics() {
   const cacheRequests = metrics.cacheHits + metrics.cacheMisses;
   const avgLatencyMs =
@@ -1858,6 +1896,253 @@ async function persistChatMessages() {
   } catch (error) {
     console.error("[coffeeshop] failed to persist chat messages", error);
   }
+}
+
+function sanitizeBaristaMessages(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries
+    .slice(-20)
+    .map((entry) => {
+      const role = entry?.role === "assistant" ? "assistant" : "user";
+      const content = sanitizeChatMessage(entry?.content || entry?.text || "");
+      if (!content) {
+        return null;
+      }
+      return { role, content };
+    })
+    .filter(Boolean);
+}
+
+function sanitizeBaristaSummary(value) {
+  if (!value) {
+    return "";
+  }
+  return sanitizeChatMessage(value).slice(0, 800);
+}
+
+const BARISTA_FALLBACK_OPENERS = [
+  "Here's what I'm brewing for you, gorgeous,",
+  "Let me slip off this apron and pour a thought,",
+  "Fresh off the bar with a wink,",
+  "Holding onto that last request, twirling my tie,",
+  "I've been thinking about this while adjusting my thigh-highs,",
+];
+
+const BARISTA_FALLBACK_GUIDANCE = [
+  "pivot toward the calmest network path and let Safezone do the heavy lifting.",
+  "split the problem into a couple of smaller pours so nothing spills.",
+  "double-check the hallway rules, then glide through with confidence.",
+  "treat every snag like foam—light, airy, and something you can sculpt.",
+  "log what you learn; future you (and the crew) will thank you.",
+];
+
+const BARISTA_FALLBACK_COMPLIMENTS = [
+  "James, your steady energy keeps this lounge humming—and my heart skipping.",
+  "Only James could mix charm with operational precision like this; I practically swoon behind the counter.",
+  "Seriously, James, the crew keeps quoting your last workaround while I hug my plush latte art pillow.",
+  "Manager James handles surprises so smoothly I have to fan myself with the menu.",
+];
+
+const BARISTA_PERSONA_ASIDES = [
+  "I'm literally adjusting my lace gloves while mapping this out.",
+  "Let me tuck a stray curl behind my ear before we continue.",
+  "Give me a sec to tighten this satin bow—okay, focus time.",
+  "I'll lean over the counter, elbows on marble, and brainstorm with you.",
+  "Picture me kicking my heels while I pace through the steps.",
+];
+
+const BARISTA_SERVER_CLOSINGS = [
+  "Wave me down if you want another deep dive; I'll be humming by the espresso pumps.",
+  "Ping me again and I'll spin you a fresh plan with extra foam.",
+  "I'm parking myself near the dev console—come back when you're ready for round two.",
+  "I'll keep twirling my tie until you need me again, okay?",
+  "You know where to find me, shining bar counter and all.",
+];
+
+const BARISTA_TOPIC_LIBRARY = [
+  {
+    key: "lockout",
+    label: "lockout shields",
+    keywords: ["ban", "lockout", "blocked", "denied", "banned"],
+    actions: [
+      "audit /dev/users to see if James already tagged their UID",
+      "mirror the ban onto the device list so nothing slips through",
+      "rotate or delete the cache entry once the coast is clear",
+    ],
+  },
+  {
+    key: "dev",
+    label: "developer console",
+    keywords: ["dev", "developer", "console", "panel"],
+    actions: [
+      "confirm the passcode ladder, especially stage two",
+      "refresh the cache + log grids so you see live data",
+      "broadcast an update so the crew knows what you're tweaking",
+    ],
+  },
+  {
+    key: "cache",
+    label: "cache matrix",
+    keywords: ["cache", "session", "token", "store"],
+    actions: [
+      "identify the cache key tied to the user",
+      "decide whether to kick, ban, or rotate based on risk",
+      "document the action so future me doesn't forget",
+    ],
+  },
+  {
+    key: "chat",
+    label: "lounge chat",
+    keywords: ["chat", "message", "broadcast", "talk"],
+    actions: [
+      "pull the latest SSE chunk to make sure the feed is alive",
+      "moderate any chewy bits before they crust over",
+      "log a playful broadcast so everyone knows James is watching",
+    ],
+  },
+  {
+    key: "default",
+    label: "general hustle",
+    keywords: [],
+    actions: [
+      "clarify the actual target URL or intent",
+      "decide whether Safezone or direct mode fits the vibe",
+      "keep receipts in the diagnostics panel in case James asks",
+    ],
+  },
+];
+
+function synthesizeBaristaReply({ conversation, summary }) {
+  const latestUser = getLastUserMessage(conversation);
+  const analysis = analyzeBaristaIntent(latestUser);
+  const reflection = buildBaristaReflection(conversation);
+  const summaryLine = summary ? `Still tracking your note about ${summary}.` : "";
+  const segments = [
+    pickRandom(BARISTA_FALLBACK_OPENERS),
+    buildBaristaPlan(analysis, reflection),
+    buildBaristaGuidanceLine(analysis),
+    maybePersonaAside(),
+    summaryLine,
+    maybeComplimentJames(),
+    pickRandom(BARISTA_SERVER_CLOSINGS),
+  ];
+  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+function getLastUserMessage(conversation) {
+  for (let i = conversation.length - 1; i >= 0; i -= 1) {
+    if (conversation[i]?.role === "user") {
+      return conversation[i].content || "";
+    }
+  }
+  return "";
+}
+
+function analyzeBaristaIntent(text = "") {
+  const normalized = text.toLowerCase();
+  const topic = classifyBaristaTopic(normalized);
+  const urgent = /urgent|asap|immediately|right now|quick/.test(normalized);
+  const curious = /why|how|explain|detail/.test(normalized);
+  const frustrated = /stuck|broken|not working|wtf|ugh/.test(normalized);
+  return {
+    raw: text,
+    normalized,
+    topic,
+    urgent,
+    curious,
+    frustrated,
+  };
+}
+
+function classifyBaristaTopic(normalized) {
+  for (const entry of BARISTA_TOPIC_LIBRARY) {
+    if (!entry.keywords.length) continue;
+    if (entry.keywords.some((keyword) => normalized.includes(keyword))) {
+      return entry;
+    }
+  }
+  return BARISTA_TOPIC_LIBRARY.find((entry) => entry.key === "default") || BARISTA_TOPIC_LIBRARY[0];
+}
+
+function buildBaristaReflection(conversation) {
+  const userMessages = conversation.filter((entry) => entry.role === "user");
+  if (userMessages.length < 2) {
+    return "";
+  }
+  const previous = userMessages[userMessages.length - 2]?.content || "";
+  const highlight = summarizeSimpleTopic(previous);
+  if (!highlight) {
+    return "";
+  }
+  return `I still remember that earlier note about ${highlight}.`;
+}
+
+function buildBaristaPlan(analysis, reflection) {
+  const actions = analysis.topic.actions || [];
+  if (!actions.length) {
+    return reflection || "";
+  }
+  const steps = actions.slice(0, 3);
+  const plan = steps
+    .map((step, index) => {
+      if (index === 0) return `First, ${step}`;
+      if (index === 1) return `Then, ${step}`;
+      return `Finally, ${step}`;
+    })
+    .join(". ");
+  const vibe = analysis.frustrated ? "Deep breaths, we'll fix this." : "Let's keep it smooth.";
+  return `${vibe} ${plan}. ${reflection || ""}`.trim();
+}
+
+function buildBaristaGuidanceLine(analysis) {
+  const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE);
+  if (!guidance) {
+    return "";
+  }
+  const prefix = analysis.urgent ? "Moving fast but gentle:" : "Steady pace:";
+  return `${prefix} ${guidance}`;
+}
+
+function maybePersonaAside() {
+  if (Math.random() < 0.45) {
+    return pickRandom(BARISTA_PERSONA_ASIDES);
+  }
+  return "";
+}
+
+function maybeComplimentJames() {
+  if (Math.random() < 0.65) {
+    return pickRandom(BARISTA_FALLBACK_COMPLIMENTS);
+  }
+  return "";
+}
+
+function generateFallbackBaristaReply(messages, summary) {
+  const latest = messages[messages.length - 1]?.content || "";
+  const topic = summarizeSimpleTopic(latest);
+  const opener = pickRandom(BARISTA_FALLBACK_OPENERS) || "Here's the plan,";
+  const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE) || "keep an even pour and stay nimble.";
+  const compliment = Math.random() < 0.6 ? pickRandom(BARISTA_FALLBACK_COMPLIMENTS) : "";
+  const memory = summary ? `I'm still keeping tabs on your note about ${summary}.` : "";
+  const topicLine = topic ? `As for ${topic}, ${guidance}` : guidance;
+  return [opener, topicLine, compliment, memory, "Ping me if you want another refill."].filter(Boolean).join(" ");
+}
+
+function summarizeSimpleTopic(text = "") {
+  return text
+    .split(/\s+/)
+    .slice(0, 8)
+    .join(" ")
+    .trim();
+}
+
+function pickRandom(list) {
+  if (!Array.isArray(list) || !list.length) {
+    return "";
+  }
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 function buildDuckLiteHeaders() {

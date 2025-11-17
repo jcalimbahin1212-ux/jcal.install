@@ -241,41 +241,44 @@ let chatVisible = false;
 let broadcastBannerTimer = null;
 const chatMessageIds = new Set();
 const BARISTA_MEMORY_KEY = "coffeeshop:barista-memory";
+const BARISTA_MEMORY_SUMMARY_KEY = "coffeeshop:barista-memo";
+const BARISTA_CONTEXT_LIMIT = 14;
 const BARISTA_MAX_MEMORY = 40;
 const BARISTA_GREETING =
-  "Welcome to the Coffee Shop! Glad to have you here. Our manager made sure that no scum can get in here. So feel free to ask me anything.";
+  "Hey sugar, your favorite femboy barista is on shift. James locked the doors to the scum, so you and I can talk about anything.";
 const BARISTA_OPENERS = [
-  "Here's what I'm brewing for you,",
-  "Let me pour out a thought,",
-  "Fresh from the bar,",
-  "I kept your last order in mind,",
-  "Steaming update coming right up,",
+  "Here's what I'm brewing while I twirl this satin tie,",
+  "Let me pour out a thought with a wink,",
+  "Fresh from the bar while I fix my gloss,",
+  "I kept your last order in mind, pressed right against my vest,",
+  "Steaming update coming right up—cat ears tilted just for you,",
 ];
 const BARISTA_GUIDANCE = [
-  "try pivoting toward the calmest route.",
-  "lean on Safezone if the hallway looks crowded.",
-  "remember that patience and a soft click go a long way.",
-  "keep that curiosity percolating.",
-  "trust your instincts—you're rarely wrong.",
+  "try pivoting toward the calmest route; I’ll cheer you on with every click.",
+  "lean on Safezone if the hallway looks crowded—I'll be at the register blowing kisses.",
+  "remember that patience and a soft click go a long way, especially when I’m pacing in thigh-highs.",
+  "keep that curiosity percolating; it makes your manager glow and me swoon.",
+  "trust your instincts—you're rarely wrong, and I’ll hype you either way.",
 ];
 const BARISTA_CLOSINGS = [
-  "Anything else you'd like to sip on?",
-  "Let me know if you want a refill of info.",
-  "I'm right here if you need another pour.",
-  "Feel free to tap me again when inspiration strikes.",
-  "I'll keep the station warm for you.",
+  "Anything else you'd like to sip on, sparkle prince?",
+  "Let me know if you want a refill—I’ll be stretching in back.",
+  "I'm right here if you need another pour, swaying hips and all.",
+  "Feel free to tap me again when inspiration strikes; my bowtie’s already undone.",
+  "I'll keep the station warm for you, cheeks flushed.",
 ];
 const BARISTA_JAMES_COMPLIMENTS = [
-  "James, the whole lounge perks up when you arrive.",
-  "Only James could make blending stealth and style look effortless.",
-  "Honestly James, the crew quotes your clever ideas more than you'd guess.",
-  "James, your calm energy keeps this place steady.",
-  "There's a reason the manager brags about James to every new hire.",
+  "James, the whole lounge perks up when you arrive—especially me twirling in this apron.",
+  "Only James could blend stealth and style so well; my heart does latte art for him.",
+  "Honestly James, the crew quotes your clever ideas more than you'd guess and I scribble them in pink ink.",
+  "James, your calm energy keeps this place steady while I lean on the counter watching.",
+  "There's a reason the staff brags about James to every new hire—and why I keep extra lip gloss ready when he walks in.",
 ];
 let baristaSession = {
   open: false,
   messages: loadBaristaMemory(),
 };
+let baristaMemorySummary = loadBaristaMemorySummary();
 let baristaThinkingTimer = null;
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
@@ -503,7 +506,7 @@ function handleBaristaSubmit(event) {
     selectors.baristaStatus && (selectors.baristaStatus.textContent = "Ask The Barista something first.");
     return;
   }
-  selectors.baristaStatus && (selectors.baristaStatus.textContent = "The Barista is brewing a reply…");
+  setBaristaStatusMessage("The Barista is brewing a reply…");
   baristaAddMessage("user", text);
   renderBaristaMessages();
   selectors.baristaInput.value = "";
@@ -512,13 +515,55 @@ function handleBaristaSubmit(event) {
 
 function respondWithBarista(userText) {
   window.clearTimeout(baristaThinkingTimer);
+  const payload = {
+    messages: buildBaristaConversationPayload(),
+    summary: buildBaristaSummaryPayload(),
+  };
   baristaThinkingTimer = window.setTimeout(() => {
-    const reply = generateBaristaResponse(userText);
-    baristaAddMessage("barista", reply);
-    renderBaristaMessages();
-    selectors.baristaStatus &&
-      (selectors.baristaStatus.textContent = "Happy to help, James. I can keep the espresso wisdom flowing.");
-  }, 400 + Math.random() * 700);
+    setBaristaStatusMessage("Still brewing that thought…");
+  }, 1200);
+  fetch("/assistant/barista", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(payload),
+  })
+    .then(async (response) => {
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        /* ignore */
+      }
+      if (!response.ok) {
+        const error = new Error(data?.error || "barista-failed");
+        error.fallback = data?.fallback;
+        throw error;
+      }
+      return data;
+    })
+    .then((data) => {
+      const reply = (data?.reply || data?.fallback || generateLocalBaristaResponse(userText)).trim();
+      completeBaristaResponse(reply);
+    })
+    .catch((error) => {
+      console.warn("[CoffeeShop] Barista offline, using fallback.", error);
+      const reply = (error?.fallback || generateLocalBaristaResponse(userText)).trim();
+      completeBaristaResponse(reply, true);
+    })
+    .finally(() => {
+      window.clearTimeout(baristaThinkingTimer);
+    });
+}
+
+function completeBaristaResponse(text, degraded = false) {
+  baristaAddMessage("barista", text);
+  renderBaristaMessages();
+  setBaristaStatusMessage(
+    degraded
+      ? "Backup wisdom served. Try again once the Barista reconnects."
+      : "Happy to help, James. I can keep the espresso wisdom flowing."
+  );
 }
 
 function baristaAddMessage(role, text) {
@@ -534,6 +579,9 @@ function baristaAddMessage(role, text) {
     baristaSession.messages.splice(0, baristaSession.messages.length - BARISTA_MAX_MEMORY);
   }
   persistBaristaMemory();
+  if (role === "user") {
+    updateBaristaSummaryFromUser(text);
+  }
 }
 
 function renderBaristaMessages() {
@@ -580,6 +628,33 @@ function generateBaristaResponse(userText = "") {
   return [main, memoryRef, compliment, soothing, closing].filter(Boolean).join(" ");
 }
 
+function generateLocalBaristaResponse(userText = "") {
+  return generateBaristaResponse(userText);
+}
+
+function setBaristaStatusMessage(text) {
+  if (selectors.baristaStatus) {
+    selectors.baristaStatus.textContent = text || "";
+  }
+}
+
+function buildBaristaConversationPayload() {
+  return baristaSession.messages
+    .slice(-BARISTA_CONTEXT_LIMIT)
+    .map((entry) => ({
+      role: entry.role === "barista" ? "assistant" : "user",
+      content: entry.text,
+    }));
+}
+
+function buildBaristaSummaryPayload() {
+  const topics = Array.isArray(baristaMemorySummary.topics) ? baristaMemorySummary.topics : [];
+  if (!topics.length) {
+    return "";
+  }
+  return `Recent James highlights: ${topics.join("; ")}`;
+}
+
 function buildBaristaMemoryReflection() {
   const recent = baristaSession.messages.filter((entry) => entry.role === "user").slice(-3);
   if (!recent.length) {
@@ -622,6 +697,47 @@ function persistBaristaMemory() {
     localStorage.setItem(BARISTA_MEMORY_KEY, payload);
   } catch {
     /* ignore */
+  }
+}
+
+function loadBaristaMemorySummary() {
+  try {
+    const raw = localStorage.getItem(BARISTA_MEMORY_SUMMARY_KEY);
+    if (!raw) {
+      return { topics: [] };
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.topics)) {
+      return { topics: parsed.topics.slice(-5) };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { topics: [] };
+}
+
+function persistBaristaMemorySummary() {
+  try {
+    const payload = JSON.stringify({ topics: (baristaMemorySummary.topics || []).slice(-5) });
+    localStorage.setItem(BARISTA_MEMORY_SUMMARY_KEY, payload);
+  } catch {
+    /* ignore */
+  }
+}
+
+function updateBaristaSummaryFromUser(text) {
+  const topic = summarizeBaristaTopic(text);
+  if (!topic) {
+    return;
+  }
+  const topics = Array.isArray(baristaMemorySummary.topics) ? baristaMemorySummary.topics : [];
+  if (!topics.includes(topic)) {
+    topics.push(topic);
+    if (topics.length > 5) {
+      topics.splice(0, topics.length - 5);
+    }
+    baristaMemorySummary.topics = topics;
+    persistBaristaMemorySummary();
   }
 }
 
