@@ -386,7 +386,9 @@
     <div class="lockout-overlay is-hidden" id="lockout-overlay" aria-hidden="true">
       <div class="lockout-overlay__scan" aria-hidden="true"></div>
       <div class="lockout-overlay__inner">
-        <p class="lockout-overlay__text" id="lockout-message"></p>
+        <div class="lockout-overlay__message" role="alert" aria-live="assertive">
+          <p class="lockout-overlay__text" id="lockout-message"></p>
+        </div>
       </div>
     </div>
 

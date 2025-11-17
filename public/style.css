@@ -198,8 +198,7 @@ body.auth-locked .dev-launcher {
 .lockout-overlay {
   position: fixed;
   inset: 0;
-  background: linear-gradient(140deg, #c58849 0%, #b07138 40%, #8f5222 100%);
-  background-blend-mode: multiply;
+  background: #b9884d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,8 +207,8 @@ body.auth-locked .dev-launcher {
   transition: opacity 220ms ease;
   font-family: "Press Start 2P", "Courier New", monospace;
   color: #f8ecdc;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0.04em;
   overflow: hidden;
   position: fixed;
   pointer-events: none;
@@ -271,19 +270,59 @@ body.lockout-active .lockout-overlay {
 
 .lockout-overlay__inner {
   position: relative;
-  padding: clamp(1.5rem, 3vw, 2.5rem);
-  border: 3px solid rgba(62, 28, 5, 0.65);
-  border-radius: 1.5rem;
-  background: rgba(23, 10, 3, 0.92);
-  box-shadow: 0 0 90px rgba(23, 8, 2, 0.9), inset 0 0 25px rgba(0, 0, 0, 0.45);
+  padding: clamp(1rem, 4vw, 2.5rem);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 720px;
+}
+
+.lockout-overlay__message {
+  position: relative;
+  isolation: isolate;
+  background: #4a2612;
+  border: 4px solid #e6c7a1;
+  border-radius: 1.25rem;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  box-shadow: 0 30px 80px rgba(17, 6, 0, 0.9), inset 0 0 25px rgba(0, 0, 0, 0.35);
   text-align: center;
-  max-width: 640px;
-  width: min(90vw, 640px);
+  width: 100%;
+}
+
+.lockout-overlay__message::before {
+  content: attr(data-lockout-label);
+  display: block;
+  font-size: clamp(0.75rem, 1.8vw, 0.95rem);
+  margin-bottom: 1rem;
+  letter-spacing: 0.2em;
+  color: #fbe2c0;
+  opacity: 0.85;
+}
+
+.lockout-overlay[data-lockout-type="dev"] .lockout-overlay__message {
+  background: #3a1709;
+  border-color: #f5d6a6;
+  box-shadow: 0 30px 80px rgba(10, 3, 0, 0.95), inset 0 0 30px rgba(0, 0, 0, 0.45);
+}
+
+.lockout-overlay[data-lockout-type="ban"] .lockout-overlay__message {
+  background: #220a02;
+  border-color: #ffb585;
+  box-shadow: 0 40px 90px rgba(5, 1, 0, 0.95), inset 0 0 35px rgba(0, 0, 0, 0.5);
+}
+
+.lockout-overlay[data-lockout-type="dev"] .lockout-overlay__message::before {
+  color: #ffe9b8;
+}
+
+.lockout-overlay[data-lockout-type="ban"] .lockout-overlay__message::before {
+  color: #ffd8b0;
 }
 
 .lockout-overlay__text {
-  font-size: clamp(0.85rem, 2.2vw, 1.2rem);
-  line-height: 1.8;
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  line-height: 1.7;
   text-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
 }
 

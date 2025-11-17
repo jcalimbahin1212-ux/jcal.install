@@ -66,12 +66,16 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_WRONG = "The coffee shop can not be accessed by scum like you.";
-const LOCKOUT_TEXT_BANNED =
-  "We have decided that, here in our beautiful coffee shop, you do not deserve a place here. Come again when you are not a disgusting human being.";
+const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
+const LOCKOUT_TEXT_BANNED = "You are a disgusting waste of air. Leave IMMEDIATELY.";
 const LOCKOUT_TEXT_DEV =
-  "The gall that you have to try acting like a developer. You are truly a disgusting waste of air. Leave the coffee shop IMMEDIATELY.";
-const DEFAULT_LOCKOUT_MESSAGE = LOCKOUT_TEXT_WRONG;
+  "The gall you have to try accessing MY developer console? You scum dont belong in this coffee shop.";
+const LOCKOUT_REASON_LABELS = {
+  access: "ACCESS DENIED",
+  dev: "DEV LOCKOUT",
+  ban: "PERMANENT BAN",
+};
+const DEFAULT_LOCKOUT_MESSAGE = LOCKOUT_TEXT_ACCESS;
 let activeAttempt = null;
 let transportState = { safezone: "unknown", lastUpdate: 0, info: null };
 
@@ -475,7 +479,7 @@ async function enforceLocalBanGate() {
       // fail closed
     }
   }
-  showAuthLockoutScreen(message);
+  showAuthLockoutScreen(message, "ban");
   return true;
 }
 
@@ -757,7 +761,7 @@ function handleAuthSubmit(event) {
     selectors.authError.textContent = "Incorrect access code.";
     selectors.authError.classList.add("is-visible");
   }
-  showAuthLockoutScreen();
+  showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access");
 }
 
 function releaseAuthGate() {
@@ -820,7 +824,7 @@ function handleBridgeSubmit(event) {
     triggerDevHandshake();
     return;
   }
-  showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
   resetDevProcess();
   return;
 }
@@ -849,11 +853,12 @@ function handleDevAuthSubmit(event) {
     setStatus("Developer workspace ready.");
     return;
   }
-  showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
+  showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
   resetDevProcess();
 }
 
-function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
+function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "access") {
+  const normalizedReason = LOCKOUT_REASON_LABELS[reason] ? reason : "access";
   let overlay = document.getElementById("lockout-overlay") || document.querySelector(".lockout-overlay");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -861,10 +866,20 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
     overlay.innerHTML = `
       <div class="lockout-overlay__scan" aria-hidden="true"></div>
       <div class="lockout-overlay__inner">
-        <p class="lockout-overlay__text" id="lockout-message"></p>
+        <div class="lockout-overlay__message" role="alert" aria-live="assertive">
+          <p class="lockout-overlay__text" id="lockout-message"></p>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
+  }
+  overlay.dataset.lockoutType = normalizedReason;
+  overlay.setAttribute("data-lockout-type", normalizedReason);
+  const messageWrapper = overlay.querySelector(".lockout-overlay__message");
+  if (messageWrapper) {
+    messageWrapper.dataset.lockoutType = normalizedReason;
+    const label = LOCKOUT_REASON_LABELS[normalizedReason] || LOCKOUT_REASON_LABELS.access;
+    messageWrapper.setAttribute("data-lockout-label", label);
   }
   const textNode =
     overlay.querySelector("#lockout-message") || overlay.querySelector(".lockout-overlay__text") || overlay;
@@ -1175,7 +1190,7 @@ function handleUserBan(message = LOCKOUT_TEXT_BANNED, identity = userIdentity) {
   persistLocalBanState(identity, finalMessage);
   cancelUserStatusMonitor();
   resetUserIdentity();
-  showAuthLockoutScreen(finalMessage);
+  showAuthLockoutScreen(finalMessage, "ban");
 }
 
 function startUserStatusMonitor(immediate = false) {
@@ -1236,7 +1251,7 @@ function startDevEntryTimer() {
   cancelDevEntryTimer();
   devEntryTimer = window.setTimeout(() => {
     resetDevProcess();
-    showAuthLockoutScreen(LOCKOUT_TEXT_DEV);
+    showAuthLockoutScreen(LOCKOUT_TEXT_DEV, "dev");
   }, DEV_ENTRY_WINDOW_MS);
 }
 
