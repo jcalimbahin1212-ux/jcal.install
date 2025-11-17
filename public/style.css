@@ -78,7 +78,8 @@ img {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at top, rgba(9, 27, 65, 0.82), rgba(2, 4, 10, 0.95));
+  background: radial-gradient(circle at 30% 10%, rgba(44, 24, 13, 0.85), transparent 45%),
+    linear-gradient(160deg, rgba(14, 7, 3, 0.96), rgba(33, 17, 9, 0.96));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -97,9 +98,9 @@ img {
   width: min(420px, 100%);
   padding: 2.5rem;
   border-radius: 1.5rem;
-  background: rgba(3, 11, 26, 0.9);
-  border: 1px solid rgba(124, 201, 255, 0.25);
-  box-shadow: 0 35px 90px rgba(1, 5, 18, 0.85);
+  background: rgba(27, 15, 8, 0.95);
+  border: 1px solid rgba(200, 136, 74, 0.4);
+  box-shadow: 0 35px 90px rgba(8, 3, 1, 0.85);
   text-align: center;
 }
 
@@ -108,12 +109,12 @@ img {
   letter-spacing: 0.35em;
   font-size: 0.75rem;
   margin: 0;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(248, 236, 220, 0.7);
 }
 
 .auth-card__lead {
   margin: 0.5rem 0 1.5rem;
-  color: rgba(239, 247, 255, 0.8);
+  color: rgba(248, 236, 220, 0.75);
 }
 
 #auth-form {
@@ -124,8 +125,8 @@ img {
 
 #auth-code {
   border-radius: 0.85rem;
-  border: 1px solid rgba(124, 201, 255, 0.35);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 136, 74, 0.45);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
   padding: 0.85rem 1.1rem;
   font-size: 1rem;
@@ -161,7 +162,7 @@ img {
 }
 
 .dev-launcher {
-  position: absolute;
+  position: fixed;
   top: 1.5rem;
   right: 1.5rem;
   border: none;
@@ -169,16 +170,17 @@ img {
   border-radius: 50%;
   width: 48px;
   height: 48px;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(12px);
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
+  z-index: 3600;
 }
 
-body:not(.auth-locked) .dev-launcher {
-  display: flex;
+body.auth-locked .dev-launcher {
+  opacity: 0.7;
 }
 
 .dev-launcher img {

@@ -743,14 +743,8 @@ function handleAuthSubmit(event) {
     return;
   }
   if (provided === AUTH_PASSCODE_NORMALIZED) {
-    if (!userIdentity) {
-      selectors.authOverlay?.classList.add("is-hidden");
-      promptUsernameCapture();
-      return;
-    }
-    authUnlocked = true;
-    localStorage.setItem(authStorageKey, "yes");
-    releaseAuthGate();
+    selectors.authOverlay?.classList.add("is-hidden");
+    promptUsernameCapture();
     return;
   }
   if (selectors.authError) {
@@ -860,18 +854,23 @@ function handleDevAuthSubmit(event) {
 }
 
 function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
-  if (document.querySelector(".lockout-overlay")) {
-    return;
+  let overlay = document.querySelector(".lockout-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "lockout-overlay";
+    overlay.innerHTML = `
+      <div class="lockout-overlay__scan" aria-hidden="true"></div>
+      <div class="lockout-overlay__inner">
+        <p class="lockout-overlay__text"></p>
+      </div>
+    `;
+    document.body.appendChild(overlay);
   }
-  const overlay = document.createElement("div");
-  overlay.className = "lockout-overlay";
-  overlay.innerHTML = `
-    <div class="lockout-overlay__scan" aria-hidden="true"></div>
-    <div class="lockout-overlay__inner">
-      <p class="lockout-overlay__text">${escapeHtml(message)}</p>
-    </div>
-  `;
-  document.body.appendChild(overlay);
+  const textNode = overlay.querySelector(".lockout-overlay__text");
+  if (textNode) {
+    textNode.textContent = message;
+  }
+  overlay.classList.remove("is-active");
   requestAnimationFrame(() => overlay.classList.add("is-active"));
 }
 
