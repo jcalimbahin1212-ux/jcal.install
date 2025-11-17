@@ -198,7 +198,8 @@ body.auth-locked .dev-launcher {
 .lockout-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at top, #0a0016 0%, #05010c 60%, #010105 100%);
+  background: linear-gradient(140deg, #c58849 0%, #b07138 40%, #8f5222 100%);
+  background-blend-mode: multiply;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -210,6 +211,29 @@ body.auth-locked .dev-launcher {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   overflow: hidden;
+  position: fixed;
+}
+
+.lockout-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.07) 2px,
+      transparent 2px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.08),
+      rgba(0, 0, 0, 0.08) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  opacity: 0.35;
+  animation: lockoutStatic 0.45s steps(2) infinite;
 }
 
 .lockout-overlay.is-active {
@@ -242,10 +266,10 @@ body.lockout-active .lockout-overlay {
 .lockout-overlay__inner {
   position: relative;
   padding: clamp(1.5rem, 3vw, 2.5rem);
-  border: 3px solid rgba(242, 201, 150, 0.45);
+  border: 3px solid rgba(62, 28, 5, 0.65);
   border-radius: 1.5rem;
-  background: rgba(33, 18, 11, 0.92);
-  box-shadow: 0 0 60px rgba(45, 21, 9, 0.65);
+  background: rgba(23, 10, 3, 0.92);
+  box-shadow: 0 0 90px rgba(23, 8, 2, 0.9), inset 0 0 25px rgba(0, 0, 0, 0.45);
   text-align: center;
   max-width: 640px;
   width: min(90vw, 640px);
@@ -255,6 +279,15 @@ body.lockout-active .lockout-overlay {
   font-size: clamp(0.85rem, 2.2vw, 1.2rem);
   line-height: 1.8;
   text-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes lockoutStatic {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, -4px, 0);
+  }
 }
 
 .broadcast-banner {
