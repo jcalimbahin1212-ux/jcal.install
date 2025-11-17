@@ -1,4 +1,4 @@
-const SHELL_VERSION = "v4";
+const SHELL_VERSION = "v5";
 const SHELL_CACHE = `coffeeshop-shell-${SHELL_VERSION}`;
 const DATA_CACHE = `coffeeshop-data-${SHELL_VERSION}`;
 const SHELL_ASSETS = [
