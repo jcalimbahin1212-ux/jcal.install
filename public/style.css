@@ -78,8 +78,8 @@ img {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 30% 10%, rgba(44, 24, 13, 0.85), transparent 45%),
-    linear-gradient(160deg, rgba(14, 7, 3, 0.96), rgba(33, 17, 9, 0.96));
+  background: radial-gradient(circle at 30% 15%, rgba(200, 136, 74, 0.3), transparent 50%),
+    linear-gradient(165deg, rgba(27, 15, 8, 0.95), rgba(15, 7, 3, 0.98));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +98,7 @@ img {
   width: min(420px, 100%);
   padding: 2.5rem;
   border-radius: 1.5rem;
-  background: rgba(27, 15, 8, 0.95);
+  background: linear-gradient(145deg, rgba(36, 19, 10, 0.96), rgba(22, 12, 6, 0.98));
   border: 1px solid rgba(200, 136, 74, 0.4);
   box-shadow: 0 35px 90px rgba(8, 3, 1, 0.85);
   text-align: center;
