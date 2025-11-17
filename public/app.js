@@ -216,6 +216,7 @@ let lastNavigation = null;
 let devCacheRefreshTimer = null;
 let devUserRefreshTimer = null;
 let devLogRefreshTimer = null;
+let devDeviceRefreshTimer = null;
 let transportPreference = normalizeTransportPref(localStorage.getItem(transportPrefKey) || "auto");
 const DIAGNOSTICS_REFRESH_MS = 15_000;
 const DIAGNOSTICS_LOG_LIMIT = 18;
@@ -886,12 +887,9 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "acce
   if (textNode) {
     textNode.textContent = message;
   }
+  overlay.setAttribute("aria-hidden", "false");
   overlay.classList.remove("is-hidden");
-  overlay.removeAttribute("aria-hidden");
-  overlay.style.removeProperty("display");
-  overlay.style.removeProperty("pointer-events");
   overlay.classList.remove("is-active");
-  void overlay.offsetWidth;
   authUnlocked = false;
   devUnlocked = false;
   document.body.classList.remove("dev-mode");
@@ -911,7 +909,9 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "acce
   selectors.devOverlay?.classList.add("is-hidden");
   lockoutActive = true;
   document.body.classList.add("lockout-active");
-  overlay.classList.add("is-active");
+  window.requestAnimationFrame(() => {
+    overlay.classList.add("is-active");
+  });
   if (lockoutTimer) {
     clearTimeout(lockoutTimer);
   }
