@@ -201,6 +201,8 @@ let autoBlankArmHandler = null;
 let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
 let devUnlocked = sessionStorage.getItem(devStorageKey) === "yes";
 let devEntryTimer = null;
+let lockoutActive = false;
+let lockoutTimer = null;
 let primedNavigationTokens = restorePrimedNavigationTokens();
 let userIdentity = loadUserIdentity();
 enforceDeviceUid();
@@ -704,6 +706,9 @@ function initializeAuthGate() {
 }
 
 function startAuthFlow() {
+  if (lockoutActive) {
+    return;
+  }
   if (devUnlocked) {
     authUnlocked = true;
     selectors.authOverlay?.classList.add("is-hidden");
@@ -888,12 +893,25 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE) {
   selectors.authOverlay?.classList.add("is-hidden");
   selectors.bridgeOverlay?.classList.add("is-hidden");
   selectors.devOverlay?.classList.add("is-hidden");
+  lockoutActive = true;
   document.body.classList.add("lockout-active");
   overlay.classList.remove("is-active");
   requestAnimationFrame(() => overlay.classList.add("is-active"));
+  if (lockoutTimer) {
+    clearTimeout(lockoutTimer);
+  }
+  lockoutTimer = window.setTimeout(() => {
+    clearLockoutScreen();
+    startAuthFlow();
+  }, 5000);
 }
 
 function clearLockoutScreen() {
+  if (lockoutTimer) {
+    clearTimeout(lockoutTimer);
+    lockoutTimer = null;
+  }
+  lockoutActive = false;
   document.body.classList.remove("lockout-active");
   const overlay = document.querySelector(".lockout-overlay");
   if (overlay) {
