@@ -6,7 +6,7 @@
 const services = {
   coffeeshop: {
     name: "Coffee Shop Balanced",
-    description: "Default renderer optimized for general coursework.",
+    description: "House blend rewrite mode for everyday browsing.",
     mode: "standard",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -20,7 +20,7 @@ const services = {
   },
   coffeeshop_headless: {
     name: "Coffee Shop Espresso",
-    description: "Headless renderer for stubborn interactive resources.",
+    description: "Routes through the headless renderer for complex sites.",
     mode: "headless",
     render: "headless",
     compose(targetUrl, meta = {}) {
@@ -36,7 +36,7 @@ const services = {
   },
   coffeeshop_lite: {
     name: "Coffee Shop Iced",
-    description: "Lightweight renderer prioritized for speed.",
+    description: "Lightweight mode optimized for speed.",
     mode: "lite",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -158,10 +158,6 @@ const selectors = {
   baristaInput: document.querySelector("#barista-input"),
   baristaStatus: document.querySelector("#barista-status"),
   baristaClose: document.querySelector("#barista-close"),
-  appShell: document.querySelector("#app-shell"),
-  eduShell: document.querySelector("#edu-shell"),
-  eduLoginButtons: document.querySelectorAll("[data-login-trigger]"),
-  eduLoginHint: document.querySelector("#edu-login-hint"),
 };
 
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
@@ -219,8 +215,6 @@ let autoBlankArmed = false;
 let autoBlankArmHandler = null;
 let authUnlocked = localStorage.getItem(authStorageKey) === "yes";
 let devUnlocked = sessionStorage.getItem(devStorageKey) === "yes";
-let authLoginRequested = false;
-let authFormBound = false;
 let devEntryTimer = null;
 let lockoutActive = false;
 let lockoutTimer = null;
@@ -320,7 +314,6 @@ function continueSessionBootstrap() {
   }
   hydrateHistoryPreference();
   registerEventHandlers();
-  initializeEduFront();
   watchMissionBox();
   updateActiveService(activeService);
   registerServiceWorker();
@@ -347,77 +340,11 @@ function initializeChatBar() {
   selectors.chatForm.addEventListener("submit", handleChatSubmit);
 }
 
-function initializeEduFront() {
-  if (!selectors.eduShell) {
-    return;
-  }
-  selectors.eduShell.setAttribute("aria-hidden", "false");
-  selectors.eduLoginButtons?.forEach((button) => {
-    button.addEventListener("click", handleEduLoginClick);
-  });
-  updateEduLoginHint();
-}
-
-function handleEduLoginClick(event) {
-  event?.preventDefault?.();
-  if (document.body.classList.contains("workspace-ready")) {
-    return;
-  }
-  authLoginRequested = true;
-  if (authUnlocked) {
-    releaseAuthGate();
-    return;
-  }
-  showAuthOverlay();
-  startAuthFlow();
-}
-
-function updateEduLoginHint() {
-  if (!selectors.eduLoginHint) {
-    return;
-  }
-  selectors.eduLoginHint.textContent = authUnlocked
-    ? "Welcome back. Tap Login to reopen your CoffeeShop workspace."
-    : "Students tap Login to continue their session.";
-}
-
-function enterWorkspaceShell() {
-  document.body.classList.add("workspace-ready");
-  document.body.classList.remove("edu-front");
-  selectors.eduShell?.setAttribute("aria-hidden", "true");
-  selectors.appShell?.removeAttribute("hidden");
-  selectors.appShell?.setAttribute("aria-hidden", "false");
-}
-
-function showEduFrontShell() {
-  document.body.classList.add("edu-front");
-  document.body.classList.remove("workspace-ready");
-  selectors.eduShell?.setAttribute("aria-hidden", "false");
-  if (selectors.appShell) {
-    selectors.appShell.setAttribute("aria-hidden", "true");
-    if (!selectors.appShell.hasAttribute("hidden")) {
-      selectors.appShell.setAttribute("hidden", "true");
-    }
-  }
-}
-
 function toggleChatVisibility() {
-  if (!document.body.classList.contains("workspace-ready")) {
-    return;
-  }
   setChatVisibility(!chatVisible);
 }
 
 function setChatVisibility(open) {
-  if (!document.body.classList.contains("workspace-ready")) {
-    chatVisible = false;
-    selectors.chatBar?.classList.remove("is-open");
-    if (selectors.chatToggle) {
-      selectors.chatToggle.textContent = "Open chat";
-      selectors.chatToggle.setAttribute("aria-expanded", "false");
-    }
-    return;
-  }
   chatVisible = open;
   selectors.chatBar?.classList.toggle("is-open", open);
   if (selectors.chatToggle) {
@@ -1122,6 +1049,41 @@ function initializeAuthGate() {
   startAuthFlow();
 }
 
+function startAuthFlow() {
+  if (lockoutActive) {
+    return;
+  }
+  if (devUnlocked) {
+    authUnlocked = true;
+    selectors.authOverlay?.classList.add("is-hidden");
+    selectors.bridgeOverlay?.classList.add("is-hidden");
+    selectors.devOverlay?.classList.add("is-hidden");
+    releaseAuthGate();
+    return;
+  }
+  if (authUnlocked && !userIdentity) {
+    selectors.authOverlay?.classList.add("is-hidden");
+    promptUsernameCapture();
+    return;
+  }
+  if (authUnlocked && userIdentity && !userIdentity.username) {
+    selectors.authOverlay?.classList.add("is-hidden");
+    promptUsernameCapture();
+    return;
+  }
+  if (authUnlocked) {
+    releaseAuthGate();
+    primeAuthenticationCache();
+    return;
+  }
+  document.body.classList.add("auth-locked");
+  selectors.authOverlay?.classList.remove("is-hidden");
+  selectors.authError && (selectors.authError.textContent = "");
+  selectors.authError?.classList.remove("is-visible");
+  selectors.authForm?.addEventListener("submit", handleAuthSubmit);
+  window.setTimeout(() => selectors.authInput?.focus(), 100);
+}
+
 function handleAuthSubmit(event) {
   event.preventDefault();
   const provided = normalizeAuthInput(selectors.authInput?.value || "");
@@ -1141,38 +1103,43 @@ function handleAuthSubmit(event) {
   showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access", { revokeAuth: true });
 }
 
-function startAuthFlow() {
-  if (lockoutActive) {
-    return;
+function releaseAuthGate() {
+  clearLockoutScreen();
+  selectors.authForm?.removeEventListener("submit", handleAuthSubmit);
+  const overlayNode = selectors.authOverlay;
+  if (overlayNode) {
+    overlayNode.classList.add("is-hidden");
   }
+  document.body.classList.remove("auth-locked");
+  if (selectors.authInput) {
+    selectors.authInput.value = "";
+  }
+  if (selectors.authError) {
+    selectors.authError.textContent = "";
+    selectors.authError.classList.remove("is-visible");
+  }
+  selectors.bridgeOverlay?.classList.add("is-hidden");
+  selectors.bridgeError?.classList.remove("is-visible");
+  selectors.devOverlay?.classList.add("is-hidden");
+  selectors.devError?.classList.remove("is-visible");
   if (devUnlocked) {
-    authUnlocked = true;
-    releaseAuthGate();
-    return;
-  }
-  if (authUnlocked && !userIdentity) {
-    hideAuthOverlay();
-    promptUsernameCapture();
-    return;
-  }
-  if (authUnlocked && userIdentity && !userIdentity.username) {
-    hideAuthOverlay();
-    promptUsernameCapture();
-    return;
-  }
-  if (authUnlocked) {
-    updateEduLoginHint();
-    if (authLoginRequested) {
-      releaseAuthGate();
-    }
-    return;
-  }
-  updateEduLoginHint();
-  if (authLoginRequested) {
-    showAuthOverlay();
+    sessionStorage.setItem(devStorageKey, "yes");
+    document.body.classList.add("dev-mode");
+    enableDevDashboard();
   } else {
-    hideAuthOverlay();
+    document.body.classList.remove("dev-mode");
+    disableDevDashboard();
   }
+  if (userIdentity?.uid) {
+    startUserStatusMonitor();
+  } else {
+    cancelUserStatusMonitor();
+  }
+  if (autoBlankEnabled && !cloakLaunched) {
+    attemptAutoBlank(true);
+  }
+  primeAuthenticationCache(true);
+  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
 }
 
 function triggerBridgeHandshake() {
@@ -1280,7 +1247,6 @@ function showAuthLockoutScreen(message = DEFAULT_LOCKOUT_MESSAGE, reason = "acce
     } catch {
       /* ignore */
     }
-    showEduFrontShell();
   }
   selectors.authOverlay?.classList.add("is-hidden");
   selectors.bridgeOverlay?.classList.add("is-hidden");
@@ -1470,54 +1436,6 @@ function saveUserIdentity(identity) {
   startUserStatusMonitor(true);
 }
 
-function readLocalBanState() {
-  const sources = [];
-  try {
-    const raw = localStorage.getItem(localBanStorageKey);
-    if (raw) sources.push(raw);
-  } catch {
-    /* ignore */
-  }
-  if (!sources.length) {
-    try {
-      const raw = sessionStorage.getItem(localBanStorageKey);
-      if (raw) sources.push(raw);
-    } catch {
-      /* ignore */
-    }
-  }
-  if (!sources.length) {
-    const cookieValue = readBanCookie();
-    if (cookieValue) {
-      sources.push(cookieValue);
-    }
-  }
-  if (!sources.length) {
-    try {
-      const shadow = localStorage.getItem(banShadowStorageKey);
-      if (shadow === "1") {
-        sources.push(JSON.stringify({ message: LOCKOUT_TEXT_BANNED }));
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  for (const raw of sources) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        return {
-          uid: parsed.uid || null,
-          username: parsed.username || null,
-          message: parsed.message || LOCKOUT_TEXT_BANNED,
-        };
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return null;
-}
 function resetUserIdentity() {
   userIdentity = null;
   document.body.dataset.username = "";
@@ -1569,64 +1487,53 @@ function registerUserIdentity(identity) {
     .catch(() => {});
 }
 
-function releaseAuthGate() {
-  clearLockoutScreen();
-  if (authFormBound && selectors.authForm) {
-    selectors.authForm.removeEventListener("submit", handleAuthSubmit);
-    authFormBound = false;
+function readLocalBanState() {
+  const sources = [];
+  try {
+    const raw = localStorage.getItem(localBanStorageKey);
+    if (raw) sources.push(raw);
+  } catch {
+    /* ignore */
   }
-  selectors.authOverlay?.classList.add("is-hidden");
-  document.body.classList.remove("auth-locked");
-  authLoginRequested = false;
-  enterWorkspaceShell();
-  if (selectors.authInput) {
-    selectors.authInput.value = "";
+  if (!sources.length) {
+    try {
+      const raw = sessionStorage.getItem(localBanStorageKey);
+      if (raw) sources.push(raw);
+    } catch {
+      /* ignore */
+    }
   }
-  if (selectors.authError) {
-    selectors.authError.textContent = "";
-    selectors.authError.classList.remove("is-visible");
+  if (!sources.length) {
+    const cookieValue = readBanCookie();
+    if (cookieValue) {
+      sources.push(cookieValue);
+    }
   }
-  selectors.bridgeOverlay?.classList.add("is-hidden");
-  selectors.bridgeError?.classList.remove("is-visible");
-  selectors.devOverlay?.classList.add("is-hidden");
-  selectors.devError?.classList.remove("is-visible");
-  if (devUnlocked) {
-    sessionStorage.setItem(devStorageKey, "yes");
-    document.body.classList.add("dev-mode");
-    enableDevDashboard();
-  } else {
-    document.body.classList.remove("dev-mode");
-    disableDevDashboard();
+  if (!sources.length) {
+    try {
+      const shadow = localStorage.getItem(banShadowStorageKey);
+      if (shadow === "1") {
+        sources.push(JSON.stringify({ message: LOCKOUT_TEXT_BANNED }));
+      }
+    } catch {
+      /* ignore */
+    }
   }
-  if (userIdentity?.uid) {
-    startUserStatusMonitor();
-  } else {
-    cancelUserStatusMonitor();
+  for (const raw of sources) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return {
+          uid: parsed.uid || null,
+          username: parsed.username || null,
+          message: parsed.message || LOCKOUT_TEXT_BANNED,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
   }
-  if (autoBlankEnabled && !cloakLaunched) {
-    attemptAutoBlank(true);
-  }
-  primeAuthenticationCache(true);
-  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
-}
-
-function showAuthOverlay() {
-  document.body.classList.add("auth-locked");
-  selectors.authOverlay?.classList.remove("is-hidden");
-  if (selectors.authError) {
-    selectors.authError.textContent = "";
-    selectors.authError.classList.remove("is-visible");
-  }
-  if (!authFormBound && selectors.authForm) {
-    selectors.authForm.addEventListener("submit", handleAuthSubmit);
-    authFormBound = true;
-  }
-  window.setTimeout(() => selectors.authInput?.focus(), 100);
-}
-
-function hideAuthOverlay() {
-  selectors.authOverlay?.classList.add("is-hidden");
-  selectors.authError?.classList.remove("is-visible");
+  return null;
 }
 
 function purgeLegacyIdentityKeys() {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="CoffeeShop Education is a calm study launcher that keeps research sessions cloaked behind a classroom-ready portal."
+      content="Coffee Shop is a cozy caramel proxy lounge that cloaks your browsing with comfort-first Safezone relays."
     />
     <meta name="theme-color" content="#3a2010" />
     <title>CoffeeShop Education</title>
@@ -13,8 +13,8 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   </head>
-  <body class="auth-locked edu-front">
-    <div class="auth-overlay is-hidden" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+  <body class="auth-locked">
+    <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <div class="auth-card">
         <p class="auth-card__eyebrow">Coffee Shop Access</p>
         <h1 id="auth-title">Access required</h1>
@@ -91,154 +91,7 @@
       </div>
     </div>
 
-    <div id="edu-shell" class="edu-shell" aria-live="polite">
-      <header class="edu-nav">
-        <div class="edu-nav__brand">
-          <span class="edu-logo">CoffeeShop Education</span>
-          <span class="edu-nav__tagline">World-class study decks, totally free.</span>
-        </div>
-        <nav class="edu-nav__links">
-          <a href="#courses">Courses</a>
-          <a href="#cohorts">Live cohorts</a>
-          <a href="#teachers">Teachers</a>
-          <a href="#parents">Parents</a>
-        </nav>
-        <button type="button" class="edu-login" data-login-trigger>Login</button>
-      </header>
-
-      <main class="edu-hero" role="main">
-        <div class="edu-hero__content">
-          <p class="edu-hero__eyebrow">Free classroom-ready library</p>
-          <h1>For every student, every classroom. Real results.</h1>
-          <p>
-            CoffeeShop Education keeps cover by looking like a calm learning portal while quietly holding your secure
-            workspace in the back room. Focus on studies in the open, click Login when it is time for the real session.
-          </p>
-          <div class="edu-hero__actions">
-            <button type="button" class="edu-primary" data-login-trigger>Login</button>
-            <button type="button" class="edu-secondary">Explore catalog</button>
-          </div>
-          <dl class="edu-hero__stats">
-            <div>
-              <dt>6,200+</dt>
-              <dd>Video lessons</dd>
-            </div>
-            <div>
-              <dt>1,400</dt>
-              <dd>Teacher resources</dd>
-            </div>
-            <div>
-              <dt>24/7</dt>
-              <dd>Study rooms</dd>
-            </div>
-          </dl>
-        </div>
-        <div class="edu-hero__card" aria-label="Featured tracks">
-          <p class="edu-card__eyebrow">Featured tracks</p>
-          <ul>
-            <li>
-              <strong>STEM Core</strong>
-              <span>Guided algebra through physics demos.</span>
-            </li>
-            <li>
-              <strong>Writing Sprint</strong>
-              <span>Daily prompts + coach feedback.</span>
-            </li>
-            <li>
-              <strong>Exam Lift</strong>
-              <span>Timed drills with auto-scores.</span>
-            </li>
-          </ul>
-        </div>
-      </main>
-
-      <section id="courses" class="edu-courses" aria-labelledby="edu-courses-title">
-        <div class="edu-section__head">
-          <div>
-            <p class="edu-eyebrow">Popular courses</p>
-            <h2 id="edu-courses-title">Pick a path &mdash; math to arts</h2>
-          </div>
-          <button type="button" class="edu-ghost">View catalog</button>
-        </div>
-        <div class="edu-course-grid">
-          <article>
-            <div class="edu-icon" aria-hidden="true">🧮</div>
-            <h3>Math Foundations</h3>
-            <p>Build skills from fractions through algebra with interactive checks.</p>
-            <span>Grades 3-10</span>
-          </article>
-          <article>
-            <div class="edu-icon" aria-hidden="true">🧪</div>
-            <h3>Science Studio</h3>
-            <p>Explore biology, chemistry, and physics with lab simulations.</p>
-            <span>Grades 5-12</span>
-          </article>
-          <article>
-            <div class="edu-icon" aria-hidden="true">🎨</div>
-            <h3>Arts &amp; Humanities</h3>
-            <p>Guided art history walks and creative writing mini-labs.</p>
-            <span>All ages</span>
-          </article>
-        </div>
-      </section>
-
-      <section id="cohorts" class="edu-cohorts">
-        <div>
-          <p class="edu-eyebrow">Live cohorts</p>
-          <h2>Study together in private rooms</h2>
-          <p>
-            Small group cohorts unlock twice a week. Each one comes with private chat, resource boards, and optional
-            guardian summaries. Everything looks like a normal homework tracker.
-          </p>
-        </div>
-        <ul>
-          <li>
-            <strong>Pre-Calc Sunrise</strong>
-            <span>Mon/Wed &middot; 7:00am</span>
-          </li>
-          <li>
-            <strong>Global Studies Lab</strong>
-            <span>Tue/Thu &middot; 4:30pm</span>
-          </li>
-          <li>
-            <strong>Creative Coding Arcade</strong>
-            <span>Fri &middot; 6:00pm</span>
-          </li>
-        </ul>
-      </section>
-
-      <section id="teachers" class="edu-trust">
-        <article>
-          <h3>Teachers</h3>
-          <p>Deploy ready-to-print lesson plans, auto-graded checks, and subtle attendance trackers.</p>
-        </article>
-        <article>
-          <h3>Learners</h3>
-          <p>Earn progress badges quietly. Switch devices without losing place using your study ID.</p>
-        </article>
-        <article>
-          <h3>Families</h3>
-          <p>Opt-in summaries arrive weekly. Nothing hints at the CoffeeShop workspace unless you press Login.</p>
-        </article>
-      </section>
-
-      <footer class="edu-footer" id="parents">
-        <div>
-          <p class="edu-eyebrow">Secure entry</p>
-          <h2>Only verified students continue past this door</h2>
-          <p>
-            Login opens the protected CoffeeShop workstation. First-time visitors will be asked for the access code; if
-            you have already entered it, a single click takes you right back in.
-          </p>
-        </div>
-        <div class="edu-footer__cta">
-          <p id="edu-login-hint">Students tap Login to continue their session.</p>
-          <button type="button" class="edu-primary" data-login-trigger aria-label="Open login access">Login</button>
-        </div>
-      </footer>
-    </div>
-
-    <div id="app-shell" hidden aria-hidden="true">
+    <div id="app-shell">
       <button id="barista-toggle" class="barista-toggle" type="button" aria-expanded="false">
         Meet The Barista
       </button>
@@ -257,7 +110,7 @@
         </div>
         <form id="barista-form" class="barista-form" autocomplete="off">
           <label for="barista-input" class="sr-only">Message The Barista</label>
-          <input id="barista-input" type="text" placeholder="Ask The Barista anything..." maxlength="320" />
+          <input id="barista-input" type="text" placeholder="Ask The Barista anything…" maxlength="320" />
           <button type="submit">Send</button>
         </form>
         <p id="barista-status" class="barista-status" aria-live="polite"></p>
@@ -548,10 +401,10 @@
       </main>
       <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
       <section class="chat-bar" aria-label="Coffee Shop global chat">
-        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat...</div>
+        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat…</div>
         <form id="chat-form" class="chat-bar__form" autocomplete="off">
           <label for="chat-input" class="sr-only">Chat message</label>
-          <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop..." maxlength="280" />
+          <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop…" maxlength="280" />
           <button type="submit">Send</button>
         </form>
       </section>

@@ -1,0 +1,42 @@
+{
+  "results": [
+    {
+      "scenario": "access",
+      "overlay": {
+        "hidden": true,
+        "active": false,
+        "className": "lockout-overlay is-hidden"
+      },
+      "body": {
+        "lockout": false,
+        "classes": "auth-locked"
+      },
+      "bodyEarly": {
+        "lockout": true,
+        "classes": "auth-locked lockout-active"
+      }
+    }
+  ],
+  "console": [
+    {
+      "type": "warning",
+      "text": "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing."
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (File not found)"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (File not found)"
+    },
+    {
+      "type": "info",
+      "text": "[CoffeeShop] service worker registered"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (File not found)"
+    }
+  ]
+}
