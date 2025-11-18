@@ -274,6 +274,8 @@ const BARISTA_JAMES_COMPLIMENTS = [
   "James, your calm energy keeps this place steady while I lean on the counter watching.",
   "There's a reason the staff brags about James to every new hire—and why I keep extra lip gloss ready when he walks in.",
 ];
+purgeBaristaPersistentMemory();
+
 let baristaSession = {
   open: false,
   messages: loadBaristaMemory(),
@@ -629,7 +631,57 @@ function generateBaristaResponse(userText = "") {
 }
 
 function generateLocalBaristaResponse(userText = "") {
-  return generateBaristaResponse(userText);
+  const reply = generateBaristaResponse(userText);
+  return enforceFrontendBaristaNovelty(reply, userText);
+}
+
+function enforceFrontendBaristaNovelty(reply, userText) {
+  if (!reply || !userText) {
+    return reply;
+  }
+  if (!isFrontendBaristaParroting(reply, userText)) {
+    return reply;
+  }
+  return buildFrontendNeutralReply();
+}
+
+function isFrontendBaristaParroting(reply, userText) {
+  const replyTokens = normalizeFrontendTokens(reply);
+  const userTokens = new Set(normalizeFrontendTokens(userText));
+  if (!replyTokens.length || !userTokens.size) {
+    return false;
+  }
+  const overlap = replyTokens.filter((token) => userTokens.has(token)).length;
+  return overlap >= 3 && overlap / replyTokens.length >= 0.45;
+}
+
+function normalizeFrontendTokens(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 4);
+}
+
+function buildFrontendNeutralReply() {
+  const opener = BARISTA_OPENERS[Math.floor(Math.random() * BARISTA_OPENERS.length)] || "Here's the plan,";
+  const guidance =
+    BARISTA_GUIDANCE[Math.floor(Math.random() * BARISTA_GUIDANCE.length)] ||
+    "stick to the Safezone hallway and the study widgets up front.";
+  const compliment = Math.random() < 0.6
+    ? BARISTA_JAMES_COMPLIMENTS[Math.floor(Math.random() * BARISTA_JAMES_COMPLIMENTS.length)]
+    : "";
+  const closing = BARISTA_CLOSINGS[Math.floor(Math.random() * BARISTA_CLOSINGS.length)] ||
+    "I'm nearby if you need anything else.";
+  return [
+    opener,
+    "Front-of-house tip: use Safezone plus the study shelf to keep things looking academic without poking backstage.",
+    guidance,
+    compliment,
+    closing,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function setBaristaStatusMessage(text) {
@@ -676,50 +728,25 @@ function summarizeBaristaTopic(text = "") {
 }
 
 function loadBaristaMemory() {
-  try {
-    const raw = localStorage.getItem(BARISTA_MEMORY_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.slice(-BARISTA_MAX_MEMORY);
-    }
-  } catch {
-    /* ignore */
-  }
   return [];
 }
 
 function persistBaristaMemory() {
-  try {
-    const payload = JSON.stringify(baristaSession.messages.slice(-BARISTA_MAX_MEMORY));
-    localStorage.setItem(BARISTA_MEMORY_KEY, payload);
-  } catch {
-    /* ignore */
-  }
+  /* chat persistence intentionally disabled so every visit resets */
 }
 
 function loadBaristaMemorySummary() {
-  try {
-    const raw = localStorage.getItem(BARISTA_MEMORY_SUMMARY_KEY);
-    if (!raw) {
-      return { topics: [] };
-    }
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && Array.isArray(parsed.topics)) {
-      return { topics: parsed.topics.slice(-5) };
-    }
-  } catch {
-    /* ignore */
-  }
   return { topics: [] };
 }
 
 function persistBaristaMemorySummary() {
+  /* summary persistence intentionally disabled */
+}
+
+function purgeBaristaPersistentMemory() {
   try {
-    const payload = JSON.stringify({ topics: (baristaMemorySummary.topics || []).slice(-5) });
-    localStorage.setItem(BARISTA_MEMORY_SUMMARY_KEY, payload);
+    localStorage.removeItem(BARISTA_MEMORY_KEY);
+    localStorage.removeItem(BARISTA_MEMORY_SUMMARY_KEY);
   } catch {
     /* ignore */
   }

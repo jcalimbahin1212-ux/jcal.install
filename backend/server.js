@@ -2259,7 +2259,8 @@ async function generateBaristaModelReply({ conversation, summary, deviceId }) {
     maybeComplimentJames(),
     pickRandom(BARISTA_SERVER_CLOSINGS),
   ];
-  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const reply = segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return enforceBaristaNovelty(reply, latestUser, guideSection);
 }
 
 function synthesizeBaristaReply({ conversation, summary }) {
@@ -2268,11 +2269,16 @@ function synthesizeBaristaReply({ conversation, summary }) {
   if (requiresBaristaRestriction(analysis)) {
     return buildBaristaRestrictionResponse();
   }
+  const guideSection = selectBaristaGuideSection(analysis.normalized);
+  const navLine = buildBaristaNavigationLine(guideSection);
+  const ctaLine = buildBaristaCtaLine(guideSection);
   const reflection = buildBaristaReflection(conversation);
   const summaryLine = summary ? `Still tracking your note about ${summary}.` : "";
   const segments = [
     pickRandom(BARISTA_FALLBACK_OPENERS),
     buildBaristaPlan(analysis, reflection),
+    navLine,
+    ctaLine,
     buildBaristaGuidanceLine(analysis),
     maybePersonaAside(),
     summaryLine,
@@ -2280,7 +2286,8 @@ function synthesizeBaristaReply({ conversation, summary }) {
     maybeComplimentJames(),
     pickRandom(BARISTA_SERVER_CLOSINGS),
   ];
-  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const reply = segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return enforceBaristaNovelty(reply, latestUser, guideSection);
 }
 
 function getLastUserMessage(conversation) {
@@ -2407,6 +2414,57 @@ function getBaristaGuideSectionById(id) {
   return BARISTA_SITE_GUIDE.find((section) => section.id === id) || null;
 }
 
+function enforceBaristaNovelty(reply, latestUser, guideSection) {
+  if (!reply) {
+    return reply;
+  }
+  if (!isBaristaParroting(reply, latestUser)) {
+    return reply;
+  }
+  return buildBaristaNeutralReply(guideSection);
+}
+
+function isBaristaParroting(reply, latestUser) {
+  if (!reply || !latestUser) {
+    return false;
+  }
+  const replyTokens = normalizeBaristaTokens(reply);
+  const userTokens = normalizeBaristaTokens(latestUser);
+  if (!replyTokens.length || !userTokens.length) {
+    return false;
+  }
+  const userSet = new Set(userTokens);
+  let overlap = 0;
+  replyTokens.forEach((token) => {
+    if (userSet.has(token)) {
+      overlap += 1;
+    }
+  });
+  return overlap >= 3 && overlap / replyTokens.length >= 0.45;
+}
+
+function normalizeBaristaTokens(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 4);
+}
+
+function buildBaristaNeutralReply(guideSection) {
+  const section = guideSection || BARISTA_SITE_GUIDE[0] || null;
+  const segments = [
+    pickRandom(BARISTA_FALLBACK_OPENERS),
+    section ? buildBaristaNavigationLine(section) : "This lounge is strictly front-of-house for you and me, honey.",
+    section ? buildBaristaCtaLine(section) : "Stick to Safezone, the study widgets, and my chat bubble—those are our playgrounds.",
+    maybePersonaAside(),
+    pickRandom(BARISTA_MANAGER_LINES),
+    maybeComplimentJames(),
+    pickRandom(BARISTA_SERVER_CLOSINGS),
+  ];
+  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
 function buildBaristaGuidanceLine(analysis) {
   const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE);
   if (!guidance) {
@@ -2451,10 +2509,16 @@ function generateFallbackBaristaReply(messages, summary) {
   const topic = summarizeSimpleTopic(latest);
   const opener = pickRandom(BARISTA_FALLBACK_OPENERS) || "Here's the plan,";
   const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE) || "keep an even pour and stay nimble.";
+  const guideSection = selectBaristaGuideSection(latest.toLowerCase());
+  const navLine = buildBaristaNavigationLine(guideSection);
+  const ctaLine = buildBaristaCtaLine(guideSection);
   const compliment = Math.random() < 0.6 ? pickRandom(BARISTA_FALLBACK_COMPLIMENTS) : "";
   const memory = summary ? `I'm still keeping tabs on your note about ${summary}.` : "";
   const topicLine = topic ? `As for ${topic}, ${guidance}` : guidance;
-  return [opener, topicLine, compliment, memory, "Ping me if you want another refill."].filter(Boolean).join(" ");
+  const reply = [opener, navLine, ctaLine, topicLine, compliment, memory, "Ping me if you want another refill."]
+    .filter(Boolean)
+    .join(" ");
+  return enforceBaristaNovelty(reply, latest, guideSection);
 }
 
 function summarizeSimpleTopic(text = "") {
