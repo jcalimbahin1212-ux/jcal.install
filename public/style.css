@@ -57,20 +57,16 @@ body.edu-front::after {
   display: none;
 }
 
-body.edu-front #app-shell {
+.edu-front:not(.workspace-ready) #app-shell {
   display: none;
 }
 
-body.workspace-active {
+.workspace-ready {
   padding-bottom: 140px;
 }
 
-body.workspace-active #edu-shell {
-  display: none;
-}
-
-body.edu-front .dev-launcher,
-body.edu-front .barista-toggle {
+.edu-front:not(.workspace-ready) .dev-launcher,
+.edu-front:not(.workspace-ready) .barista-toggle {
   display: none;
 }
 

@@ -5,8 +5,8 @@
 
 const services = {
   coffeeshop: {
-    name: "Coffee Shop Balanced",
-    description: "House blend rewrite mode for everyday browsing.",
+    name: "Study Relay Balanced",
+    description: "Default renderer optimized for general coursework.",
     mode: "standard",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -19,8 +19,8 @@ const services = {
     },
   },
   coffeeshop_headless: {
-    name: "Coffee Shop Espresso",
-    description: "Routes through the headless renderer for complex sites.",
+    name: "Study Relay Espresso",
+    description: "Headless renderer for stubborn interactive resources.",
     mode: "headless",
     render: "headless",
     compose(targetUrl, meta = {}) {
@@ -35,8 +35,8 @@ const services = {
     },
   },
   coffeeshop_lite: {
-    name: "Coffee Shop Iced",
-    description: "Lightweight mode optimized for speed.",
+    name: "Study Relay Iced",
+    description: "Lightweight renderer prioritized for speed.",
     mode: "lite",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -66,10 +66,10 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
-const LOCKOUT_TEXT_BANNED = "You are disgusting. Get out of our Coffee Shop.";
+const LOCKOUT_TEXT_ACCESS = "You dont belong in this study hall. Leave.";
+const LOCKOUT_TEXT_BANNED = "You are not cleared for CoffeeShop Education.";
 const LOCKOUT_TEXT_DEV =
-  "The gall you have to try accessing MY developer console? You scum dont belong in this coffee shop.";
+  "The audacity to poke the coordinator console without clearance? Step away from this study hall.";
 const LOCKOUT_REASON_LABELS = {
   access: "ACCESS DENIED",
   dev: "DEV LOCKOUT",
@@ -350,10 +350,7 @@ function initializeEduFront() {
   if (!selectors.eduShell) {
     return;
   }
-  selectors.eduShell.setAttribute(
-    "aria-hidden",
-    document.body.classList.contains("workspace-active") ? "true" : "false"
-  );
+  selectors.eduShell.setAttribute("aria-hidden", "false");
   selectors.eduLoginButtons?.forEach((button) => {
     button.addEventListener("click", handleEduLoginClick);
   });
@@ -362,7 +359,7 @@ function initializeEduFront() {
 
 function handleEduLoginClick(event) {
   event?.preventDefault?.();
-  if (document.body.classList.contains("workspace-active")) {
+  if (document.body.classList.contains("workspace-ready")) {
     return;
   }
   authLoginRequested = true;
@@ -384,14 +381,13 @@ function updateEduLoginHint() {
 }
 
 function enterWorkspaceShell() {
-  document.body.classList.add("workspace-active");
-  document.body.classList.remove("edu-front");
-  selectors.eduShell?.setAttribute("aria-hidden", "true");
+  document.body.classList.add("workspace-ready");
+  selectors.eduShell?.setAttribute("aria-hidden", "false");
 }
 
 function showEduFrontShell() {
   document.body.classList.add("edu-front");
-  document.body.classList.remove("workspace-active");
+  document.body.classList.remove("workspace-ready");
   selectors.eduShell?.setAttribute("aria-hidden", "false");
 }
 
@@ -950,7 +946,7 @@ function registerEventHandlers() {
     }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Coffee Shop workspace poured.");
+    setStatus("Study workspace ready.");
     injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
@@ -1589,7 +1585,7 @@ function releaseAuthGate() {
     attemptAutoBlank(true);
   }
   primeAuthenticationCache(true);
-  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
+  setStatus("Access confirmed. Study Lab unlocked.");
 }
 
 function showAuthOverlay() {
@@ -3052,7 +3048,7 @@ function describeTargetForLog(targetUrl) {
 }
 const SEARCH_PROVIDERS = [
   {
-    label: "Coffee Shop Lite",
+    label: "Study Relay Lite",
     type: "local",
     buildUrl: (term) => `/search/lite?q=${encodeURIComponent(term)}`,
   },
