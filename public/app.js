@@ -383,7 +383,8 @@ function updateEduLoginHint() {
 
 function enterWorkspaceShell() {
   document.body.classList.add("workspace-ready");
-  selectors.eduShell?.setAttribute("aria-hidden", "false");
+  document.body.classList.remove("edu-front");
+  selectors.eduShell?.setAttribute("aria-hidden", "true");
   selectors.appShell?.removeAttribute("hidden");
   selectors.appShell?.setAttribute("aria-hidden", "false");
 }

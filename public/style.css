@@ -61,6 +61,10 @@ body:not(.workspace-ready) #app-shell {
   display: none;
 }
 
+.workspace-ready .edu-shell {
+  display: none;
+}
+
 .workspace-ready {
   padding-bottom: 140px;
 }
