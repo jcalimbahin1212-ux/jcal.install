@@ -16,9 +16,9 @@
   <body class="auth-locked edu-front">
     <div class="auth-overlay is-hidden" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Study Lab Access</p>
+        <p class="auth-card__eyebrow">Coffee Shop Access</p>
         <h1 id="auth-title">Access required</h1>
-        <p class="auth-card__lead">Enter the CoffeeShop Education access code to continue.</p>
+        <p class="auth-card__lead">Enter the Coffee Shop access code to continue.</p>
         <form id="auth-form" autocomplete="off">
           <label for="auth-code" class="sr-only">Access code</label>
           <input
@@ -37,7 +37,7 @@
 
     <div class="auth-overlay is-hidden" id="username-overlay" role="dialog" aria-modal="true">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Study ID</p>
+        <p class="auth-card__eyebrow">Coffee Shop ID</p>
         <h1>Choose a username</h1>
         <p class="auth-card__lead">Pick a unique name so we can build your private workspace.</p>
         <form id="username-form" autocomplete="off">
@@ -51,9 +51,9 @@
 
     <div class="auth-overlay is-hidden" id="bridge-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Study admin</p>
+        <p class="auth-card__eyebrow">Coffee Shop dev</p>
         <h1>Identity check</h1>
-        <p>Enter the stage-two coordinator code.</p>
+        <p>Enter the stage-two developer code.</p>
         <form id="bridge-form" autocomplete="off">
           <label for="bridge-code" class="sr-only">Stage-two code</label>
           <input
@@ -72,9 +72,9 @@
 
     <div class="auth-overlay is-hidden" id="dev-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Study admin</p>
-        <h1>Coordinator console</h1>
-        <p>Enter the coordinator access code to continue.</p>
+        <p class="auth-card__eyebrow">Coffee Shop dev</p>
+        <h1>Developer console</h1>
+        <p>Enter the developer access code to continue.</p>
         <form id="dev-form" autocomplete="off">
           <label for="dev-code" class="sr-only">Developer access code</label>
           <input
@@ -238,15 +238,15 @@
       </footer>
     </div>
 
-    <div id="app-shell">
+    <div id="app-shell" hidden aria-hidden="true">
       <button id="barista-toggle" class="barista-toggle" type="button" aria-expanded="false">
-        Meet The Mentor
+        Meet The Barista
       </button>
       <section id="barista-panel" class="barista-panel" aria-live="polite" hidden>
         <header class="barista-panel__header">
           <div>
-            <p class="barista-panel__eyebrow">Study Mentor AI</p>
-            <h2>The Mentor</h2>
+            <p class="barista-panel__eyebrow">Coffee Shop AI</p>
+            <h2>The Barista</h2>
           </div>
           <button id="barista-close" class="barista-panel__close" type="button" aria-label="Close Barista chat">
             &times;
@@ -256,8 +256,8 @@
           Tap out your first order to start chatting.
         </div>
         <form id="barista-form" class="barista-form" autocomplete="off">
-          <label for="barista-input" class="sr-only">Message The Mentor</label>
-          <input id="barista-input" type="text" placeholder="Ask the mentor anything…" maxlength="320" />
+          <label for="barista-input" class="sr-only">Message The Barista</label>
+          <input id="barista-input" type="text" placeholder="Ask The Barista anything..." maxlength="320" />
           <button type="submit">Send</button>
         </form>
         <p id="barista-status" class="barista-status" aria-live="polite"></p>
@@ -269,12 +269,11 @@
       </div>
       <header class="hero">
         <div class="hero__content">
-        <img src="assets/logo.svg" class="hero__logo" alt="CoffeeShop Education crest" width="140" height="140" />
-        <p class="hero__eyebrow">Curriculum relay portal</p>
-        <h1 class="hero__title">Study Lab Control</h1>
+        <img src="assets/logo.svg" class="hero__logo" alt="Coffee Shop proxy logo" width="140" height="140" />
+        <p class="hero__eyebrow">Quiet proxy lounge</p>
+        <h1 class="hero__title">Coffee Shop</h1>
         <p class="hero__lead">
-          CoffeeShop Education quietly ferries your research traffic through a classroom-safe mirror so assignments and
-          curiosity can keep moving without raising eyebrows.
+          A hazel-toned hideout that pours every request through our Safezone roastery. Slow-sip comfort, fast escapes.
         </p>
 
         <form id="portal-form" class="portal" autocomplete="off">
@@ -284,10 +283,10 @@
             name="destination"
             type="text"
             inputmode="url"
-            placeholder="Paste a link or search any topic..."
+            placeholder="Order a site or search anything..."
             required
           />
-          <button type="submit">Launch study link</button>
+          <button type="submit">Pour a connection</button>
         </form>
 
         <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
@@ -338,10 +337,10 @@
       </div>
 
         <div class="relay-panel" aria-live="polite">
-        <p class="relay-panel__label">Resource engine</p>
-        <p id="active-service-name" class="relay-panel__name">Study Relay Balanced</p>
+        <p class="relay-panel__label">Active engine</p>
+        <p id="active-service-name" class="relay-panel__name">Coffee Shop Balanced</p>
         <p id="active-service-desc" class="relay-panel__desc">
-          Default renderer tuned for general coursework and research sites.
+          House blend rewrite that balances warmth, compatibility, and stealth.
         </p>
         <div class="relay-panel__choices" role="group" aria-label="Relay choice">
           <button class="relay-chip is-active" data-service="coffeeshop">Balanced</button>
@@ -402,7 +401,7 @@
         <img src="assets/logo.svg" alt="Developer console launcher" />
       </button>
 
-      <section class="workspace" aria-label="Study workspace">
+      <section class="workspace" aria-label="Coffee Shop Safezone workspace">
         <div class="workspace__chrome">
           <p id="workspace-status">Awaiting secure session.</p>
           <button type="button" id="workspace-reset">Reset view</button>
@@ -414,14 +413,14 @@
           </div>
           <iframe
             id="proxy-frame"
-            title="Study workspace session"
+            title="Coffee Shop Safezone session"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             loading="lazy"
           ></iframe>
         </div>
       </section>
 
-      <section class="diagnostics" aria-label="Study diagnostics">
+      <section class="diagnostics" aria-label="Coffee Shop diagnostics">
         <header class="diagnostics__header">
           <div>
             <p class="diagnostics__eyebrow">Relay telemetry</p>
@@ -472,7 +471,7 @@
           <header>
             <p class="dev-dashboard__eyebrow">Developer mode</p>
             <h2>Active sessions</h2>
-            <p class="dev-dashboard__welcome">Welcome to the Study Station, James. What would you like to do here?</p>
+            <p class="dev-dashboard__welcome">Welcome to the Barista Station, James. What would you like to do here?</p>
             <p class="dev-dashboard__url">Current URL cache: <span id="dev-current-cache">n/a</span></p>
           </header>
           <div class="dev-dashboard__grid">
@@ -514,32 +513,31 @@
 
         <section class="features">
           <article>
-            <h2>Campus-friendly cover</h2>
-            <p>The entire surface stays dressed like a lesson library so supervising eyes only see coursework.</p>
+            <h2>No account trail</h2>
+            <p>Browser-grade privacy without the sign-in baggage. Everything is ephemeral unless you say otherwise.</p>
           </article>
           <article>
-            <h2>One steady relay</h2>
-            <p>Every resource routes through a single engineered rewrite stack, making behavior predictable and calm.</p>
+            <h2>Single-origin routing</h2>
+            <p>Every sip runs through one carefully tuned Safezone roast so you always know what stack shields you.</p>
           </article>
           <article>
-            <h2>Focus-first tooling</h2>
-            <p>Quick toggles for focus mode, panic exits, and tab disguises keep you in control of every study session.</p>
+            <h2>Warm ambience</h2>
+            <p>Caramel gradients, quiet toggles, and little rituals keep the experience calm even when traffic spikes.</p>
           </article>
         </section>
 
         <section class="mission" id="mission">
           <p>
-            CoffeeShop Education exists to keep learning moving even when networks lock things down. Built by @1d3nt1ty;
-            coordination chat lives at
-            <a href="https://discord.gg/unblock" target="_blank" rel="noreferrer">discord.gg/unblock</a>.
+            The goal of Coffee Shop is to finally end annoying internet censorships, especially at school. Solo made by
+            @1d3nt1ty. Visit the TN Discord at <a href="https://discord.gg/unblock" target="_blank" rel="noreferrer">discord.gg/unblock</a>.
           </p>
         </section>
 
         <section class="how-it-works">
-          <h2>How the study relay works</h2>
+          <h2>How Coffee Shop works</h2>
           <ol>
-            <li>Paste a link or search topic from the hero launcher.</li>
-            <li>The relay mirrors it through our Safezone rewrite before presenting it inside the study workspace.</li>
+            <li>Paste a URL or type anything to search privately.</li>
+            <li>Coffee Shop launches a cloaked tab through our native Safezone rewrite backend.</li>
           </ol>
           <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
         </section>
@@ -549,11 +547,11 @@
         </section>
       </main>
       <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
-      <section class="chat-bar" aria-label="Study hall chat">
-        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat…</div>
+      <section class="chat-bar" aria-label="Coffee Shop global chat">
+        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat...</div>
         <form id="chat-form" class="chat-bar__form" autocomplete="off">
           <label for="chat-input" class="sr-only">Chat message</label>
-          <input id="chat-input" type="text" placeholder="Say something to the study hall…" maxlength="280" />
+          <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop..." maxlength="280" />
           <button type="submit">Send</button>
         </form>
       </section>

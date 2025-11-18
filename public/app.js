@@ -5,7 +5,7 @@
 
 const services = {
   coffeeshop: {
-    name: "Study Relay Balanced",
+    name: "Coffee Shop Balanced",
     description: "Default renderer optimized for general coursework.",
     mode: "standard",
     compose(targetUrl, meta = {}) {
@@ -19,7 +19,7 @@ const services = {
     },
   },
   coffeeshop_headless: {
-    name: "Study Relay Espresso",
+    name: "Coffee Shop Espresso",
     description: "Headless renderer for stubborn interactive resources.",
     mode: "headless",
     render: "headless",
@@ -35,7 +35,7 @@ const services = {
     },
   },
   coffeeshop_lite: {
-    name: "Study Relay Iced",
+    name: "Coffee Shop Iced",
     description: "Lightweight renderer prioritized for speed.",
     mode: "lite",
     compose(targetUrl, meta = {}) {
@@ -66,10 +66,10 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_ACCESS = "You dont belong in this study hall. Leave.";
-const LOCKOUT_TEXT_BANNED = "You are not cleared for CoffeeShop Education.";
+const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
+const LOCKOUT_TEXT_BANNED = "You are disgusting. Get out of our Coffee Shop.";
 const LOCKOUT_TEXT_DEV =
-  "The audacity to poke the coordinator console without clearance? Step away from this study hall.";
+  "The gall you have to try accessing MY developer console? You scum dont belong in this coffee shop.";
 const LOCKOUT_REASON_LABELS = {
   access: "ACCESS DENIED",
   dev: "DEV LOCKOUT",
@@ -158,6 +158,7 @@ const selectors = {
   baristaInput: document.querySelector("#barista-input"),
   baristaStatus: document.querySelector("#barista-status"),
   baristaClose: document.querySelector("#barista-close"),
+  appShell: document.querySelector("#app-shell"),
   eduShell: document.querySelector("#edu-shell"),
   eduLoginButtons: document.querySelectorAll("[data-login-trigger]"),
   eduLoginHint: document.querySelector("#edu-login-hint"),
@@ -383,19 +384,39 @@ function updateEduLoginHint() {
 function enterWorkspaceShell() {
   document.body.classList.add("workspace-ready");
   selectors.eduShell?.setAttribute("aria-hidden", "false");
+  selectors.appShell?.removeAttribute("hidden");
+  selectors.appShell?.setAttribute("aria-hidden", "false");
 }
 
 function showEduFrontShell() {
   document.body.classList.add("edu-front");
   document.body.classList.remove("workspace-ready");
   selectors.eduShell?.setAttribute("aria-hidden", "false");
+  if (selectors.appShell) {
+    selectors.appShell.setAttribute("aria-hidden", "true");
+    if (!selectors.appShell.hasAttribute("hidden")) {
+      selectors.appShell.setAttribute("hidden", "true");
+    }
+  }
 }
 
 function toggleChatVisibility() {
+  if (!document.body.classList.contains("workspace-ready")) {
+    return;
+  }
   setChatVisibility(!chatVisible);
 }
 
 function setChatVisibility(open) {
+  if (!document.body.classList.contains("workspace-ready")) {
+    chatVisible = false;
+    selectors.chatBar?.classList.remove("is-open");
+    if (selectors.chatToggle) {
+      selectors.chatToggle.textContent = "Open chat";
+      selectors.chatToggle.setAttribute("aria-expanded", "false");
+    }
+    return;
+  }
   chatVisible = open;
   selectors.chatBar?.classList.toggle("is-open", open);
   if (selectors.chatToggle) {
@@ -946,7 +967,7 @@ function registerEventHandlers() {
     }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Study workspace ready.");
+    setStatus("Coffee Shop workspace poured.");
     injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
@@ -1585,7 +1606,7 @@ function releaseAuthGate() {
     attemptAutoBlank(true);
   }
   primeAuthenticationCache(true);
-  setStatus("Access confirmed. Study Lab unlocked.");
+  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
 }
 
 function showAuthOverlay() {
@@ -3048,7 +3069,7 @@ function describeTargetForLog(targetUrl) {
 }
 const SEARCH_PROVIDERS = [
   {
-    label: "Study Relay Lite",
+    label: "Coffee Shop Lite",
     type: "local",
     buildUrl: (term) => `/search/lite?q=${encodeURIComponent(term)}`,
   },

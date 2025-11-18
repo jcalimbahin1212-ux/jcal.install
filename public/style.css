@@ -57,7 +57,7 @@ body.edu-front::after {
   display: none;
 }
 
-.edu-front:not(.workspace-ready) #app-shell {
+body:not(.workspace-ready) #app-shell {
   display: none;
 }
 
@@ -65,8 +65,10 @@ body.edu-front::after {
   padding-bottom: 140px;
 }
 
-.edu-front:not(.workspace-ready) .dev-launcher,
-.edu-front:not(.workspace-ready) .barista-toggle {
+body:not(.workspace-ready) .dev-launcher,
+body:not(.workspace-ready) .barista-toggle,
+body:not(.workspace-ready) .chat-toggle,
+body:not(.workspace-ready) .chat-bar {
   display: none;
 }
 
