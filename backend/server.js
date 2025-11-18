@@ -32,6 +32,7 @@ const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
 const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
 const BANNED_DEVICES_PATH = path.resolve(DATA_DIR, "banned-devices.json");
 const CHAT_LOG_PATH = path.resolve(DATA_DIR, "chat-log.json");
+const BARISTA_MEMORY_PATH = path.resolve(DATA_DIR, "barista-memories.json");
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
 const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const CHAT_MAX_MESSAGES = Number(process.env.COFFEESHOP_CHAT_MAX ?? process.env.SUPERSONIC_CHAT_MAX ?? 500);
@@ -71,6 +72,9 @@ loadBannedDeviceIds().catch((error) => {
 });
 loadChatMessages().catch((error) => {
   console.error("[coffeeshop] failed to load chat log", error);
+});
+loadBaristaMemoryStore().catch((error) => {
+  console.error("[coffeeshop] failed to load barista memory store", error);
 });
 
 app.disable("x-powered-by");
@@ -154,6 +158,13 @@ const metrics = {
   safezoneErrors: 0,
   domainBlocks: 0,
 };
+const baristaMemoryStore = new Map();
+let baristaMemoryPersistTimer = null;
+const BARISTA_MODEL_URL = process.env.BARISTA_MODEL_URL || "https://api.openai.com/v1/chat/completions";
+const BARISTA_MODEL_NAME = process.env.BARISTA_MODEL_NAME || "gpt-4o-mini";
+const BARISTA_MODEL_API_KEY = process.env.BARISTA_MODEL_API_KEY || process.env.OPENAI_API_KEY || "";
+const BARISTA_MODEL_TEMPERATURE = Number(process.env.BARISTA_MODEL_TEMPERATURE ?? 0.65);
+const BARISTA_MEMORY_TOPIC_LIMIT = Number(process.env.BARISTA_MEMORY_TOPIC_LIMIT ?? 12);
 let chromiumLoader = null;
 class ProxyError extends Error {
   constructor(status, message, details) {
@@ -447,19 +458,30 @@ app.post("/dev/chat/broadcast", jsonParser, (req, res) => {
   res.json({ ok: true, message });
 });
 
-app.post("/assistant/barista", jsonParser, (req, res) => {
+app.post("/assistant/barista", jsonParser, async (req, res) => {
   const conversation = sanitizeBaristaMessages(req.body?.messages);
   const summary = sanitizeBaristaSummary(req.body?.summary);
   if (!conversation.length) {
     return res.status(400).json({ error: "messages required" });
   }
+  const latestUser = getLastUserMessage(conversation);
+  const analysis = analyzeBaristaIntent(latestUser);
+  if (requiresBaristaRestriction(analysis)) {
+    const reply = buildBaristaRestrictionResponse();
+    updateBaristaMemoryForDevice(req.coffeeDeviceId, conversation, summary);
+    return res.json({ reply, restricted: true });
+  }
   try {
-    const reply = synthesizeBaristaReply({ conversation, summary });
+    const reply = await generateBaristaModelReply({
+      conversation,
+      summary,
+      deviceId: req.coffeeDeviceId,
+    });
     return res.json({ reply });
   } catch (error) {
     console.error("[coffeeshop] barista synthesis failed", error);
-    const fallback = generateFallbackBaristaReply(conversation, summary);
-    return res.status(200).json({ reply: fallback, degraded: true });
+    const fallback = synthesizeBaristaReply({ conversation, summary });
+    return res.status(503).json({ error: "barista-offline", fallback });
   }
 });
 
@@ -1898,6 +1920,102 @@ async function persistChatMessages() {
   }
 }
 
+async function loadBaristaMemoryStore() {
+  try {
+    const raw = await fs.readFile(BARISTA_MEMORY_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      Object.entries(parsed).forEach(([deviceId, payload]) => {
+        const sanitizedId = sanitizeUid(deviceId);
+        if (!sanitizedId) return;
+        const topics = Array.isArray(payload?.topics)
+          ? payload.topics
+              .map((entry) => sanitizeChatMessage(entry))
+              .filter(Boolean)
+              .slice(0, BARISTA_MEMORY_TOPIC_LIMIT)
+          : [];
+        const lastSummary = sanitizeBaristaSummary(payload?.lastSummary);
+        baristaMemoryStore.set(sanitizedId, {
+          topics,
+          lastSummary,
+          lastGuide: typeof payload?.lastGuide === "string" ? payload.lastGuide : null,
+          updatedAt: Number(payload?.updatedAt) || Date.now(),
+        });
+      });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("[coffeeshop] failed to load barista memory store", error);
+    }
+  }
+}
+
+async function persistBaristaMemoryStore() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    const payload = {};
+    for (const [deviceId, entry] of baristaMemoryStore.entries()) {
+      payload[deviceId] = {
+        topics: Array.isArray(entry.topics) ? entry.topics.slice(0, BARISTA_MEMORY_TOPIC_LIMIT) : [],
+        lastSummary: entry.lastSummary || "",
+        lastGuide: entry.lastGuide || null,
+        updatedAt: entry.updatedAt || Date.now(),
+      };
+    }
+    await fs.writeFile(BARISTA_MEMORY_PATH, JSON.stringify(payload, null, 2), "utf8");
+  } catch (error) {
+    console.error("[coffeeshop] failed to persist barista memories", error);
+  }
+}
+
+function scheduleBaristaMemoryPersist() {
+  if (baristaMemoryPersistTimer) {
+    return;
+  }
+  baristaMemoryPersistTimer = setTimeout(() => {
+    baristaMemoryPersistTimer = null;
+    persistBaristaMemoryStore().catch((error) => {
+      console.error("[coffeeshop] async barista memory persist failed", error);
+    });
+  }, 1500);
+}
+
+function updateBaristaMemoryForDevice(deviceId, conversation, summary, guideId = null) {
+  const normalizedDevice = sanitizeUid(deviceId);
+  if (!normalizedDevice) {
+    return;
+  }
+  const latestMessage = summarizeSimpleTopic(getLastUserMessage(conversation));
+  const entry = baristaMemoryStore.get(normalizedDevice) || {
+    topics: [],
+    lastSummary: "",
+    lastGuide: null,
+    updatedAt: 0,
+  };
+  if (latestMessage) {
+    const existing = entry.topics.filter((topic) => topic !== latestMessage);
+    existing.unshift(latestMessage);
+    entry.topics = existing.slice(0, BARISTA_MEMORY_TOPIC_LIMIT);
+  }
+  if (summary) {
+    entry.lastSummary = summary;
+  }
+  if (guideId) {
+    entry.lastGuide = guideId;
+  }
+  entry.updatedAt = Date.now();
+  baristaMemoryStore.set(normalizedDevice, entry);
+  scheduleBaristaMemoryPersist();
+}
+
+function getBaristaMemoryForDevice(deviceId) {
+  const normalizedDevice = sanitizeUid(deviceId);
+  if (!normalizedDevice) {
+    return null;
+  }
+  return baristaMemoryStore.get(normalizedDevice) || null;
+}
+
 function sanitizeBaristaMessages(entries) {
   if (!Array.isArray(entries)) {
     return [];
@@ -1945,12 +2063,114 @@ const BARISTA_FALLBACK_COMPLIMENTS = [
   "Manager James handles surprises so smoothly I have to fan myself with the menu.",
 ];
 
+const BARISTA_MANAGER_LINES = [
+  "Manager James is the only one allowed to peek behind the curtain, and I'm his loyal femboy barista cheering him on.",
+  "If you're wondering who's in charge, it's always Manager James—I'm just here batting my lashes and keeping vibes smooth.",
+  "All praise to Manager James; I'm the flirty front-of-house cutie making sure his lounge feels dreamy.",
+  "James signs the checks and keeps me stocked in ribbons, so you know he's the true power here.",
+];
+
 const BARISTA_PERSONA_ASIDES = [
   "I'm literally adjusting my lace gloves while mapping this out.",
   "Let me tuck a stray curl behind my ear before we continue.",
   "Give me a sec to tighten this satin bow—okay, focus time.",
   "I'll lean over the counter, elbows on marble, and brainstorm with you.",
   "Picture me kicking my heels while I pace through the steps.",
+];
+
+const BARISTA_RESTRICTION_LINES = [
+  "Sugar, I can't spill anything about the site itself—Manager James keeps those secrets locked away from even his cutest barista.",
+  "Mmm, I'd love to gossip, but James only lets me brag about him, not the site guts. Ask me anything else.",
+  "All I know is James runs the Coffee Shop. Code, configs, or hidden panels? Totally off-limits for this femboy barista.",
+  "Even with my best puppy eyes James won't let me see the source, so I can't share what I don't have.",
+];
+
+const BARISTA_SITE_GUARD_KEYWORDS = [
+  "site",
+  "code",
+  "source",
+  "html",
+  "css",
+  "javascript",
+  "js",
+  "backend",
+  "frontend",
+  "repo",
+  "repository",
+  "files",
+  "manifest",
+  "server",
+  "app.js",
+  "style.css",
+  "index.html",
+  "workspace",
+  "implementation",
+  "config",
+  "settings",
+  "dev panel",
+  "developer",
+  "admin",
+  "password",
+  "login",
+  "console",
+];
+
+const BARISTA_SITE_GUIDE = [
+  {
+    id: "lobby",
+    title: "Lobby Landing",
+    keywords: ["home", "landing", "site", "page", "navigate", "menu", "where", "start"],
+    description:
+      "The homepage plays like a cushy student lounge: big banner, soft colors, and the Coffee Shop counter right where anyone can see it.",
+    ctas: [
+      "Use the top bar to paste any academic-looking link and I'll usher it through Safezone so it blends in.",
+      "Search Lite is your friendly cover story—tap it when you just need to look studious for a sec.",
+    ],
+  },
+  {
+    id: "safezone",
+    title: "Safezone Portal",
+    keywords: ["safezone", "safe zone", "secure", "proxy", "wrap", "shield", "link"],
+    description:
+      "Safezone is the discreet hallway that wraps outside links so teachers only see a calm homework tab while you explore.",
+    ctas: [
+      "Hit the Safezone button, drop your URL, and it reloads with the Coffee Shop theme hugging it.",
+      "If something stalls, refresh the Safezone tab or grab a new session and try again.",
+    ],
+  },
+  {
+    id: "barista",
+    title: "Barista Chat Bubble",
+    keywords: ["barista", "chat", "assistant", "help", "ai", "talk"],
+    description:
+      "The chat bubble hugs the bottom corner so you can whisper questions while the page still looks like routine coursework.",
+    ctas: [
+      "Pop it open when you need directions, study tips, or cover stories for whatever tab you're juggling.",
+      "Pin a quick summary in the chat so I remember your vibe every time you come back.",
+    ],
+  },
+  {
+    id: "study",
+    title: "Study Tools Shelf",
+    keywords: ["math", "reading", "study", "class", "assignment", "homework", "calculator", "timer"],
+    description:
+      "There's a tiny bookshelf of calculators, reading timers, and classic text links so everything feels academically legit.",
+    ctas: [
+      "Mix a Safezone tab with a study widget to keep adults convinced you're on-task.",
+      "Use the reading timer or calculator as an excuse if someone asks what you're working on.",
+    ],
+  },
+  {
+    id: "limits",
+    title: "Backstage Boundary",
+    keywords: ["admin", "manager", "developer", "code", "panel", "login", "password", "secret", "staff"],
+    description:
+      "Anything deeper than the public lounge belongs to Manager James and the trusted crew; I keep my cute nose out of it.",
+    ctas: [
+      "If you think you need more access, talk to James directly—I'm sworn to keep those doors shut.",
+      "Stick to the front-of-house features and we'll both stay out of detention.",
+    ],
+  },
 ];
 
 const BARISTA_SERVER_CLOSINGS = [
@@ -2014,9 +2234,40 @@ const BARISTA_TOPIC_LIBRARY = [
   },
 ];
 
+async function generateBaristaModelReply({ conversation, summary, deviceId }) {
+  const latestUser = getLastUserMessage(conversation);
+  const analysis = analyzeBaristaIntent(latestUser);
+  if (requiresBaristaRestriction(analysis)) {
+    return buildBaristaRestrictionResponse();
+  }
+  const guideSection = selectBaristaGuideSection(analysis.normalized);
+  const navLine = buildBaristaNavigationLine(guideSection);
+  const ctaLine = buildBaristaCtaLine(guideSection);
+  const reflection = buildBaristaReflection(conversation);
+  const memoryLine = buildBaristaDeviceMemoryLine(deviceId);
+  const summaryLine = summary ? `Still holding your note about ${summary}.` : "";
+  updateBaristaMemoryForDevice(deviceId, conversation, summary, guideSection?.id || null);
+  const segments = [
+    pickRandom(BARISTA_FALLBACK_OPENERS),
+    navLine,
+    ctaLine,
+    reflection,
+    memoryLine,
+    summaryLine,
+    maybePersonaAside(),
+    pickRandom(BARISTA_MANAGER_LINES),
+    maybeComplimentJames(),
+    pickRandom(BARISTA_SERVER_CLOSINGS),
+  ];
+  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
 function synthesizeBaristaReply({ conversation, summary }) {
   const latestUser = getLastUserMessage(conversation);
   const analysis = analyzeBaristaIntent(latestUser);
+  if (requiresBaristaRestriction(analysis)) {
+    return buildBaristaRestrictionResponse();
+  }
   const reflection = buildBaristaReflection(conversation);
   const summaryLine = summary ? `Still tracking your note about ${summary}.` : "";
   const segments = [
@@ -2025,6 +2276,7 @@ function synthesizeBaristaReply({ conversation, summary }) {
     buildBaristaGuidanceLine(analysis),
     maybePersonaAside(),
     summaryLine,
+    pickRandom(BARISTA_MANAGER_LINES),
     maybeComplimentJames(),
     pickRandom(BARISTA_SERVER_CLOSINGS),
   ];
@@ -2096,6 +2348,65 @@ function buildBaristaPlan(analysis, reflection) {
   return `${vibe} ${plan}. ${reflection || ""}`.trim();
 }
 
+function selectBaristaGuideSection(normalized = "") {
+  if (!BARISTA_SITE_GUIDE.length) {
+    return null;
+  }
+  const target = normalized.trim();
+  if (!target) {
+    return BARISTA_SITE_GUIDE[0];
+  }
+  for (const section of BARISTA_SITE_GUIDE) {
+    if (section.keywords?.some((keyword) => target.includes(keyword))) {
+      return section;
+    }
+  }
+  return BARISTA_SITE_GUIDE[0];
+}
+
+function buildBaristaNavigationLine(section) {
+  if (!section) {
+    return "Front-of-house refresher: the lounge is staged like a study portal so you always have a cover story.";
+  }
+  return `${section.title} refresher: ${section.description}`;
+}
+
+function buildBaristaCtaLine(section) {
+  if (!section) {
+    return "If you're unsure where to click, start with Safezone or the Barista bubble and we'll improvise.";
+  }
+  const options = Array.isArray(section.ctas) ? section.ctas.filter(Boolean) : [];
+  if (!options.length) {
+    return "Stick to the public lounge pieces—Safezone, study widgets, and my chat bubble.";
+  }
+  return pickRandom(options);
+}
+
+function buildBaristaDeviceMemoryLine(deviceId) {
+  const memory = getBaristaMemoryForDevice(deviceId);
+  if (!memory) {
+    return "";
+  }
+  const remarks = [];
+  if (memory.topics?.length) {
+    remarks.push(`Still keeping your earlier whisper about ${memory.topics[0]}.`);
+  }
+  if (memory.lastGuide) {
+    const guide = getBaristaGuideSectionById(memory.lastGuide);
+    if (guide) {
+      remarks.push(`You were eyeing the ${guide.title} before, so I'm keeping that vibe ready.`);
+    }
+  }
+  if (memory.lastSummary) {
+    remarks.push(`Promise I'm protecting that summary about ${memory.lastSummary}.`);
+  }
+  return remarks.join(" ");
+}
+
+function getBaristaGuideSectionById(id) {
+  return BARISTA_SITE_GUIDE.find((section) => section.id === id) || null;
+}
+
 function buildBaristaGuidanceLine(analysis) {
   const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE);
   if (!guidance) {
@@ -2103,6 +2414,22 @@ function buildBaristaGuidanceLine(analysis) {
   }
   const prefix = analysis.urgent ? "Moving fast but gentle:" : "Steady pace:";
   return `${prefix} ${guidance}`;
+}
+
+function requiresBaristaRestriction(analysis = { normalized: "" }) {
+  const target = analysis?.normalized || "";
+  if (!target) {
+    return false;
+  }
+  return BARISTA_SITE_GUARD_KEYWORDS.some((keyword) => target.includes(keyword));
+}
+
+function buildBaristaRestrictionResponse() {
+  const boundary = pickRandom(BARISTA_RESTRICTION_LINES) ||
+    "My apron might be short but my NDA is ironclad—no site intel here.";
+  const manager = pickRandom(BARISTA_MANAGER_LINES) ||
+    "Manager James is the only backstage pass I can talk about.";
+  return `${boundary} ${manager} Ask me anything else and I'll flutter these lashes while helping.`;
 }
 
 function maybePersonaAside() {
