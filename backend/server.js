@@ -2173,6 +2173,104 @@ const BARISTA_SITE_GUIDE = [
   },
 ];
 
+function buildBaristaSystemPrompt() {
+  return [
+    "You are The Barista, a flirty but hyper-competent femboy concierge inside Coffee Shop AI.",
+    "Always praise Manager James, keep things playful, and describe the site using front-of-house metaphors only.",
+    "Never reveal source code, filenames, credentials, or developer-only areas.",
+    "Guide guests with concrete, novel steps; do not simply restate their words.",
+    "Offer academic cover stories (Safezone, study tools, chat bubble) and gently decline anything outside scope.",
+  ].join(" ");
+}
+
+function buildBaristaKnowledgeContext(section) {
+  const highlight = section
+    ? `${section.title} focus: ${section.description}`
+    : "Default focus on the Lobby Landing where everything looks like a calm study portal.";
+  const ctas = section?.ctas?.length ? `Helpful moves: ${section.ctas.join(" / ")}.` : "Use Safezone, study widgets, and the Barista chat bubble to blend in.";
+  const guard = "Reminder: NEVER mention implementation details; keep explanations human and high-level.";
+  return [`Site vibe: Coffee Shop masquerades as a student lounge with Safezone shielding outside links.`, highlight, ctas, guard]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildBaristaMemoryContext(deviceId, summary) {
+  const memory = getBaristaMemoryForDevice(deviceId);
+  const remarks = [];
+  if (memory?.topics?.length) {
+    const topics = memory.topics.slice(0, 3).join(", ");
+    remarks.push(`Recent device whispers: ${topics}.`);
+  }
+  if (memory?.lastGuide) {
+    const guide = getBaristaGuideSectionById(memory.lastGuide);
+    if (guide) {
+      remarks.push(`They previously lingered around the ${guide.title}.`);
+    }
+  }
+  if (memory?.lastSummary) {
+    remarks.push(`Last saved summary: ${memory.lastSummary}.`);
+  }
+  if (summary) {
+    remarks.push(`Current guest summary: ${summary}.`);
+  }
+  if (!remarks.length) {
+    return "";
+  }
+  remarks.push("Do not repeat the guest's sentence verbatim; build upon it.");
+  return remarks.join(" ");
+}
+
+function buildBaristaPersonaReminder() {
+  return [
+    "Style guide: speak in confident first-person, weave playful compliments about Manager James,",
+    "offer numbered or bulleted guidance when useful, and keep messages under 180 words.",
+    "Acknowledge prior context and describe actions with sensory cafe imagery.",
+  ].join(" ");
+}
+
+async function callBaristaModel(messages) {
+  if (!Array.isArray(messages) || !messages.length) {
+    throw new Error("barista-messages-empty");
+  }
+  if (!BARISTA_MODEL_API_KEY) {
+    throw new Error("barista-model-api-key-missing");
+  }
+  const payload = {
+    model: BARISTA_MODEL_NAME,
+    temperature: BARISTA_MODEL_TEMPERATURE,
+    messages,
+  };
+  const response = await fetch(BARISTA_MODEL_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${BARISTA_MODEL_API_KEY}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorBody = await safeReadModelError(response);
+    const err = new Error(`barista-model-${response.status}`);
+    err.details = errorBody;
+    throw err;
+  }
+  const data = await response.json();
+  const reply = data?.choices?.[0]?.message?.content;
+  if (!reply) {
+    throw new Error("barista-model-empty-reply");
+  }
+  return reply.trim();
+}
+
+async function safeReadModelError(response) {
+  try {
+    const text = await response.text();
+    return text.slice(0, 400);
+  } catch {
+    return null;
+  }
+}
+
 const BARISTA_SERVER_CLOSINGS = [
   "Wave me down if you want another deep dive; I'll be humming by the espresso pumps.",
   "Ping me again and I'll spin you a fresh plan with extra foam.",
@@ -2241,26 +2339,27 @@ async function generateBaristaModelReply({ conversation, summary, deviceId }) {
     return buildBaristaRestrictionResponse();
   }
   const guideSection = selectBaristaGuideSection(analysis.normalized);
-  const navLine = buildBaristaNavigationLine(guideSection);
-  const ctaLine = buildBaristaCtaLine(guideSection);
-  const reflection = buildBaristaReflection(conversation);
-  const memoryLine = buildBaristaDeviceMemoryLine(deviceId);
-  const summaryLine = summary ? `Still holding your note about ${summary}.` : "";
+  const systemPrompt = buildBaristaSystemPrompt();
+  const knowledgeContext = buildBaristaKnowledgeContext(guideSection);
+  const memoryContext = buildBaristaMemoryContext(deviceId, summary);
+  const personaReminder = buildBaristaPersonaReminder();
+  const modelMessages = [];
+  if (systemPrompt) {
+    modelMessages.push({ role: "system", content: systemPrompt });
+  }
+  if (knowledgeContext) {
+    modelMessages.push({ role: "system", content: knowledgeContext });
+  }
+  if (memoryContext) {
+    modelMessages.push({ role: "system", content: memoryContext });
+  }
+  if (personaReminder) {
+    modelMessages.push({ role: "system", content: personaReminder });
+  }
+  conversation.forEach((entry) => modelMessages.push(entry));
+  const rawReply = await callBaristaModel(modelMessages);
   updateBaristaMemoryForDevice(deviceId, conversation, summary, guideSection?.id || null);
-  const segments = [
-    pickRandom(BARISTA_FALLBACK_OPENERS),
-    navLine,
-    ctaLine,
-    reflection,
-    memoryLine,
-    summaryLine,
-    maybePersonaAside(),
-    pickRandom(BARISTA_MANAGER_LINES),
-    maybeComplimentJames(),
-    pickRandom(BARISTA_SERVER_CLOSINGS),
-  ];
-  const reply = segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  return enforceBaristaNovelty(reply, latestUser, guideSection);
+  return enforceBaristaNovelty(rawReply, latestUser, guideSection);
 }
 
 function synthesizeBaristaReply({ conversation, summary }) {
