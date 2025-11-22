@@ -21,12 +21,22 @@ class VirtualCPU {
         this.speedGhz = speedGhz;
         this.load = new Array(cores).fill(0);
         this.temperature = 45; // Celsius
+        this.thermalThrottle = false;
     }
 
     tick() {
         // Simulate load fluctuation
         this.load = this.load.map(l => Math.max(0, Math.min(100, l + (Math.random() * 10 - 5))));
         this.temperature = 40 + (this.getAverageLoad() * 0.5);
+        
+        // Thermal throttling simulation
+        if (this.temperature > 90) {
+            this.thermalThrottle = true;
+            this.speedGhz = Math.max(0.8, this.speedGhz * 0.9);
+        } else if (this.temperature < 60 && this.thermalThrottle) {
+            this.thermalThrottle = false;
+            this.speedGhz = 3.2; // Reset to base clock
+        }
     }
 
     getAverageLoad() {
@@ -38,16 +48,25 @@ class VirtualRAM {
     constructor(sizeGb = 16) {
         this.total = sizeGb * 1024 * 1024 * 1024;
         this.used = 0;
+        this.swapUsed = 0;
     }
 
     allocate(bytes) {
-        if (this.used + bytes > this.total) return false;
+        if (this.used + bytes > this.total) {
+            // Simulate swap usage
+            this.swapUsed += bytes;
+            return true; 
+        }
         this.used += bytes;
         return true;
     }
 
     free(bytes) {
-        this.used = Math.max(0, this.used - bytes);
+        if (this.swapUsed > 0) {
+            this.swapUsed = Math.max(0, this.swapUsed - bytes);
+        } else {
+            this.used = Math.max(0, this.used - bytes);
+        }
     }
 }
 
@@ -56,6 +75,47 @@ class VirtualGPU {
         this.model = model;
         this.vram = 8 * 1024; // MB
         this.utilization = 0;
+        this.driverVersion = "536.23";
+    }
+}
+
+// --- Network Stack Simulation ---
+
+class VirtualNetworkInterface {
+    constructor(config) {
+        this.ip = config.ip;
+        this.mac = config.mac;
+        this.bandwidthMbps = config.bandwidthMbps || 100;
+        this.latencyBaseMs = config.latencyBaseMs || 20;
+        this.jitterMs = config.jitterMs || 5;
+        this.packetLossRate = 0.001; // 0.1%
+        this.bytesSent = 0;
+        this.bytesReceived = 0;
+        this.activeConnections = 0;
+        this.dnsCache = new Map();
+    }
+
+    async resolveDns(hostname) {
+        if (this.dnsCache.has(hostname)) {
+            return this.dnsCache.get(hostname);
+        }
+        // Simulate DNS lookup time
+        await new Promise(r => setTimeout(r, 10 + Math.random() * 40));
+        const ip = `104.21.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+        this.dnsCache.set(hostname, ip);
+        return ip;
+    }
+
+    async transmit(bytes) {
+        this.bytesSent += bytes;
+        const transmissionTime = (bytes * 8) / (this.bandwidthMbps * 1000000) * 1000;
+        await new Promise(r => setTimeout(r, transmissionTime));
+    }
+
+    async receive(bytes) {
+        this.bytesReceived += bytes;
+        const transmissionTime = (bytes * 8) / (this.bandwidthMbps * 1000000) * 1000;
+        await new Promise(r => setTimeout(r, transmissionTime));
     }
 }
 
@@ -76,9 +136,11 @@ class VirtualFileSystem {
         this.mkdir("/home/user");
         this.mkdir("/home/user/Downloads");
         this.mkdir("/home/user/Documents");
+        this.mkdir("/home/user/.cache");
         this.mkdir("/var");
         this.mkdir("/var/log");
         this.mkdir("/tmp");
+        this.mkdir("/etc");
     }
 
     mkdir(path) {
@@ -161,35 +223,85 @@ class ProcessManager {
 
 // --- Browser Simulation ---
 
+class FingerprintManager {
+    constructor(platform) {
+        this.platform = platform;
+        this.canvasHash = randomUUID();
+        this.audioHash = randomUUID();
+        this.webglRenderer = this._getWebGLRenderer();
+        this.screenResolution = this._getScreenResolution();
+    }
+
+    _getWebGLRenderer() {
+        const renderers = [
+            "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            "ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        ];
+        return renderers[Math.floor(Math.random() * renderers.length)];
+    }
+
+    _getScreenResolution() {
+        const res = ["1920x1080", "2560x1440", "1366x768", "3840x2160"];
+        return res[Math.floor(Math.random() * res.length)];
+    }
+}
+
 class VirtualBrowserTab extends EventEmitter {
-    constructor(id, userAgent) {
+    constructor(id, userAgent, fingerprint) {
         super();
         this.id = id;
         this.userAgent = userAgent;
+        this.fingerprint = fingerprint;
         this.url = "about:blank";
         this.title = "New Tab";
         this.history = [];
         this.cookies = new Map(); // Domain -> Cookie[]
         this.state = "idle"; // idle, loading, rendering
+        this.domNodes = 0;
     }
 
-    async navigate(url, networkStack) {
+    async navigate(url, networkStack, fileSystem) {
         this.state = "loading";
         this.emit("load-start", url);
         
         try {
+            // DNS Lookup Simulation
+            const hostname = new URL(url).hostname;
+            await networkStack.resolveDns(hostname);
+
+            // Connection Handshake Simulation
+            await networkStack.transmit(500); // SYN
+            await networkStack.receive(500);  // SYN-ACK
+            await networkStack.transmit(500); // ACK
+
             const response = await networkStack.fetch(url, {
-                headers: { "User-Agent": this.userAgent }
+                headers: { 
+                    "User-Agent": this.userAgent,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Sec-Ch-Ua-Platform": `"${this.fingerprint.platform}"`,
+                    "Sec-Ch-Ua-Mobile": "?0",
+                    "Upgrade-Insecure-Requests": "1"
+                }
             });
             
             this.url = url;
-            this.title = url; // Simplified
+            this.title = url; 
             this.history.push(url);
             this.state = "rendering";
             
-            // Simulate rendering time
-            await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+            // Simulate rendering time based on content size
+            const contentLength = Number(response.headers.get("content-length")) || 50000;
+            const renderTime = Math.min(2000, contentLength / 100); // 1ms per 100 bytes
+            await new Promise(r => setTimeout(r, renderTime));
             
+            // Heuristic Analysis (Simulated DOM parsing)
+            this.domNodes = Math.floor(contentLength / 200);
+            
+            // Cache resources to virtual disk
+            fileSystem.writeFile(`/home/user/.cache/${encodeURIComponent(url)}.html`, "<html>...cached content...</html>");
+
             this.state = "idle";
             this.emit("load-finish", url);
             return response;
@@ -225,23 +337,23 @@ export class VirtualPC extends EventEmitter {
         };
 
         // Network
-        this.network = {
+        this.network = new VirtualNetworkInterface({
             ip: config.ip || this._randomizeIp(),
             mac: this._randomizeMac(),
-            latencyBaseMs: Math.floor(Math.random() * 40) + 10,
-            jitterMs: Math.floor(Math.random() * 5),
-            bytesSent: 0,
-            bytesReceived: 0
-        };
+            bandwidthMbps: config.bandwidthMbps || 100
+        });
+        // Monkey-patch fetch onto network interface for internal use
+        this.network.fetch = this._internalFetch.bind(this);
 
         // User Space (Browser)
+        this.fingerprint = new FingerprintManager(this.platform);
         this.browser = {
             name: "Chrome",
             version: "122.0.0.0",
             userAgent: this._generateUserAgent(this.platform),
             tabs: new Map(),
             activeTabId: null,
-            extensions: ["uBlock Origin", "Tampermonkey"],
+            extensions: ["uBlock Origin", "Tampermonkey", "React Developer Tools"],
             bookmarks: []
         };
 
@@ -271,7 +383,7 @@ export class VirtualPC extends EventEmitter {
 
     _openNewTab() {
         const tabId = randomUUID();
-        const tab = new VirtualBrowserTab(tabId, this.browser.userAgent);
+        const tab = new VirtualBrowserTab(tabId, this.browser.userAgent, this.fingerprint);
         this.browser.tabs.set(tabId, tab);
         this.browser.activeTabId = tabId;
         return tab;
@@ -281,8 +393,9 @@ export class VirtualPC extends EventEmitter {
         // Simulate OS tasks like indexing, updates, etc.
         const tasks = ["Windows Update", "Search Indexer", "Antivirus Scan", "Telemetry Upload"];
         const task = tasks[Math.floor(Math.random() * tasks.length)];
-        // console.log(`[VirtualPC ${this.id}] Background task: ${task}`);
         this.cpu.load[0] += 20; // Spike CPU
+        this.ram.allocate(1024 * 1024 * 50); // Allocate 50MB
+        setTimeout(() => this.ram.free(1024 * 1024 * 50), 5000); // Free after 5s
     }
 
     /**
@@ -294,35 +407,14 @@ export class VirtualPC extends EventEmitter {
         let tab = this.browser.tabs.get(this.browser.activeTabId);
         if (!tab) tab = this._openNewTab();
 
-        // Simulate network conditions
-        await this._simulateNetworkDelay();
-
-        // Execute request
+        // Execute request via Tab -> Network Stack
         const start = Date.now();
         try {
-            // We use the tab to navigate, but we return the raw response for the proxy
-            // In a full simulation, the tab would render and we'd return the screenshot/DOM.
-            // Here we are a proxy, so we return the stream.
-            
-            // Merge headers
-            const headers = new Headers(options.headers);
-            headers.set("User-Agent", this.browser.userAgent);
-            headers.set("X-Forwarded-For", this.network.ip); // Simulate proxy chain if needed, or hide it
-            
-            // Add realistic headers based on platform
-            this._enrichHeaders(headers);
-
-            const response = await fetch(url, {
-                ...options,
-                headers,
-                redirect: "manual"
-            });
+            const response = await tab.navigate(url, this.network, this.fs);
 
             // Update stats
             const duration = Date.now() - start;
-            this.network.bytesSent += (options.body ? options.body.length : 0) || 0;
-            this.network.bytesReceived += Number(response.headers.get("content-length")) || 0;
-
+            
             // Log to filesystem
             this.fs.writeFile(
                 `/var/log/browser_history.log`, 
@@ -336,18 +428,25 @@ export class VirtualPC extends EventEmitter {
         }
     }
 
-    _enrichHeaders(headers) {
-        headers.set("Sec-Ch-Ua-Platform", `"${this.platform}"`);
-        headers.set("Sec-Ch-Ua-Mobile", "?0");
-        headers.set("Accept-Language", "en-US,en;q=0.9");
-        if (!headers.has("Accept")) {
-            headers.set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+    async _internalFetch(url, options) {
+        // This is the actual fetch call to the outside world
+        // In a real VM, this would be the network driver sending packets
+        
+        // Simulate packet loss
+        if (Math.random() < this.network.packetLossRate) {
+            await new Promise(r => setTimeout(r, 1000)); // Retry delay
         }
-    }
 
-    async _simulateNetworkDelay() {
-        const delay = this.network.latencyBaseMs + (Math.random() * this.network.jitterMs);
-        await new Promise(r => setTimeout(r, delay));
+        const response = await fetch(url, {
+            ...options,
+            redirect: "manual"
+        });
+        
+        // Track bandwidth
+        const bodySize = Number(response.headers.get("content-length")) || 0;
+        this.network.receive(bodySize);
+        
+        return response;
     }
 
     // --- Randomization ---
@@ -382,11 +481,13 @@ export class VirtualPC extends EventEmitter {
             cpu: {
                 cores: this.cpu.cores,
                 load: this.cpu.load.map(l => Math.round(l)),
-                temp: Math.round(this.cpu.temperature)
+                temp: Math.round(this.cpu.temperature),
+                throttled: this.cpu.thermalThrottle
             },
             ram: {
                 total: this.ram.total,
-                used: this.ram.used
+                used: this.ram.used,
+                swap: this.ram.swapUsed
             },
             network: {
                 ip: this.network.ip,
@@ -394,11 +495,16 @@ export class VirtualPC extends EventEmitter {
                 traffic: {
                     sent: this.network.bytesSent,
                     received: this.network.bytesReceived
-                }
+                },
+                activeConnections: this.network.activeConnections
             },
             browser: {
                 tabs: this.browser.tabs.size,
-                activeTab: this.browser.activeTabId
+                activeTab: this.browser.activeTabId,
+                fingerprint: {
+                    resolution: this.fingerprint.screenResolution,
+                    renderer: this.fingerprint.webglRenderer
+                }
             },
             processes: this.proc.processes.size
         };

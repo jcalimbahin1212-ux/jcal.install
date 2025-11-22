@@ -48,7 +48,49 @@ export class NginxLikeController extends EventEmitter {
         console.log("[NginxController] Initializing server manager...");
         this._loadDefaultConfig();
         this._spawnWorkers();
+        this._startHealthCheck();
         this.status = "ready";
+    }
+
+    _startHealthCheck() {
+        setInterval(() => {
+            this.workers.forEach((worker, id) => {
+                const diag = worker.getDiagnostics();
+                
+                // Check for thermal throttling
+                if (diag.cpu.throttled) {
+                    console.warn(`[NginxController] Worker ${id} is thermal throttling. Cooling down...`);
+                    // Temporarily remove from rotation or just log
+                }
+
+                // Check for "crash" (high load + high temp + errors)
+                if (diag.cpu.temp > 95) {
+                    console.error(`[NginxController] Worker ${id} OVERHEATED. Initiating emergency reboot.`);
+                    this._rebootWorker(id);
+                }
+            });
+        }, 5000);
+    }
+
+    _rebootWorker(id) {
+        const oldWorker = this.workers.get(id);
+        if (!oldWorker) return;
+
+        console.log(`[NginxController] Rebooting worker ${id}...`);
+        const newWorker = new VirtualPC({
+            id: id,
+            platform: oldWorker.platform,
+            // Inherit some config but reset state
+        });
+        this.workers.set(id, newWorker);
+        
+        // Update upstreams
+        this.upstreams.forEach(upstream => {
+            const idx = upstream.workers.findIndex(w => w.id === id);
+            if (idx !== -1) {
+                upstream.workers[idx] = newWorker;
+            }
+        });
     }
 
     _loadDefaultConfig() {
@@ -219,11 +261,33 @@ export class NginxLikeController extends EventEmitter {
     }
 
     _loadBalance(upstream) {
-        // Simple Round Robin
-        if (!upstream.cursor) upstream.cursor = 0;
-        const worker = upstream.workers[upstream.cursor];
-        upstream.cursor = (upstream.cursor + 1) % upstream.workers.length;
-        return worker;
+        // Smart Load Balancing: Least Connections / Lowest Load
+        let bestWorker = null;
+        let minScore = Infinity;
+
+        for (const worker of upstream.workers) {
+            const diag = worker.getDiagnostics();
+            
+            // Skip if throttled or overheated
+            if (diag.cpu.throttled || diag.cpu.temp > 90) continue;
+
+            // Score = Active Connections + (CPU Load / 10)
+            const score = diag.network.activeConnections + (diag.cpu.load.reduce((a,b)=>a+b,0) / diag.cpu.cores / 10);
+            
+            if (score < minScore) {
+                minScore = score;
+                bestWorker = worker;
+            }
+        }
+
+        // Fallback to Round Robin if all are busy/hot
+        if (!bestWorker) {
+            if (!upstream.cursor) upstream.cursor = 0;
+            bestWorker = upstream.workers[upstream.cursor];
+            upstream.cursor = (upstream.cursor + 1) % upstream.workers.length;
+        }
+
+        return bestWorker;
     }
 
     // --- Configuration Management ---
