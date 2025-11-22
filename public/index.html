@@ -19,7 +19,7 @@
         <p class="auth-card__eyebrow">Coffee Shop Access</p>
         <h1 id="auth-title">Access required</h1>
         <p class="auth-card__lead">Enter the Coffee Shop access code to continue.</p>
-        <form id="auth-form" autocomplete="off">
+        <form id="auth-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="auth-code" class="sr-only">Access code</label>
           <input
             id="auth-code"
@@ -40,7 +40,7 @@
         <p class="auth-card__eyebrow">Coffee Shop ID</p>
         <h1>Choose a username</h1>
         <p class="auth-card__lead">Pick a unique name so we can build your private workspace.</p>
-        <form id="username-form" autocomplete="off">
+        <form id="username-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="username-input" class="sr-only">Username</label>
           <input id="username-input" type="text" autocomplete="off" placeholder="Enter username" required />
           <button type="submit">Save username</button>
@@ -54,7 +54,7 @@
         <p class="auth-card__eyebrow">Coffee Shop dev</p>
         <h1>Identity check</h1>
         <p>Enter the stage-two developer code.</p>
-        <form id="bridge-form" autocomplete="off">
+        <form id="bridge-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="bridge-code" class="sr-only">Stage-two code</label>
           <input
             id="bridge-code"
@@ -75,7 +75,7 @@
         <p class="auth-card__eyebrow">Coffee Shop dev</p>
         <h1>Developer console</h1>
         <p>Enter the developer access code to continue.</p>
-        <form id="dev-form" autocomplete="off">
+        <form id="dev-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="dev-code" class="sr-only">Developer access code</label>
           <input
             id="dev-code"
@@ -108,7 +108,7 @@
         <div id="barista-messages" class="barista-messages" aria-live="polite">
           Tap out your first order to start chatting.
         </div>
-        <form id="barista-form" class="barista-form" autocomplete="off">
+        <form id="barista-form" class="barista-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="barista-input" class="sr-only">Message The Barista</label>
           <input id="barista-input" type="text" placeholder="Ask The Barista anything…" maxlength="320" />
           <button type="submit">Send</button>
@@ -129,7 +129,7 @@
           A hazel-toned hideout that pours every request through our Safezone roastery. Slow-sip comfort, fast escapes.
         </p>
 
-        <form id="portal-form" class="portal" autocomplete="off">
+        <form id="portal-form" class="portal" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="destination" class="sr-only">Enter a URL or search query</label>
           <input
             id="destination"
@@ -350,7 +350,7 @@
             </article>
             <article>
               <h3>Broadcast</h3>
-              <form id="dev-broadcast-form" class="dev-broadcast">
+              <form id="dev-broadcast-form" class="dev-broadcast" onsubmit="event.preventDefault();">
                 <label class="sr-only" for="dev-broadcast-input">Broadcast message</label>
                 <textarea id="dev-broadcast-input" placeholder="Type system message…" rows="3"></textarea>
                 <button type="submit">Send broadcast</button>
@@ -402,7 +402,7 @@
       <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
       <section class="chat-bar" aria-label="Coffee Shop global chat">
         <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat…</div>
-        <form id="chat-form" class="chat-bar__form" autocomplete="off">
+        <form id="chat-form" class="chat-bar__form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="chat-input" class="sr-only">Chat message</label>
           <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop…" maxlength="280" />
           <button type="submit">Send</button>

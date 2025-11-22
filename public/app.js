@@ -345,7 +345,7 @@ function initializeChatBar() {
   setChatVisibility(false);
   selectors.chatToggle?.addEventListener("click", () => toggleChatVisibility());
   connectChatStream();
-  selectors.chatForm.addEventListener("submit", handleChatSubmit);
+  // selectors.chatForm.addEventListener("submit", handleChatSubmit);
 }
 
 function toggleChatVisibility() {
@@ -470,7 +470,7 @@ function initializeBaristaAssistant() {
   renderBaristaMessages();
   selectors.baristaToggle.addEventListener("click", () => toggleBaristaPanel());
   selectors.baristaClose?.addEventListener("click", () => toggleBaristaPanel(false));
-  selectors.baristaForm?.addEventListener("submit", handleBaristaSubmit);
+  // selectors.baristaForm?.addEventListener("submit", handleBaristaSubmit);
   document.addEventListener("keydown", (event) => {
     if (event.code === "Escape" && baristaSession.open) {
       toggleBaristaPanel(false);
@@ -864,40 +864,8 @@ function registerEventHandlers() {
     });
   });
 
-  selectors.form?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const rawValue = selectors.input?.value.trim() ?? "";
-    if (!rawValue) {
-      setStatus("Type something first.", true);
-      return;
-    }
+  // Portal form handler moved to global delegation
 
-    try {
-      const meta = {};
-      const targetUrl = buildNavigationTarget(rawValue, meta);
-      stampNavigationTokens(meta, { renew: true });
-      const intent = meta.intent;
-      meta.transport = resolveTransportForIntent(intent);
-      const order = buildServiceOrder(userSelectedService, intent);
-      lastNavigation = {
-        targetUrl,
-        rawInput: rawValue,
-        order,
-        index: 0,
-        meta,
-      };
-      cancelActiveServiceAttempt();
-      launchWithService(order[0], targetUrl, { meta });
-
-      if (persistHistory) {
-        localStorage.setItem(historyKey, rawValue);
-      }
-      setStatus(`Launching via ${services[activeService].name}...`);
-      selectors.form.reset();
-    } catch (error) {
-      setStatus(error.message || "Unable to build that request.", true);
-    }
-  });
 
   selectors.frame?.addEventListener("load", () => {
     const proxyError = inspectFrameForProxyError();
@@ -1034,8 +1002,8 @@ function registerEventHandlers() {
   selectors.devUserList?.addEventListener("click", handleDevUserActionClick);
   selectors.devDeviceList?.addEventListener("click", handleDevDeviceActionClick);
   selectors.devBannedList?.addEventListener("click", handleDevBannedActionClick);
-  selectors.devBroadcastForm?.addEventListener("submit", handleDevBroadcastSubmit);
-  selectors.usernameForm?.addEventListener("submit", handleUsernameSubmit);
+  // selectors.devBroadcastForm?.addEventListener("submit", handleDevBroadcastSubmit);
+  // selectors.usernameForm?.addEventListener("submit", handleUsernameSubmit);
   selectors.devLauncher?.addEventListener("click", () => {
     if (document.body.classList.contains("dev-mode")) {
       enableDevDashboard();
@@ -1059,6 +1027,16 @@ function registerEventHandlers() {
       handleBridgeSubmit(event);
     } else if (event.target && event.target.id === "dev-form") {
       handleDevAuthSubmit(event);
+    } else if (event.target && event.target.id === "username-form") {
+      handleUsernameSubmit(event);
+    } else if (event.target && event.target.id === "barista-form") {
+      handleBaristaSubmit(event);
+    } else if (event.target && event.target.id === "chat-form") {
+      handleChatSubmit(event);
+    } else if (event.target && event.target.id === "dev-broadcast-form") {
+      handleDevBroadcastSubmit(event);
+    } else if (event.target && event.target.id === "portal-form") {
+      handlePortalSubmit(event);
     }
   });
 
@@ -1882,6 +1860,67 @@ function handleDevCacheActionClick(event) {
   }
 }
 
+function handleDevBroadcastSubmit(event) {
+  event.preventDefault();
+  if (!selectors.devBroadcastInput) return;
+  const text = selectors.devBroadcastInput.value.trim();
+  if (!text) {
+    selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Enter a message first.");
+    return;
+  }
+  fetch("/dev/chat/broadcast", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      text,
+      author: userIdentity?.username || "[dev]",
+    }),
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("send-failed");
+      selectors.devBroadcastInput.value = "";
+      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast sent.");
+    })
+    .catch(() => {
+      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast failed.");
+    });
+}
+
+function handlePortalSubmit(event) {
+    event.preventDefault();
+    const rawValue = selectors.input?.value.trim() ?? "";
+    if (!rawValue) {
+      setStatus("Type something first.", true);
+      return;
+    }
+
+    try {
+      const meta = {};
+      const targetUrl = buildNavigationTarget(rawValue, meta);
+      stampNavigationTokens(meta, { renew: true });
+      const intent = meta.intent;
+      meta.transport = resolveTransportForIntent(intent);
+      const order = buildServiceOrder(userSelectedService, intent);
+      lastNavigation = {
+        targetUrl,
+        rawInput: rawValue,
+        order,
+        index: 0,
+        meta,
+      };
+      cancelActiveServiceAttempt();
+      launchWithService(order[0], targetUrl, { meta });
+
+      if (persistHistory) {
+        localStorage.setItem(historyKey, rawValue);
+      }
+      setStatus(`Launching via ${services[activeService].name}...`);
+      selectors.form.reset();
+    } catch (error) {
+      setStatus(error.message || "Unable to build that request.", true);
+    }
+}
+
 async function refreshDevDeviceList() {
   if (!selectors.devDeviceList || !document.body.classList.contains("dev-mode")) return;
   try {
@@ -2033,6 +2072,29 @@ async function sendDevUserAction(uid, action, payload = {}) {
   } catch (error) {
     console.error("[CoffeeShop] dev user action failed", error);
   }
+}
+
+function handleDevUserActionClick(event) {
+  const button = event.target.closest("[data-user-action]");
+  if (!button) return;
+  const container = button.closest(".dev-user-entry");
+  const uid = container?.dataset.uid;
+  const action = button.dataset.userAction;
+  if (!uid || !action) {
+    return;
+  }
+  if (action === "rename") {
+    const currentName = container?.dataset.username || "";
+    const proposed = window.prompt("Enter new username for this UID:", currentName);
+    const sanitized = sanitizeUsername(proposed || "");
+    if (!sanitized || sanitized.length < 3) {
+      setStatus("Username must be at least 3 characters for rename.", true);
+      return;
+    }
+    sendDevUserAction(uid, action, { username: sanitized });
+    return;
+  }
+  sendDevUserAction(uid, action);
 }
 
 async function refreshDevLogList() {
