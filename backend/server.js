@@ -12,6 +12,13 @@ import { WebSocketServer, WebSocket } from "ws";
 import { NginxLikeController } from "./simulation/NginxLikeController.js";
 import SmartCache from "./simulation/SmartCache.js";
 
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+
 const SAFEZONE_OP = {
   OPEN: "OPEN",
   HEADERS: "HEADERS",
@@ -59,7 +66,42 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const jsonParser = express.json({ limit: "50kb" });
-fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
+
+// --- FILESYSTEM ROBUSTNESS WRAPPER ---
+const fsSafe = {
+  async mkdir(path, options) {
+    try {
+      await fs.mkdir(path, options);
+    } catch (error) {
+      if (error.code !== "EEXIST" && error.code !== "EROFS" && error.code !== "EACCES") {
+        console.warn(`[fsSafe] mkdir failed for ${path}:`, error.message);
+      }
+    }
+  },
+  async readFile(path, encoding) {
+    try {
+      return await fs.readFile(path, encoding);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.warn(`[fsSafe] readFile failed for ${path}:`, error.message);
+      }
+      throw error;
+    }
+  },
+  async writeFile(path, data) {
+    try {
+      await fs.writeFile(path, data);
+    } catch (error) {
+      if (error.code === "EROFS" || error.code === "EACCES") {
+        // Read-only filesystem: ignore write
+        return;
+      }
+      console.warn(`[fsSafe] writeFile failed for ${path}:`, error.message);
+    }
+  }
+};
+
+fsSafe.mkdir(DATA_DIR, { recursive: true });
 loadBannedCacheKeys().catch((error) => {
   console.error("[coffeeshop] failed to load banned caches", error);
 });
@@ -1273,6 +1315,18 @@ app.use((req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error("[Express] Unhandled Error:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({
+    error: "Internal Server Error",
+    message: process.env.NODE_ENV === "production" ? "An unexpected error occurred." : err.message,
+  });
+});
+
 server.listen(PORT, () => {
   console.log(`Coffee Shop backend online at http://localhost:${PORT}`);
 });
@@ -1810,22 +1864,22 @@ function summarizeMetrics() {
 
 async function loadBannedCacheKeys() {
   try {
-    const raw = await fs.readFile(BANNED_CACHE_PATH, "utf8");
+    const raw = await fsSafe.readFile(BANNED_CACHE_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       parsed.forEach((key) => bannedCacheKeys.add(key));
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      throw error;
+      console.warn("Failed to load banned cache keys:", error.message);
     }
   }
 }
 
 async function persistBannedCacheKeys() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(BANNED_CACHE_PATH, JSON.stringify([...bannedCacheKeys]), "utf8");
+    await fsSafe.mkdir(DATA_DIR, { recursive: true });
+    await fsSafe.writeFile(BANNED_CACHE_PATH, JSON.stringify([...bannedCacheKeys]), "utf8");
   } catch (error) {
     console.error("[coffeeshop] failed to persist banned caches", error);
   }
@@ -1833,7 +1887,7 @@ async function persistBannedCacheKeys() {
 
 async function loadUserRegistry() {
   try {
-    const raw = await fs.readFile(USERS_PATH, "utf8");
+    const raw = await fsSafe.readFile(USERS_PATH, "utf8");
     const parsed = JSON.parse(raw);
     let entries = null;
     if (parsed && typeof parsed === "object") {
@@ -1856,19 +1910,19 @@ async function loadUserRegistry() {
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      throw error;
+      console.warn("Failed to load user registry:", error.message);
     }
   }
 }
 
 async function persistUserRegistry() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fsSafe.mkdir(DATA_DIR, { recursive: true });
     const payload = {
       version: USER_REGISTRY_VERSION,
       entries: Object.fromEntries(userRegistry.entries()),
     };
-    await fs.writeFile(USERS_PATH, JSON.stringify(payload), "utf8");
+    await fsSafe.writeFile(USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
     console.error("[coffeeshop] failed to persist user registry", error);
   }
@@ -1876,7 +1930,7 @@ async function persistUserRegistry() {
 
 async function loadUserLogs() {
   try {
-    const raw = await fs.readFile(LOGS_PATH, "utf8");
+    const raw = await fsSafe.readFile(LOGS_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       parsed.forEach((entry) => {
@@ -1887,15 +1941,15 @@ async function loadUserLogs() {
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      throw error;
+      console.warn("Failed to load user logs:", error.message);
     }
   }
 }
 
 async function persistUserLogs() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(LOGS_PATH, JSON.stringify(userLogs.slice(-MAX_LOG_ENTRIES)), "utf8");
+    await fsSafe.mkdir(DATA_DIR, { recursive: true });
+    await fsSafe.writeFile(LOGS_PATH, JSON.stringify(userLogs.slice(-MAX_LOG_ENTRIES)), "utf8");
   } catch (error) {
     console.error("[coffeeshop] failed to persist user logs", error);
   }
@@ -1903,7 +1957,7 @@ async function persistUserLogs() {
 
 async function loadBannedUsers() {
   try {
-    const raw = await fs.readFile(BANNED_USERS_PATH, "utf8");
+    const raw = await fsSafe.readFile(BANNED_USERS_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       parsed.forEach((entry) => {
@@ -1916,21 +1970,21 @@ async function loadBannedUsers() {
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      throw error;
+      console.warn("Failed to load banned users:", error.message);
     }
   }
 }
 
 async function persistBannedUsers() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fsSafe.mkdir(DATA_DIR, { recursive: true });
     const payload = Array.from(bannedUsers.values()).map((entry) => ({
       uid: entry.uid,
       username: entry.username || null,
       timestamp: entry.timestamp || Date.now(),
       deviceId: entry.deviceId || null,
     }));
-    await fs.writeFile(BANNED_USERS_PATH, JSON.stringify(payload), "utf8");
+    await fsSafe.writeFile(BANNED_USERS_PATH, JSON.stringify(payload), "utf8");
   } catch (error) {
     console.error("[coffeeshop] failed to persist banned users", error);
   }
@@ -2023,7 +2077,7 @@ async function loadScientistMemoryStore() {
 
 async function persistScientistMemoryStore() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fsSafe.mkdir(DATA_DIR, { recursive: true });
     const payload = {};
     for (const [deviceId, entry] of SCIENTIST_MEMORY_STORE.entries()) {
       payload[deviceId] = {
@@ -2033,7 +2087,7 @@ async function persistScientistMemoryStore() {
         updatedAt: entry.updatedAt || Date.now(),
       };
     }
-    await fs.writeFile(SCIENTIST_MEMORY_PATH, JSON.stringify(payload, null, 2), "utf8");
+    await fsSafe.writeFile(SCIENTIST_MEMORY_PATH, JSON.stringify(payload, null, 2), "utf8");
   } catch (error) {
     console.error("[astracore] failed to persist scientist memories", error);
   }
