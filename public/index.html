@@ -419,6 +419,69 @@
       </div>
     </div>
 
+    <button id="proxy-manager-toggle" class="proxy-manager-toggle" type="button">
+        Proxy Manager
+      </button>
+
+      <section id="proxy-manager-panel" class="proxy-manager-panel" aria-hidden="true">
+        <header class="proxy-manager-panel__header">
+          <h2>Proxy Manager</h2>
+          <button id="proxy-manager-close" class="proxy-manager-panel__close" type="button" aria-label="Close Proxy Manager">
+            &times;
+          </button>
+        </header>
+        
+        <div class="proxy-manager-content">
+          <p class="subtle">Select a relay node to route your traffic. If one is blocked, try another.</p>
+          
+          <div class="proxy-node-list" role="radiogroup" aria-label="Proxy Nodes">
+            <div class="proxy-node is-active" data-node="us-east-1" role="radio" aria-checked="true" tabindex="0">
+              <div class="proxy-node__info">
+                <h3>US East (Virginia)</h3>
+                <p>Low latency, standard routing.</p>
+              </div>
+              <span class="proxy-node__status">Online</span>
+            </div>
+            
+            <div class="proxy-node" data-node="eu-west-1" role="radio" aria-checked="false" tabindex="0">
+              <div class="proxy-node__info">
+                <h3>EU West (Ireland)</h3>
+                <p>Alternative route, higher latency.</p>
+              </div>
+              <span class="proxy-node__status">Online</span>
+            </div>
+            
+            <div class="proxy-node" data-node="ap-northeast-1" role="radio" aria-checked="false" tabindex="0">
+              <div class="proxy-node__info">
+                <h3>Asia Pacific (Tokyo)</h3>
+                <p>Bypass regional blocks.</p>
+              </div>
+              <span class="proxy-node__status">Online</span>
+            </div>
+
+             <div class="proxy-node" data-node="stealth-v2" role="radio" aria-checked="false" tabindex="0">
+              <div class="proxy-node__info">
+                <h3>Stealth V2 (Experimental)</h3>
+                <p>Obfuscated headers, slower but safer.</p>
+              </div>
+              <span class="proxy-node__status">Beta</span>
+            </div>
+          </div>
+
+          <div class="comfort" style="margin-top: 2rem;">
+             <h3>Anti-Blocking Measures</h3>
+             <label class="toggle">
+                <input type="checkbox" id="stealth-headers" checked>
+                <span>Strip Tracking Headers</span>
+             </label>
+             <label class="toggle">
+                <input type="checkbox" id="rotate-user-agent">
+                <span>Rotate User-Agent</span>
+             </label>
+          </div>
+        </div>
+      </section>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>

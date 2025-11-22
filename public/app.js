@@ -158,6 +158,12 @@ const selectors = {
   baristaInput: document.querySelector("#barista-input"),
   baristaStatus: document.querySelector("#barista-status"),
   baristaClose: document.querySelector("#barista-close"),
+  proxyManagerToggle: document.querySelector("#proxy-manager-toggle"),
+  proxyManagerPanel: document.querySelector("#proxy-manager-panel"),
+  proxyManagerClose: document.querySelector("#proxy-manager-close"),
+  proxyNodes: document.querySelectorAll(".proxy-node"),
+  stealthHeadersToggle: document.querySelector("#stealth-headers"),
+  rotateUaToggle: document.querySelector("#rotate-user-agent"),
 };
 
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
@@ -1860,32 +1866,6 @@ function handleDevCacheActionClick(event) {
   }
 }
 
-function handleDevBroadcastSubmit(event) {
-  event.preventDefault();
-  if (!selectors.devBroadcastInput) return;
-  const text = selectors.devBroadcastInput.value.trim();
-  if (!text) {
-    selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Enter a message first.");
-    return;
-  }
-  fetch("/dev/chat/broadcast", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      text,
-      author: userIdentity?.username || "[dev]",
-    }),
-  })
-    .then((response) => {
-      if (!response.ok) throw new Error("send-failed");
-      selectors.devBroadcastInput.value = "";
-      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast sent.");
-    })
-    .catch(() => {
-      selectors.devBroadcastStatus && (selectors.devBroadcastStatus.textContent = "Broadcast failed.");
-    });
-}
-
 async function refreshDevDeviceList() {
   if (!selectors.devDeviceList || !document.body.classList.contains("dev-mode")) return;
   try {
@@ -1927,7 +1907,7 @@ function handleDevDeviceActionClick(event) {
   fetch(`/dev/devices/${encodeURIComponent(deviceId)}/action`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action: action }),
   })
     .then(() => refreshDevDeviceList())
     .catch(() => setStatus("Device action failed.", true));
@@ -2037,29 +2017,6 @@ async function sendDevUserAction(uid, action, payload = {}) {
   } catch (error) {
     console.error("[CoffeeShop] dev user action failed", error);
   }
-}
-
-function handleDevUserActionClick(event) {
-  const button = event.target.closest("[data-user-action]");
-  if (!button) return;
-  const container = button.closest(".dev-user-entry");
-  const uid = container?.dataset.uid;
-  const action = button.dataset.userAction;
-  if (!uid || !action) {
-    return;
-  }
-  if (action === "rename") {
-    const currentName = container?.dataset.username || "";
-    const proposed = window.prompt("Enter new username for this UID:", currentName);
-    const sanitized = sanitizeUsername(proposed || "");
-    if (!sanitized || sanitized.length < 3) {
-      setStatus("Username must be at least 3 characters for rename.", true);
-      return;
-    }
-    sendDevUserAction(uid, action, { username: sanitized });
-    return;
-  }
-  sendDevUserAction(uid, action);
 }
 
 async function refreshDevLogList() {
@@ -3083,4 +3040,62 @@ function clearInjectedUserScript() {
   if (!selectors.frame || !selectors.frame.contentDocument) return;
   const existing = selectors.frame.contentDocument.getElementById("coffeeshop-userscript");
   existing?.remove();
+}
+
+// Proxy Manager functions
+function toggleProxyManager(open) {
+  if (!selectors.proxyManagerPanel) return;
+  selectors.proxyManagerPanel.classList.toggle("is-open", open);
+  selectors.proxyManagerPanel.setAttribute("aria-hidden", !open);
+}
+
+function selectProxyNode(nodeId, notify = true) {
+  if (!nodeId) return;
+  
+  selectors.proxyNodes.forEach(node => {
+    const isActive = node.dataset.node === nodeId;
+    node.classList.toggle("is-active", isActive);
+    node.setAttribute("aria-checked", isActive);
+  });
+
+  localStorage.setItem("coffeeshop:proxy-node", nodeId);
+  
+  if (notify) {
+    setStatus(`Switched to proxy node: ${nodeId}`);
+  }
+}
+
+selectors.proxyManagerToggle?.addEventListener("click", () => toggleProxyManager(true));
+selectors.proxyManagerClose?.addEventListener("click", () => toggleProxyManager(false));
+
+selectors.proxyNodes.forEach(node => {
+  node.addEventListener("click", () => {
+    selectProxyNode(node.dataset.node);
+  });
+  node.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      selectProxyNode(node.dataset.node);
+    }
+  });
+});
+
+selectors.stealthHeadersToggle?.addEventListener("change", (e) => {
+  localStorage.setItem("coffeeshop:stealth-headers", e.target.checked);
+  setStatus(e.target.checked ? "Stealth headers enabled." : "Stealth headers disabled.");
+});
+
+selectors.rotateUaToggle?.addEventListener("change", (e) => {
+  localStorage.setItem("coffeeshop:rotate-ua", e.target.checked);
+  setStatus(e.target.checked ? "User-Agent rotation enabled." : "User-Agent rotation disabled.");
+});
+
+// Initialize Proxy Manager state
+const savedNode = localStorage.getItem("coffeeshop:proxy-node") || "us-east-1";
+selectProxyNode(savedNode, false);
+
+if (selectors.stealthHeadersToggle) {
+  selectors.stealthHeadersToggle.checked = localStorage.getItem("coffeeshop:stealth-headers") !== "false";
+}
+if (selectors.rotateUaToggle) {
+  selectors.rotateUaToggle.checked = localStorage.getItem("coffeeshop:rotate-ua") === "true";
 }

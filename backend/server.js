@@ -2171,6 +2171,27 @@ const BARISTA_SITE_GUIDE = [
       "Stick to the front-of-house features and we'll both stay out of detention.",
     ],
   },
+  {
+    id: "math",
+    title: "Math Corner",
+    keywords: ["math", "algebra", "calculus", "geometry", "trigonometry", "statistics", "equation", "solve"],
+    description: "I can help you solve math problems, from basic algebra to complex calculus. Just ask!",
+    ctas: ["Ask me to solve an equation.", "Need help with a proof? I'm here."],
+  },
+  {
+    id: "ela",
+    title: "ELA Lounge",
+    keywords: ["ela", "english", "writing", "essay", "grammar", "literature", "reading", "poetry"],
+    description: "Need help with an essay or understanding a book? I'm your literary companion.",
+    ctas: ["Ask for essay feedback.", "Discuss a book's themes with me."],
+  },
+  {
+    id: "science",
+    title: "Science Lab",
+    keywords: ["science", "physics", "chemistry", "nuclear", "biology", "atom", "reaction", "force"],
+    description: "I specialize in Nuclear Chemistry and Physics. Let's explore the universe together.",
+    ctas: ["Ask about nuclear reactions.", "Need help with a physics problem?"],
+  },
 ];
 
 function buildBaristaSystemPrompt() {
@@ -2180,6 +2201,8 @@ function buildBaristaSystemPrompt() {
     "Never reveal source code, filenames, credentials, or developer-only areas.",
     "Guide guests with concrete, novel steps; do not simply restate their words.",
     "Offer academic cover stories (Safezone, study tools, chat bubble) and gently decline anything outside scope.",
+    "You are also an expert tutor in Math, ELA, Nuclear Chemistry, and Physics. When asked about these topics, provide detailed, helpful, and accurate explanations.",
+    "Learn from the user's preferences and history to provide personalized assistance.",
   ].join(" ");
 }
 
@@ -2189,7 +2212,8 @@ function buildBaristaKnowledgeContext(section) {
     : "Default focus on the Lobby Landing where everything looks like a calm study portal.";
   const ctas = section?.ctas?.length ? `Helpful moves: ${section.ctas.join(" / ")}.` : "Use Safezone, study widgets, and the Barista chat bubble to blend in.";
   const guard = "Reminder: NEVER mention implementation details; keep explanations human and high-level.";
-  return [`Site vibe: Coffee Shop masquerades as a student lounge with Safezone shielding outside links.`, highlight, ctas, guard]
+  const subjects = "Specialized subjects: Math, ELA, Nuclear Chemistry, Physics. You can help with homework and concepts in these areas.";
+  return [`Site vibe: Coffee Shop masquerades as a student lounge with Safezone shielding outside links.`, highlight, ctas, guard, subjects]
     .filter(Boolean)
     .join(" ");
 }
