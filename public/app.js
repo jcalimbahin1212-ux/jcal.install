@@ -301,6 +301,7 @@ if (selectors.autoBlankToggle) {
 bootstrapSession();
 
 function bootstrapSession() {
+  registerEventHandlers();
   enforceLocalBanGate().then((blocked) => {
     if (blocked) {
       return;
@@ -321,7 +322,6 @@ function continueSessionBootstrap() {
     startUserStatusMonitor(true);
   }
   hydrateHistoryPreference();
-  registerEventHandlers();
   watchMissionBox();
   updateActiveService(activeService);
   registerServiceWorker();
@@ -1052,6 +1052,8 @@ function registerEventHandlers() {
     window.setTimeout(() => selectors.bridgeInput?.focus(), 100);
   });
 
+  selectors.authForm?.addEventListener("submit", handleAuthSubmit);
+
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
   selectors.diagPing?.addEventListener("click", () => runHealthPing());
@@ -1113,7 +1115,6 @@ function startAuthFlow() {
   selectors.authOverlay?.classList.remove("is-hidden");
   selectors.authError && (selectors.authError.textContent = "");
   selectors.authError?.classList.remove("is-visible");
-  selectors.authForm?.addEventListener("submit", handleAuthSubmit);
   window.setTimeout(() => selectors.authInput?.focus(), 100);
 }
 
@@ -1142,7 +1143,6 @@ function handleAuthSubmit(event) {
 
 function releaseAuthGate() {
   clearLockoutScreen();
-  selectors.authForm?.removeEventListener("submit", handleAuthSubmit);
   const overlayNode = selectors.authOverlay;
   if (overlayNode) {
     overlayNode.classList.add("is-hidden");
