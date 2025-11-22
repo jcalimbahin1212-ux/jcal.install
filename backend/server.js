@@ -10,6 +10,7 @@ import { promises as fs } from "node:fs";
 import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
 import { NginxLikeController } from "./simulation/NginxLikeController.js";
+import SmartCache from "./simulation/SmartCache.js";
 
 const SAFEZONE_OP = {
   OPEN: "OPEN",
@@ -52,6 +53,7 @@ const ADMIN_HEADER = "x-coffeeshop-admin";
 const REQUEST_ID_HEADER = "x-coffeeshop-request-id";
 
 const nginxController = new NginxLikeController();
+const smartCache = new SmartCache(path.join(DATA_DIR, "smart-cache"));
 
 const app = express();
 const server = createServer(app);
@@ -681,6 +683,23 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
     throw new ProxyError(451, "Cache access blocked by administrator.", "cache-banned");
   }
   if (cacheKey) {
+    const smartEntry = await smartCache.get(targetUrl.href);
+    if (smartEntry) {
+      metrics.cacheHits += 1;
+      return respondWithContext(
+        {
+          status: smartEntry.status,
+          headers: smartEntry.headers,
+          body: smartEntry.content,
+          fromCache: true,
+          renderer: "smart-cache",
+        },
+        targetUrl,
+        context,
+        { renderer: "smart-cache", status: smartEntry.status }
+      );
+    }
+
     const cached = cacheStore.get(cacheKey);
     if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
       metrics.cacheHits += 1;
@@ -775,6 +794,7 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
           renderer: "direct",
           user: context.user,
         });
+        smartCache.set(targetUrl.href, bodyBuffer, contentType, headers, upstream.status);
       }
       recordDomainSuccess(targetUrl.hostname);
       return respondWithContext(
@@ -804,6 +824,7 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
           renderer: "direct",
           user: context.user,
         });
+        smartCache.set(targetUrl.href, bodyBuffer, contentType, headers, upstream.status);
       }
       recordDomainSuccess(targetUrl.hostname);
       return respondWithContext(
@@ -820,6 +841,32 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
     }
 
     if (upstream.body) {
+      const cType = (contentType || "").toLowerCase();
+      const isCacheableAsset = cType.includes("image") || cType.includes("javascript") || cType.includes("font");
+
+      if (isCacheableAsset && ENABLE_CACHE) {
+        const buffer = await upstream.arrayBuffer();
+        const bodyBuffer = Buffer.from(buffer);
+
+        setHeaderValue(headers, "x-renderer", "direct");
+
+        // Save to SmartCache
+        smartCache.set(targetUrl.href, bodyBuffer, contentType, headers, upstream.status);
+
+        recordDomainSuccess(targetUrl.hostname);
+        return respondWithContext(
+          {
+            status: upstream.status,
+            headers,
+            body: bodyBuffer,
+            renderer: "direct",
+          },
+          targetUrl,
+          context,
+          { renderer: "direct", status: upstream.status }
+        );
+      }
+
       setHeaderValue(headers, "x-renderer", "direct");
       recordDomainSuccess(targetUrl.hostname);
       return respondWithContext(
@@ -1547,6 +1594,10 @@ function rewriteHtmlDocument(html, baseUrl, context = {}) {
     $("html").prepend("<head></head>");
   }
   const head = $("head").first();
+  
+  // Inject Interceptor Script
+  head.prepend('<script src="/interceptor.js"></script>');
+
   const headMeta = [
     ["coffeeshop-request-id", context.requestId],
     ["coffeeshop-renderer", context.renderer || "direct"],
@@ -2221,6 +2272,8 @@ function buildBaristaSystemPrompt() {
     "You are also an expert tutor in Math, ELA, Nuclear Chemistry, and Physics. When asked about these topics, provide detailed, helpful, and accurate explanations.",
     "Learn from the user's preferences and history to provide personalized assistance.",
     "Respond directly to the user's intent without preamble or echoing their input.",
+    "If asked about performance, brag about the new 'Virtual PC' engine that simulates thermal throttling, network jitter, and browser fingerprinting to keep guests safe.",
+    "Mention that the 'Nginx Controller' now auto-heals overheated workers and balances load based on CPU temps.",
   ].join(" ");
 }
 
@@ -2515,619 +2568,69 @@ function selectBaristaGuideSection(normalized = "") {
 
 function buildBaristaNavigationLine(section) {
   if (!section) {
-    return "Front-of-house refresher: the lounge is staged like a study portal so you always have a cover story.";
+    return "Front-of-house refresher: the lounge is staged like a study portal with a big banner and soft colors.";
   }
-  return `${section.title} refresher: ${section.description}`;
+  const verbs = ["pivot", "glide", "swing", "sashay", "sprint"];
+  const randomVerb = pickRandom(verbs);
+  return `Quick ${randomVerb} to the ${section.title}—${section.description}`;
 }
 
 function buildBaristaCtaLine(section) {
-  if (!section) {
-    return "If you're unsure where to click, start with Safezone or the Barista bubble and we'll improvise.";
-  }
-  const options = Array.isArray(section.ctas) ? section.ctas.filter(Boolean) : [];
-  if (!options.length) {
-    return "Stick to the public lounge pieces—Safezone, study widgets, and my chat bubble.";
-  }
-  return pickRandom(options);
-}
-
-function buildBaristaDeviceMemoryLine(deviceId) {
-  const memory = getBaristaMemoryForDevice(deviceId);
-  if (!memory) {
+  if (!section?.ctas?.length) {
     return "";
   }
-  const remarks = [];
-  if (memory.topics?.length) {
-    remarks.push(`Still keeping your earlier whisper about ${memory.topics[0]}.`);
-  }
-  if (memory.lastGuide) {
-    const guide = getBaristaGuideSectionById(memory.lastGuide);
-    if (guide) {
-      remarks.push(`You were eyeing the ${guide.title} before, so I'm keeping that vibe ready.`);
-    }
-  }
-  if (memory.lastSummary) {
-    remarks.push(`Promise I'm protecting that summary about ${memory.lastSummary}.`);
-  }
-  return remarks.join(" ");
-}
-
-function getBaristaGuideSectionById(id) {
-  return BARISTA_SITE_GUIDE.find((section) => section.id === id) || null;
-}
-
-function enforceBaristaNovelty(reply, latestUser, guideSection) {
-  if (!reply) {
-    return reply;
-  }
-  if (!isBaristaParroting(reply, latestUser)) {
-    return reply;
-  }
-  return buildBaristaNeutralReply(guideSection);
-}
-
-function isBaristaParroting(reply, latestUser) {
-  if (!reply || !latestUser) {
-    return false;
-  }
-  const replyTokens = normalizeBaristaTokens(reply);
-  const userTokens = normalizeBaristaTokens(latestUser);
-  if (!replyTokens.length || !userTokens.length) {
-    return false;
-  }
-  const userSet = new Set(userTokens);
-  let overlap = 0;
-  replyTokens.forEach((token) => {
-    if (userSet.has(token)) {
-      overlap += 1;
-    }
-  });
-  return overlap >= 3 && overlap / replyTokens.length >= 0.45;
-}
-
-function normalizeBaristaTokens(text = "") {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length >= 4);
-}
-
-function buildBaristaNeutralReply(guideSection) {
-  const section = guideSection || BARISTA_SITE_GUIDE[0] || null;
-  const segments = [
-    pickRandom(BARISTA_FALLBACK_OPENERS),
-    section ? buildBaristaNavigationLine(section) : "This lounge is strictly front-of-house for you and me, honey.",
-    section ? buildBaristaCtaLine(section) : "Stick to Safezone, the study widgets, and my chat bubble—those are our playgrounds.",
-    maybePersonaAside(),
-    pickRandom(BARISTA_MANAGER_LINES),
-    maybeComplimentJames(),
-    pickRandom(BARISTA_SERVER_CLOSINGS),
-  ];
-  return segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const cta = pickRandom(section.ctas);
+  return `Helpful move: ${cta}`;
 }
 
 function buildBaristaGuidanceLine(analysis) {
-  const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE);
-  if (!guidance) {
-    return "";
+  const { urgent, curious, frustrated } = analysis;
+  const guidance = [];
+  if (urgent) {
+    guidance.push("Stay calm and tackle one thing at a time.");
   }
-  const prefix = analysis.urgent ? "Moving fast but gentle:" : "Steady pace:";
-  return `${prefix} ${guidance}`;
-}
-
-function requiresBaristaRestriction(analysis = { normalized: "" }) {
-  const target = analysis?.normalized || "";
-  if (!target) {
-    return false;
+  if (curious) {
+    guidance.push("Dig deeper, but keep it under wraps.");
   }
-  return BARISTA_SITE_GUARD_KEYWORDS.some((keyword) => target.includes(keyword));
-}
-
-function buildBaristaRestrictionResponse() {
-  const boundary = pickRandom(BARISTA_RESTRICTION_LINES) ||
-    "My apron might be short but my NDA is ironclad—no site intel here.";
-  const manager = pickRandom(BARISTA_MANAGER_LINES) ||
-    "Manager James is the only backstage pass I can talk about.";
-  return `${boundary} ${manager} Ask me anything else and I'll flutter these lashes while helping.`;
+  if (frustrated) {
+    guidance.push("Take a breath, these things happen.");
+  }
+  return guidance.length ? `Guidance: ${guidance.join(" ")}` : "";
 }
 
 function maybePersonaAside() {
-  if (Math.random() < 0.45) {
-    return pickRandom(BARISTA_PERSONA_ASIDES);
-  }
-  return "";
+  return Math.random() < 0.5 ? pickRandom(BARISTA_PERSONA_ASIDES) : "";
 }
 
 function maybeComplimentJames() {
-  if (Math.random() < 0.65) {
-    return pickRandom(BARISTA_FALLBACK_COMPLIMENTS);
-  }
-  return "";
+  return Math.random() < 0.5 ? pickRandom(BARISTA_FALLBACK_COMPLIMENTS) : "";
 }
 
-function generateFallbackBaristaReply(messages, summary) {
-  const latest = messages[messages.length - 1]?.content || "";
-  const topic = summarizeSimpleTopic(latest);
-  const opener = pickRandom(BARISTA_FALLBACK_OPENERS) || "Here's the plan,";
-  const guidance = pickRandom(BARISTA_FALLBACK_GUIDANCE) || "keep an even pour and stay nimble.";
-  const guideSection = selectBaristaGuideSection(latest.toLowerCase());
-  const navLine = buildBaristaNavigationLine(guideSection);
-  const ctaLine = buildBaristaCtaLine(guideSection);
-  const compliment = Math.random() < 0.6 ? pickRandom(BARISTA_FALLBACK_COMPLIMENTS) : "";
-  const memory = summary ? `I'm still keeping tabs on your note about ${summary}.` : "";
-  const topicLine = topic ? `As for ${topic}, ${guidance}` : guidance;
-  const reply = [opener, navLine, ctaLine, topicLine, compliment, memory, "Ping me if you want another refill."]
-    .filter(Boolean)
-    .join(" ");
-  return enforceBaristaNovelty(reply, latest, guideSection);
+function enforceBaristaNovelty(reply, latestUserMessage, guideSection) {
+  const lowerReply = reply.toLowerCase();
+  const isRepetitive = lowerReply.includes("you said") || lowerReply.includes("previously") || lowerReply.includes("again");
+  const isOnTopic = guideSection.keywords?.some((keyword) => lowerReply.includes(keyword)) || false;
+  if (isRepetitive && isOnTopic) {
+    return `${reply} And remember, I'm here to keep things running smoothly and discreetly.`;
+  }
+  return reply;
+}
+
+function pickRandom(array = []) {
+  if (!array.length) {
+    return null;
+  }
+  const index = Math.floor(Math.random() * array.length);
+  return array[index];
 }
 
 function summarizeSimpleTopic(text = "") {
-  return text
-    .split(/\s+/)
-    .slice(0, 8)
-    .join(" ")
-    .trim();
-}
-
-function pickRandom(list) {
-  if (!Array.isArray(list) || !list.length) {
+  const lower = text.toLowerCase().trim();
+  if (!lower) {
     return "";
   }
-  return list[Math.floor(Math.random() * list.length)];
+  const firstWord = lower.split(" ")[0];
+  const isQuestion = /\?$/.test(lower);
+  const base = isQuestion ? "inquiring about" : "interested in";
+  return `${base} ${firstWord}`;
 }
-
-function buildDuckLiteHeaders() {
-  const headers = {
-    "user-agent":
-      process.env.POWERTHROUGH_HEADLESS_UA ||
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
-    "accept-language": "en-US,en;q=0.9",
-    referer: "https://duckduckgo.com/",
-  };
-  if (duckLiteSession.cookie) {
-    headers.cookie = duckLiteSession.cookie;
-  }
-  return headers;
-}
-
-function updateDuckLiteCookies(response) {
-  const setCookies = response.headers?.getSetCookie?.() || [];
-  if (!setCookies.length) {
-    return;
-  }
-  const parsed = [];
-  setCookies.forEach((entry) => {
-    const [pair] = entry.split(";");
-    if (pair) {
-      parsed.push(pair.trim());
-    }
-  });
-  if (parsed.length) {
-    duckLiteSession.cookie = parsed.join("; ");
-    duckLiteSession.lastUpdated = Date.now();
-  }
-}
-
-async function fetchDuckLiteResults(term, attempt = 0) {
-  const upstreamUrl = new URL("https://html.duckduckgo.com/html/");
-  upstreamUrl.searchParams.set("q", term);
-  upstreamUrl.searchParams.set("ia", "web");
-  upstreamUrl.searchParams.set("t", "coffeeshop");
-  upstreamUrl.searchParams.set("kl", "us-en");
-  const response = await fetch(upstreamUrl, {
-    headers: buildDuckLiteHeaders(),
-    redirect: "follow",
-  });
-  updateDuckLiteCookies(response);
-  if (!response.ok) {
-    throw new Error(`duckduckgo responded with ${response.status}`);
-  }
-  const html = await response.text();
-  if (/bots use duckduckgo too/i.test(html) && attempt < 2) {
-    duckLiteSession.cookie = "";
-    return fetchDuckLiteResults(term, attempt + 1);
-  }
-  return { html, upstreamUrl };
-}
-
-function buildCoffeeShopUrl(target) {
-  return `/powerthrough?url=${encodeURIComponent(target)}`;
-}
-
-function normalizeTargetUrl(input) {
-  try {
-    return new URL(input);
-  } catch {
-    if (looksLikeDomain(input)) {
-      return new URL(`https://${input}`);
-    }
-    return new URL(`https://duckduckgo.com/?q=${encodeURIComponent(input)}`);
-  }
-}
-
-function getFirstQueryValue(value) {
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
-}
-
-function generateDeviceId() {
-  return `dev-${Math.random().toString(36).slice(2, 7)}${Date.now().toString(36).slice(-5)}`;
-}
-
-function parseCookies(header = "") {
-  return header
-    .split(";")
-    .map((pair) => pair.trim())
-    .filter(Boolean)
-    .reduce((acc, pair) => {
-      const [key, ...rest] = pair.split("=");
-      if (!key) return acc;
-      acc[key.trim()] = rest.join("=").trim();
-      return acc;
-    }, {});
-}
-
-function appendSetCookie(res, cookie) {
-  if (!cookie) return;
-  const existing = res.getHeader("Set-Cookie");
-  if (!existing) {
-    res.setHeader("Set-Cookie", cookie);
-  } else if (Array.isArray(existing)) {
-    existing.push(cookie);
-    res.setHeader("Set-Cookie", existing);
-  } else {
-    res.setHeader("Set-Cookie", [existing, cookie]);
-  }
-}
-
-function buildDeviceCookie(deviceId) {
-  return `${DEVICE_COOKIE_NAME}=${deviceId}; Path=/; Max-Age=${DEVICE_COOKIE_MAX_AGE}; SameSite=Lax`;
-}
-
-function safeWriteSse(res, payload) {
-  try {
-    res.write(payload);
-  } catch {
-    // ignore broken connection
-  }
-}
-
-function sanitizeChatMessage(value) {
-  if (!value) return "";
-  return value.toString().trim().replace(/\s+/g, " ").slice(0, 320);
-}
-
-function appendChatMessage(entry) {
-  const message = {
-    id: entry.id || `chat-${Date.now().toString(36)}-${(chatMessageCounter += 1).toString(16)}`,
-    uid: entry.uid || null,
-    username: entry.username || "anonymous",
-    text: entry.text,
-    deviceId: entry.deviceId || null,
-    system: Boolean(entry.system),
-    timestamp: Date.now(),
-  };
-  chatMessages.push(message);
-  if (chatMessages.length > CHAT_MAX_MESSAGES) {
-    chatMessages.splice(0, chatMessages.length - CHAT_MAX_MESSAGES);
-  }
-  persistChatMessages();
-  broadcastChatMessage(message);
-  return message;
-}
-
-function broadcastChatMessage(message) {
-  const payload = `data: ${JSON.stringify([message])}\n\n`;
-  chatStreamClients.forEach((client) => safeWriteSse(client.res, payload));
-}
-
-function sanitizeLimit(value, defaultValue = null, min = 1, max = 500) {
-  if (value === undefined || value === null || value === "") {
-    return defaultValue;
-  }
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return defaultValue;
-  }
-  const clamped = Math.max(min, Math.min(max, Math.floor(numeric)));
-  return clamped;
-}
-
-function normalizeBoolean(value) {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) return false;
-    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
-  }
-  return Boolean(value);
-}
-
-function sanitizeUid(value) {
-  if (!value) return "";
-  return value.toString().trim().slice(0, 40);
-}
-
-function sanitizeUsernameInput(value) {
-  if (!value) return "";
-  return value.toString().replace(/[^a-z0-9_\- ]/gi, "").trim().slice(0, 32);
-}
-
-function normalizeAliasToken(value) {
-  const sanitized = sanitizeUsernameInput(value);
-  return normalizedAliasFromSanitized(sanitized);
-}
-
-function isUidBanned(uid) {
-  if (!uid) {
-    return false;
-  }
-  return bannedUsers.has(uid);
-}
-
-function isUsernameBanned(username) {
-  const alias = normalizeAliasToken(username);
-  if (!alias) {
-    return false;
-  }
-  return bannedAliases.has(alias);
-}
-
-function ingestBanEntry(uid, username, timestamp = Date.now(), deviceId = null) {
-  if (!uid) return;
-  const sanitized = sanitizeUsernameInput(username);
-  const alias = normalizedAliasFromSanitized(sanitized);
-  const normalizedDevice = deviceId ? sanitizeUid(deviceId) : null;
-  bannedUsers.set(uid, {
-    uid,
-    username: sanitized || null,
-    alias: alias || null,
-    timestamp,
-    deviceId: normalizedDevice,
-  });
-  if (alias) {
-    bannedAliases.add(alias);
-  }
-  if (normalizedDevice) {
-    bannedDeviceIds.add(normalizedDevice);
-  }
-}
-
-function normalizedAliasFromSanitized(value) {
-  return value ? value.toLowerCase() : "";
-}
-
-function rememberBanEntry(uid, username, deviceId) {
-  ingestBanEntry(uid, username, Date.now(), deviceId);
-  persistBannedUsers();
-  if (deviceId) {
-    banDeviceId(deviceId);
-  }
-}
-
-function forgetBanEntry(uid) {
-  const entry = bannedUsers.get(uid);
-  if (!entry) {
-    return;
-  }
-  if (entry.alias) {
-    let aliasStillUsed = false;
-    for (const other of bannedUsers.values()) {
-      if (other.uid !== uid && other.alias === entry.alias) {
-        aliasStillUsed = true;
-        break;
-      }
-    }
-    if (!aliasStillUsed) {
-      bannedAliases.delete(entry.alias);
-    }
-  }
-  bannedUsers.delete(uid);
-  persistBannedUsers();
-  maybeUnbanDeviceId(entry.deviceId);
-}
-
-function maybeUnbanDeviceId(deviceId) {
-  if (!deviceId) return;
-  for (const entry of bannedUsers.values()) {
-    if (entry.deviceId === deviceId) {
-      return;
-    }
-  }
-  unbanDeviceId(deviceId);
-}
-
-function getRegistryUsername(uid) {
-  const entry = userRegistry.get(uid);
-  return entry?.username || null;
-}
-
-function getRegistryDeviceId(uid) {
-  const entry = userRegistry.get(uid);
-  return entry?.deviceId || null;
-}
-
-function isDeviceBanned(deviceId) {
-  if (!deviceId) {
-    return false;
-  }
-  return bannedDeviceIds.has(deviceId);
-}
-
-function banDeviceId(deviceId) {
-  const normalized = sanitizeUid(deviceId);
-  if (!normalized) {
-    return;
-  }
-  bannedDeviceIds.add(normalized);
-  persistBannedDeviceIds();
-}
-
-function unbanDeviceId(deviceId) {
-  const normalized = sanitizeUid(deviceId);
-  if (!normalized) {
-    return;
-  }
-  bannedDeviceIds.delete(normalized);
-  persistBannedDeviceIds();
-}
-
-function forgetDeviceOnlyBan(deviceId) {
-  if (!deviceId) return;
-  let changed = false;
-  for (const [uid, info] of bannedUsers.entries()) {
-    if (info.deviceId === deviceId) {
-      bannedUsers.delete(uid);
-      changed = true;
-    }
-  }
-  if (changed) {
-    persistBannedUsers();
-  }
-}
-
-function recordUserLog(entry) {
-  if (!entry?.uid) {
-    return;
-  }
-  const logEntry = {
-    uid: entry.uid,
-    username:
-      entry.username || userRegistry.get(entry.uid)?.username || "unknown",
-    deviceId: entry.deviceId || userRegistry.get(entry.uid)?.deviceId || null,
-    target: entry.target || "",
-    intent: entry.intent || "url",
-    renderer: entry.renderer || "direct",
-    timestamp: entry.timestamp || Date.now(),
-    status: entry.status || 200,
-  };
-  userLogs.push(logEntry);
-  if (userLogs.length > MAX_LOG_ENTRIES) {
-    userLogs.splice(0, userLogs.length - MAX_LOG_ENTRIES);
-  }
-  persistUserLogs();
-  const registryEntry = userRegistry.get(entry.uid) || {};
-  registryEntry.username = logEntry.username;
-  registryEntry.deviceId = logEntry.deviceId || registryEntry.deviceId || null;
-  registryEntry.lastSeen = logEntry.timestamp;
-  userRegistry.set(entry.uid, registryEntry);
-  persistUserRegistry();
-}
-
-function looksLikeDomain(value) {
-  return /^[^\s]+\.[a-z]{2,}$/i.test(value);
-}
-
-function isBlockedHost(hostname) {
-  if (blockedHosts.has(hostname.toLowerCase())) {
-    return true;
-  }
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
-    return isPrivateIpv4(hostname);
-  }
-  return false;
-}
-
-function isPrivateIpv4(ip) {
-  const parts = ip.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
-    return false;
-  }
-  const [a, b] = parts;
-  if (a === 10) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  return false;
-}
-
-function pruneCache() {
-  purgeExpiredCacheEntries();
-  enforceCacheCapacity();
-}
-
-function purgeExpiredCacheEntries() {
-  const now = Date.now();
-  for (const [key, value] of cacheStore.entries()) {
-    if (value.expiresAt && value.expiresAt <= now) {
-      cacheStore.delete(key);
-    }
-  }
-}
-
-function enforceCacheCapacity() {
-  if (cacheStore.size <= CACHE_MAX_ENTRIES) {
-    return;
-  }
-  while (cacheStore.size > CACHE_MAX_ENTRIES) {
-    const oldestKey = cacheStore.keys().next().value;
-    if (!oldestKey) {
-      break;
-    }
-    cacheStore.delete(oldestKey);
-    metrics.cacheEvictions += 1;
-  }
-}
-
-async function renderWithHeadless(targetUrl) {
-  const chromium = await loadChromium();
-  if (!chromium) {
-    throw new Error("Headless rendering requested but Playwright is unavailable.");
-  }
-  metrics.headlessActive += 1;
-  let browser;
-  try {
-    browser = await chromium.launch({
-      headless: true,
-      args: ["--disable-dev-shm-usage", "--no-sandbox"],
-    });
-    const context = await browser.newContext({
-      userAgent:
-        process.env.POWERTHROUGH_HEADLESS_UA ||
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
-      viewport: { width: 1366, height: 768 },
-    });
-    const page = await context.newPage();
-    await page.goto(targetUrl.href, {
-      waitUntil: "networkidle",
-      timeout: Number(process.env.POWERTHROUGH_HEADLESS_TIMEOUT ?? 30_000),
-    });
-    const body = await page.content();
-    await browser.close();
-    metrics.headlessActive -= 1;
-    return {
-      status: 200,
-      headers: [["content-type", "text/html; charset=utf-8"]],
-      body,
-    };
-  } catch (error) {
-    metrics.headlessActive -= 1;
-    metrics.headlessFailures += 1;
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-    throw error;
-  }
-}
-
-async function loadChromium() {
-  if (!chromiumLoader) {
-    chromiumLoader = import("playwright")
-      .then((mod) => mod.chromium)
-      .catch((error) => {
-        console.error(
-          "[coffeeshop] Set POWERTHROUGH_HEADLESS=false or install the `playwright` package to use headless mode.",
-          error
-        );
-        return null;
-      });
-  }
-  return chromiumLoader;
-}
-
-
