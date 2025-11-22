@@ -1,21 +1,260 @@
 :root {
-  color-scheme: dark;
-  --purple-900: #0f0805;
-  --purple-800: #1a0e08;
-  --purple-700: #26150c;
-  --purple-500: #b07b4e;
-  --purple-300: #f5d0a1;
-  --lavender: #faefe3;
-  --grey-box: rgba(36, 20, 12, 0.8);
-  --text-primary: #fff8f0;
-  --text-muted: rgba(255, 248, 240, 0.7);
-  --card-bg: rgba(30, 18, 12, 0.75);
-  --border: rgba(242, 201, 150, 0.15);
-  --accent-1: #d99a5e;
-  --accent-2: #9e5a32;
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(20, 10, 5, 0.6);
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Nuclear / Science Theme */
+  --bg-color: #051105; /* Deep dark green */
+  --text-color: #e0f2e0; /* Pale green text */
+  --accent-color: #00ff41; /* Matrix/Terminal green */
+  --accent-hover: #00cc33;
+  --secondary-bg: #0a1f0a; /* Slightly lighter dark green */
+  --border-color: #1a3d1a;
+  --error-color: #ff3333;
+  --success-color: #00ff41;
+  --font-family: 'Courier New', Courier, monospace; /* Terminal style */
+  --heading-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  /* Legacy variables mapped to new theme */
+  --purple-900: #051105;
+  --purple-800: #0a1f0a;
+  --purple-700: #0f2e0f;
+  --purple-600: #143d14;
+  --purple-500: #1a4d1a;
+  --purple-400: #206020;
+  --purple-300: #2b802b;
+  --purple-200: #40a040;
+  --purple-100: #80c080;
+  --purple-050: #c0e0c0;
+
+  --gold-500: #00ff41; /* Replaces gold with terminal green */
+  --gold-400: #33ff66;
+  --gold-600: #00cc33;
+  --gold-100: #ccffcc;
+
+  --surface-dark: #051105;
+  --surface-mid: #0a1f0a;
+  --surface-light: #0f2e0f;
+  --surface-overlay: rgba(5, 17, 5, 0.95);
+
+  --text-main: #e0f2e0;
+  --text-muted: #80c080;
+  --text-inverse: #051105;
+
+  --radius-sm: 2px; /* Sharper corners for tech feel */
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 255, 65, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 255, 65, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 255, 65, 0.1);
+
+  /* Additional mappings for existing CSS */
+  --lavender: #c0e0c0;
+  --grey-box: rgba(10, 31, 10, 0.8);
+  --text-primary: #e0f2e0;
+  --card-bg: rgba(10, 31, 10, 0.75);
+  --border: rgba(0, 255, 65, 0.15);
+  --accent-1: #00ff41;
+  --accent-2: #00cc33;
+  --glass-border: rgba(0, 255, 65, 0.08);
+  --glass-bg: rgba(5, 17, 5, 0.6);
+  --font: 'Courier New', Courier, monospace;
+}
+
+/* Fake Site Styles */
+#fake-site {
+  background-color: #ffffff;
+  color: #333;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+}
+
+.fake-header {
+  background-color: #004d00; /* Academic Green */
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fake-logo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.fake-nav {
+  display: flex;
+  gap: 2rem;
+}
+
+.fake-nav a {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.fake-nav a:hover {
+  text-decoration: underline;
+}
+
+.fake-login-btn {
+  background: transparent;
+  border: 1px solid white;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.fake-login-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.fake-hero {
+  background: linear-gradient(rgba(0, 77, 0, 0.8), rgba(0, 77, 0, 0.8)), url('assets/hero-bg.jpg'); /* Fallback if no image */
+  background-size: cover;
+  background-position: center;
+  color: white;
+  text-align: center;
+  padding: 5rem 2rem;
+}
+
+.fake-hero h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.fake-cta {
+  background-color: #ffcc00;
+  color: #004d00;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 2rem;
+}
+
+.fake-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  padding: 4rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.fake-feature {
+  text-align: center;
+  padding: 2rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.fake-feature h3 {
+  color: #004d00;
+  margin-bottom: 1rem;
+}
+
+.fake-footer {
+  background-color: #333;
+  color: white;
+  text-align: center;
+  padding: 2rem;
+  margin-top: auto;
+}
+
+/* App Shell (Hidden by default) */
+#app-shell {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Overrides for Nuclear Theme */
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  background: radial-gradient(circle at 15% 15%, rgba(0, 255, 65, 0.05), transparent 50%),
+    radial-gradient(circle at 85% 10%, rgba(0, 204, 51, 0.05), transparent 45%),
+    linear-gradient(170deg, #051105 0%, #0a1f0a 40%, #0f2e0f 80%, #051105 100%);
+}
+
+.hero__title {
+  color: var(--accent-color);
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.hero__eyebrow {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+button {
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+input[type="text"], input[type="password"], input[type="url"], textarea {
+  background-color: var(--surface-mid);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+}
+
+input:focus, textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+  outline: none;
+}
+
+.relay-chip.is-active {
+  background-color: var(--accent-color);
+  color: var(--bg-color);
+  border-color: var(--accent-color);
+}
+
+.auth-card {
+  border: 1px solid var(--accent-color);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+  background: linear-gradient(145deg, rgba(10, 31, 10, 0.96), rgba(5, 17, 5, 0.98));
+}
+
+.auth-card h1 {
+  color: var(--accent-color);
+}
+
+.lockout-overlay {
+  background-color: rgba(0, 0, 0, 0.95);
+}
+
+.lockout-overlay__text {
+  color: var(--error-color);
+  font-family: var(--font-family);
+  font-size: 2rem;
+  text-transform: uppercase;
+  border: 2px solid var(--error-color);
+  padding: 2rem;
+  background: rgba(255, 0, 0, 0.1);
+}
+
+/* Hide fake site when app is active */
+body:not(.auth-locked) #fake-site {
+  display: none;
+}
+
+body.auth-locked #app-shell {
+  display: none !important;
 }
 
 *,
@@ -195,7 +434,7 @@ body.auth-locked .dev-launcher {
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45);
 }
 
-.barista-toggle {
+.scientist-toggle {
   position: fixed;
   top: 1.5rem;
   left: 1.5rem;
@@ -211,17 +450,17 @@ body.auth-locked .dev-launcher {
   transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }
 
-.barista-toggle:hover {
+.scientist-toggle:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
 }
 
-body.barista-visible .barista-toggle {
+body.scientist-visible .scientist-toggle {
   opacity: 0;
   pointer-events: none;
 }
 
-.barista-panel {
+.scientist-panel {
   position: fixed;
   top: 1.5rem;
   left: 1.5rem;
@@ -239,23 +478,23 @@ body.barista-visible .barista-toggle {
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.barista-panel:not(.is-open) {
+.scientist-panel:not(.is-open) {
   opacity: 0;
   transform: translateY(-10px);
 }
 
-.barista-panel[hidden] {
+.scientist-panel[hidden] {
   display: none;
 }
 
-.barista-panel__header {
+.scientist-panel__header {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
   align-items: flex-start;
 }
 
-.barista-panel__eyebrow {
+.scientist-panel__eyebrow {
   margin: 0;
   text-transform: uppercase;
   font-size: 0.75rem;
@@ -263,12 +502,12 @@ body.barista-visible .barista-toggle {
   color: var(--text-muted);
 }
 
-.barista-panel__header h2 {
+.scientist-panel__header h2 {
   margin: 0.15rem 0 0;
   font-size: 1.4rem;
 }
 
-.barista-panel__close {
+.scientist-panel__close {
   border: none;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
@@ -279,7 +518,7 @@ body.barista-visible .barista-toggle {
   cursor: pointer;
 }
 
-.barista-messages {
+.scientist-messages {
   flex: 1;
   min-height: 220px;
   max-height: 50vh;
@@ -291,35 +530,35 @@ body.barista-visible .barista-toggle {
   font-size: 0.95rem;
 }
 
-.barista-message {
+.scientist-message {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.barista-message__bubble {
+.scientist-message__bubble {
   padding: 0.65rem 0.9rem;
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.barista-message--user .barista-message__bubble {
+.scientist-message--user .scientist-message__bubble {
   background: rgba(168, 106, 58, 0.25);
   border-color: rgba(200, 136, 74, 0.5);
 }
 
-.barista-message__meta {
+.scientist-message__meta {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
 
-.barista-form {
+.scientist-form {
   display: flex;
   gap: 0.5rem;
 }
 
-.barista-form input {
+.scientist-form input {
   flex: 1;
   border-radius: 999px;
   border: 1px solid rgba(248, 236, 220, 0.35);
@@ -328,7 +567,7 @@ body.barista-visible .barista-toggle {
   padding: 0.65rem 1rem;
 }
 
-.barista-form button {
+.scientist-form button {
   border: none;
   border-radius: 999px;
   padding: 0.65rem 1.4rem;
@@ -338,7 +577,7 @@ body.barista-visible .barista-toggle {
   cursor: pointer;
 }
 
-.barista-status {
+.scientist-status {
   min-height: 1.2rem;
   margin: 0;
   font-size: 0.85rem;
@@ -346,12 +585,12 @@ body.barista-visible .barista-toggle {
 }
 
 @media (max-width: 640px) {
-  .barista-toggle {
+  .scientist-toggle {
     top: auto;
     bottom: 1rem;
   }
 
-  .barista-panel {
+  .scientist-panel {
     top: auto;
     bottom: 1rem;
     left: 1rem;

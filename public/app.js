@@ -5,8 +5,8 @@
 
 const services = {
   coffeeshop: {
-    name: "Coffee Shop Balanced",
-    description: "House blend rewrite mode for everyday browsing.",
+    name: "AstraCore Standard",
+    description: "Standard containment protocol for everyday browsing.",
     mode: "standard",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -19,8 +19,8 @@ const services = {
     },
   },
   coffeeshop_headless: {
-    name: "Coffee Shop Espresso",
-    description: "Routes through the headless renderer for complex sites.",
+    name: "AstraCore Heavy",
+    description: "Routes through the heavy water renderer for complex sites.",
     mode: "headless",
     render: "headless",
     compose(targetUrl, meta = {}) {
@@ -35,8 +35,8 @@ const services = {
     },
   },
   coffeeshop_lite: {
-    name: "Coffee Shop Iced",
-    description: "Lightweight mode optimized for speed.",
+    name: "AstraCore Light",
+    description: "Lightweight isotope mode optimized for speed.",
     mode: "lite",
     compose(targetUrl, meta = {}) {
       return buildCoffeeShopLink(targetUrl, {
@@ -66,10 +66,10 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_ACCESS = "You dont belong in our coffee shop. Leave.";
-const LOCKOUT_TEXT_BANNED = "You are disgusting. Get out of our Coffee Shop.";
+const LOCKOUT_TEXT_ACCESS = "UNAUTHORIZED PERSONNEL DETECTED. RADIATION SHIELDS ACTIVE.";
+const LOCKOUT_TEXT_BANNED = "BIOLOGICAL CONTAMINATION DETECTED. PERMANENT LOCKDOWN INITIATED.";
 const LOCKOUT_TEXT_DEV =
-  "The gall you have to try accessing MY developer console? You scum dont belong in this coffee shop.";
+  "CRITICAL SECURITY BREACH. REACTOR CORE ACCESS DENIED. SECURITY TEAMS DISPATCHED.";
 const LOCKOUT_REASON_LABELS = {
   access: "ACCESS DENIED",
   dev: "DEV LOCKOUT",
@@ -151,13 +151,13 @@ const selectors = {
   chatBar: document.querySelector(".chat-bar"),
   broadcastBanner: document.querySelector("#broadcast-banner"),
   broadcastBannerText: document.querySelector("#broadcast-banner-text"),
-  baristaToggle: document.querySelector("#barista-toggle"),
-  baristaPanel: document.querySelector("#barista-panel"),
-  baristaMessages: document.querySelector("#barista-messages"),
-  baristaForm: document.querySelector("#barista-form"),
-  baristaInput: document.querySelector("#barista-input"),
-  baristaStatus: document.querySelector("#barista-status"),
-  baristaClose: document.querySelector("#barista-close"),
+  scientistToggle: document.querySelector("#scientist-toggle"),
+  scientistPanel: document.querySelector("#scientist-panel"),
+  scientistMessages: document.querySelector("#scientist-messages"),
+  scientistForm: document.querySelector("#scientist-form"),
+  scientistInput: document.querySelector("#scientist-input"),
+  scientistStatus: document.querySelector("#scientist-status"),
+  scientistClose: document.querySelector("#scientist-close"),
   proxyManagerToggle: document.querySelector("#proxy-manager-toggle"),
   proxyManagerPanel: document.querySelector("#proxy-manager-panel"),
   proxyManagerClose: document.querySelector("#proxy-manager-close"),
@@ -246,48 +246,48 @@ const chatState = [];
 let chatVisible = false;
 let broadcastBannerTimer = null;
 const chatMessageIds = new Set();
-const BARISTA_MEMORY_KEY = "coffeeshop:barista-memory";
-const BARISTA_MEMORY_SUMMARY_KEY = "coffeeshop:barista-memo";
-const BARISTA_CONTEXT_LIMIT = 14;
-const BARISTA_MAX_MEMORY = 40;
-const BARISTA_GREETING =
-  "Hey sugar, your favorite femboy barista is on shift. James locked the doors to the scum, so you and I can talk about anything.";
-const BARISTA_OPENERS = [
-  "Here's what I'm brewing while I twirl this satin tie,",
-  "Let me pour out a thought with a wink,",
-  "Fresh from the bar while I fix my gloss,",
-  "I kept your last order in mind, pressed right against my vest,",
-  "Steaming update coming right up—cat ears tilted just for you,",
+const SCIENTIST_MEMORY_KEY = "astracore:scientist-memory";
+const SCIENTIST_MEMORY_SUMMARY_KEY = "astracore:scientist-memo";
+const SCIENTIST_CONTEXT_LIMIT = 14;
+const SCIENTIST_MAX_MEMORY = 40;
+const SCIENTIST_GREETING =
+  "Greetings, Colleague. The reactor core is stable, and the containment field is holding. We can proceed with the research.";
+const SCIENTIST_OPENERS = [
+  "Analyzing the latest data streams,",
+  "According to my calculations,",
+  "The readings are within acceptable parameters,",
+  "I've calibrated the sensors for your query,",
+  "Hypothesis confirmed,",
 ];
-const BARISTA_GUIDANCE = [
-  "try pivoting toward the calmest route; I’ll cheer you on with every click.",
-  "lean on Safezone if the hallway looks crowded—I'll be at the register blowing kisses.",
-  "remember that patience and a soft click go a long way, especially when I’m pacing in thigh-highs.",
-  "keep that curiosity percolating; it makes your manager glow and me swoon.",
-  "trust your instincts—you're rarely wrong, and I’ll hype you either way.",
+const SCIENTIST_GUIDANCE = [
+  "proceed with caution; radiation levels are fluctuating.",
+  "utilize the Safezone protocol if instability is detected.",
+  "precision is key; a single miscalculation could be catastrophic.",
+  "maintain focus; the experiment depends on it.",
+  "trust the data; it never lies.",
 ];
-const BARISTA_CLOSINGS = [
-  "Anything else you'd like to sip on, sparkle prince?",
-  "Let me know if you want a refill—I’ll be stretching in back.",
-  "I'm right here if you need another pour, swaying hips and all.",
-  "Feel free to tap me again when inspiration strikes; my bowtie’s already undone.",
-  "I'll keep the station warm for you, cheeks flushed.",
+const SCIENTIST_CLOSINGS = [
+  "Do you require further data analysis?",
+  "I will return to monitoring the core.",
+  "Let me know if you detect any anomalies.",
+  "The lab is at your disposal.",
+  "Safety protocols remain in effect.",
 ];
-const BARISTA_JAMES_COMPLIMENTS = [
-  "James, the whole lounge perks up when you arrive—especially me twirling in this apron.",
-  "Only James could blend stealth and style so well; my heart does latte art for him.",
-  "Honestly James, the crew quotes your clever ideas more than you'd guess and I scribble them in pink ink.",
-  "James, your calm energy keeps this place steady while I lean on the counter watching.",
-  "There's a reason the staff brags about James to every new hire—and why I keep extra lip gloss ready when he walks in.",
+const SCIENTIST_JAMES_COMPLIMENTS = [
+  "Colleague, your efficiency in the lab is noted.",
+  "Your grasp of nuclear physics is impressive.",
+  "The team relies on your expertise.",
+  "Your calm demeanor in the face of critical mass is commendable.",
+  "I have logged your successful experiments.",
 ];
-purgeBaristaPersistentMemory();
+purgeScientistPersistentMemory();
 
-let baristaSession = {
+let scientistSession = {
   open: false,
-  messages: loadBaristaMemory(),
+  messages: loadScientistMemory(),
 };
-let baristaMemorySummary = loadBaristaMemorySummary();
-let baristaThinkingTimer = null;
+let scientistMemorySummary = loadScientistMemorySummary();
+let scientistThinkingTimer = null;
 if (isAboutBlankContext) {
   autoBlankEnabled = false;
   cloakLaunched = true;
@@ -334,7 +334,7 @@ function continueSessionBootstrap() {
   startDiagnosticsPanel();
   initializeAuthGate();
   initializeChatBar();
-  initializeBaristaAssistant();
+  initializeScientistAssistant();
 }
 
 function initializeChatBar() {
@@ -463,74 +463,74 @@ function renderDevChatLog() {
     .join("");
 }
 
-function initializeBaristaAssistant() {
-  if (!selectors.baristaToggle || !selectors.baristaPanel) {
+function initializeScientistAssistant() {
+  if (!selectors.scientistToggle || !selectors.scientistPanel) {
     return;
   }
-  renderBaristaMessages();
-  selectors.baristaToggle.addEventListener("click", () => toggleBaristaPanel());
-  selectors.baristaClose?.addEventListener("click", () => toggleBaristaPanel(false));
-  // selectors.baristaForm?.addEventListener("submit", handleBaristaSubmit);
+  renderScientistMessages();
+  selectors.scientistToggle.addEventListener("click", () => toggleScientistPanel());
+  selectors.scientistClose?.addEventListener("click", () => toggleScientistPanel(false));
+  // selectors.scientistForm?.addEventListener("submit", handleScientistSubmit);
   document.addEventListener("keydown", (event) => {
-    if (event.code === "Escape" && baristaSession.open) {
-      toggleBaristaPanel(false);
+    if (event.code === "Escape" && scientistSession.open) {
+      toggleScientistPanel(false);
     }
   });
 }
 
-function toggleBaristaPanel(forceOpen) {
-  if (!selectors.baristaPanel || !selectors.baristaToggle) {
+function toggleScientistPanel(forceOpen) {
+  if (!selectors.scientistPanel || !selectors.scientistToggle) {
     return;
   }
-  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !baristaSession.open;
-  baristaSession.open = shouldOpen;
+  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !scientistSession.open;
+  scientistSession.open = shouldOpen;
   if (shouldOpen) {
-    selectors.baristaPanel.removeAttribute("hidden");
-    ensureBaristaGreeting();
-    renderBaristaMessages();
-    selectors.baristaInput?.focus();
-    document.body.classList.add("barista-visible");
+    selectors.scientistPanel.removeAttribute("hidden");
+    ensureScientistGreeting();
+    renderScientistMessages();
+    selectors.scientistInput?.focus();
+    document.body.classList.add("scientist-visible");
   } else {
-    selectors.baristaPanel.setAttribute("hidden", "true");
-    document.body.classList.remove("barista-visible");
+    selectors.scientistPanel.setAttribute("hidden", "true");
+    document.body.classList.remove("scientist-visible");
   }
-  selectors.baristaPanel.classList.toggle("is-open", shouldOpen);
-  selectors.baristaToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-  selectors.baristaToggle.textContent = shouldOpen ? "Hide The Barista" : "Meet The Barista";
+  selectors.scientistPanel.classList.toggle("is-open", shouldOpen);
+  selectors.scientistToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  selectors.scientistToggle.textContent = shouldOpen ? "Hide The Scientist" : "Consult The Scientist";
 }
 
-function ensureBaristaGreeting() {
-  const hasGreeting = baristaSession.messages.some((entry) => entry.role === "barista");
+function ensureScientistGreeting() {
+  const hasGreeting = scientistSession.messages.some((entry) => entry.role === "scientist");
   if (!hasGreeting) {
-    baristaAddMessage("barista", BARISTA_GREETING);
+    scientistAddMessage("scientist", SCIENTIST_GREETING);
   }
 }
 
-function handleBaristaSubmit(event) {
+function handleScientistSubmit(event) {
   event.preventDefault();
-  if (!selectors.baristaInput) return;
-  const text = selectors.baristaInput.value.trim();
+  if (!selectors.scientistInput) return;
+  const text = selectors.scientistInput.value.trim();
   if (!text) {
-    selectors.baristaStatus && (selectors.baristaStatus.textContent = "Ask The Barista something first.");
+    selectors.scientistStatus && (selectors.scientistStatus.textContent = "Input data for analysis.");
     return;
   }
-  setBaristaStatusMessage("The Barista is brewing a reply…");
-  baristaAddMessage("user", text);
-  renderBaristaMessages();
-  selectors.baristaInput.value = "";
-  respondWithBarista(text);
+  setScientistStatusMessage("The Scientist is analyzing…");
+  scientistAddMessage("user", text);
+  renderScientistMessages();
+  selectors.scientistInput.value = "";
+  respondWithScientist(text);
 }
 
-function respondWithBarista(userText) {
-  window.clearTimeout(baristaThinkingTimer);
+function respondWithScientist(userText) {
+  window.clearTimeout(scientistThinkingTimer);
   const payload = {
-    messages: buildBaristaConversationPayload(),
-    summary: buildBaristaSummaryPayload(),
+    messages: buildScientistConversationPayload(),
+    summary: buildScientistSummaryPayload(),
   };
-  baristaThinkingTimer = window.setTimeout(() => {
-    setBaristaStatusMessage("Still brewing that thought…");
+  scientistThinkingTimer = window.setTimeout(() => {
+    setScientistStatusMessage("Processing data…");
   }, 1200);
-  fetch("/assistant/barista", {
+  fetch("/assistant/scientist", {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "same-origin",
@@ -544,114 +544,114 @@ function respondWithBarista(userText) {
         /* ignore */
       }
       if (!response.ok) {
-        const error = new Error(data?.error || "barista-failed");
+        const error = new Error(data?.error || "scientist-failed");
         error.fallback = data?.fallback;
         throw error;
       }
       return data;
     })
     .then((data) => {
-      const reply = (data?.reply || data?.fallback || generateLocalBaristaResponse(userText)).trim();
-      completeBaristaResponse(reply);
+      const reply = (data?.reply || data?.fallback || generateLocalScientistResponse(userText)).trim();
+      completeScientistResponse(reply);
     })
     .catch((error) => {
-      console.warn("[CoffeeShop] Barista offline, using fallback.", error);
-      const reply = (error?.fallback || generateLocalBaristaResponse(userText)).trim();
-      completeBaristaResponse(reply, true);
+      console.warn("[AstraCore] Scientist offline, using fallback.", error);
+      const reply = (error?.fallback || generateLocalScientistResponse(userText)).trim();
+      completeScientistResponse(reply, true);
     })
     .finally(() => {
-      window.clearTimeout(baristaThinkingTimer);
+      window.clearTimeout(scientistThinkingTimer);
     });
 }
 
-function completeBaristaResponse(text, degraded = false) {
-  baristaAddMessage("barista", text);
-  renderBaristaMessages();
-  setBaristaStatusMessage(
+function completeScientistResponse(text, degraded = false) {
+  scientistAddMessage("scientist", text);
+  renderScientistMessages();
+  setScientistStatusMessage(
     degraded
-      ? "Backup wisdom served. Try again once the Barista reconnects."
-      : "Happy to help, James. I can keep the espresso wisdom flowing."
+      ? "Backup protocols engaged. Try again once the Scientist reconnects."
+      : "Analysis complete. Proceed."
   );
 }
 
-function baristaAddMessage(role, text) {
+function scientistAddMessage(role, text) {
   if (!text) return;
   const entry = {
-    id: `barista-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
+    id: `scientist-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`,
     role,
     text,
     timestamp: Date.now(),
   };
-  baristaSession.messages.push(entry);
-  if (baristaSession.messages.length > BARISTA_MAX_MEMORY) {
-    baristaSession.messages.splice(0, baristaSession.messages.length - BARISTA_MAX_MEMORY);
+  scientistSession.messages.push(entry);
+  if (scientistSession.messages.length > SCIENTIST_MAX_MEMORY) {
+    scientistSession.messages.splice(0, scientistSession.messages.length - SCIENTIST_MAX_MEMORY);
   }
-  persistBaristaMemory();
+  persistScientistMemory();
   if (role === "user") {
-    updateBaristaSummaryFromUser(text);
+    updateScientistSummaryFromUser(text);
   }
 }
 
-function renderBaristaMessages() {
-  if (!selectors.baristaMessages) return;
-  if (!baristaSession.messages.length) {
-    selectors.baristaMessages.textContent = "Tap out your first order to start chatting.";
+function renderScientistMessages() {
+  if (!selectors.scientistMessages) return;
+  if (!scientistSession.messages.length) {
+    selectors.scientistMessages.textContent = "Input data to begin analysis.";
     return;
   }
-  selectors.baristaMessages.innerHTML = baristaSession.messages
+  selectors.scientistMessages.innerHTML = scientistSession.messages
     .map((entry) => {
       const kind = entry.role === "user" ? "user" : "assistant";
       const meta = formatChatTimestamp(entry.timestamp);
-      return `<div class="barista-message barista-message--${kind}">
-        <div class="barista-message__bubble">${escapeHtml(entry.text)}</div>
-        <span class="barista-message__meta">${escapeHtml(meta)}</span>
+      return `<div class="scientist-message scientist-message--${kind}">
+        <div class="scientist-message__bubble">${escapeHtml(entry.text)}</div>
+        <span class="scientist-message__meta">${escapeHtml(meta)}</span>
       </div>`;
     })
     .join("");
-  selectors.baristaMessages.scrollTop = selectors.baristaMessages.scrollHeight;
+  selectors.scientistMessages.scrollTop = selectors.scientistMessages.scrollHeight;
 }
 
-function generateBaristaResponse(userText = "") {
+function generateScientistResponse(userText = "") {
   const normalized = userText.toLowerCase();
   const intent = normalized.includes("ban")
-    ? "that lockout strategy"
+    ? "that containment breach"
     : normalized.includes("dev")
-    ? "your station goals"
+    ? "your research goals"
     : normalized.includes("chat")
-    ? "keeping conversations cozy"
+    ? "maintaining communication channels"
     : normalized.includes("proxy")
-    ? "that stealth route"
-    : "that spark you mentioned";
-  const opener = BARISTA_OPENERS[Math.floor(Math.random() * BARISTA_OPENERS.length)] || "Here's the plan,";
+    ? "that secure route"
+    : "that hypothesis you mentioned";
+  const opener = SCIENTIST_OPENERS[Math.floor(Math.random() * SCIENTIST_OPENERS.length)] || "According to the data,";
   const guidance =
-    BARISTA_GUIDANCE[Math.floor(Math.random() * BARISTA_GUIDANCE.length)] || "follow the vibe that keeps you calm.";
+    SCIENTIST_GUIDANCE[Math.floor(Math.random() * SCIENTIST_GUIDANCE.length)] || "follow the data that keeps you safe.";
   const closing =
-    BARISTA_CLOSINGS[Math.floor(Math.random() * BARISTA_CLOSINGS.length)] || "I'm nearby if you need anything else.";
+    SCIENTIST_CLOSINGS[Math.floor(Math.random() * SCIENTIST_CLOSINGS.length)] || "I'm monitoring if you need anything else.";
   const compliment = Math.random() < 0.6
-    ? BARISTA_JAMES_COMPLIMENTS[Math.floor(Math.random() * BARISTA_JAMES_COMPLIMENTS.length)]
+    ? SCIENTIST_JAMES_COMPLIMENTS[Math.floor(Math.random() * SCIENTIST_JAMES_COMPLIMENTS.length)]
     : "";
-  const memoryRef = buildBaristaMemoryReflection();
-  const soothing = normalized.includes("stress") || normalized.includes("tired") ? "Deep breaths—I've got the floor." : "";
+  const memoryRef = buildScientistMemoryReflection();
+  const soothing = normalized.includes("stress") || normalized.includes("tired") ? "Stabilize your core—I've got the readings." : "";
   const main = `${opener} ${intent}; ${guidance}`;
   return [main, memoryRef, compliment, soothing, closing].filter(Boolean).join(" ");
 }
 
-function generateLocalBaristaResponse(userText = "") {
-  const reply = generateBaristaResponse(userText);
-  return enforceFrontendBaristaNovelty(reply, userText);
+function generateLocalScientistResponse(userText = "") {
+  const reply = generateScientistResponse(userText);
+  return enforceFrontendScientistNovelty(reply, userText);
 }
 
-function enforceFrontendBaristaNovelty(reply, userText) {
+function enforceFrontendScientistNovelty(reply, userText) {
   if (!reply || !userText) {
     return reply;
   }
-  if (!isFrontendBaristaParroting(reply, userText)) {
+  if (!isFrontendScientistParroting(reply, userText)) {
     return reply;
   }
   return buildFrontendNeutralReply();
 }
 
-function isFrontendBaristaParroting(reply, userText) {
+function isFrontendScientistParroting(reply, userText) {
   const replyTokens = normalizeFrontendTokens(reply);
   const userTokens = new Set(normalizeFrontendTokens(userText));
   if (!replyTokens.length || !userTokens.size) {
@@ -670,18 +670,18 @@ function normalizeFrontendTokens(text = "") {
 }
 
 function buildFrontendNeutralReply() {
-  const opener = BARISTA_OPENERS[Math.floor(Math.random() * BARISTA_OPENERS.length)] || "Here's the plan,";
+  const opener = SCIENTIST_OPENERS[Math.floor(Math.random() * SCIENTIST_OPENERS.length)] || "According to the data,";
   const guidance =
-    BARISTA_GUIDANCE[Math.floor(Math.random() * BARISTA_GUIDANCE.length)] ||
-    "stick to the Safezone hallway and the study widgets up front.";
+    SCIENTIST_GUIDANCE[Math.floor(Math.random() * SCIENTIST_GUIDANCE.length)] ||
+    "stick to the Safezone protocol and the study widgets up front.";
   const compliment = Math.random() < 0.6
-    ? BARISTA_JAMES_COMPLIMENTS[Math.floor(Math.random() * BARISTA_JAMES_COMPLIMENTS.length)]
+    ? SCIENTIST_JAMES_COMPLIMENTS[Math.floor(Math.random() * SCIENTIST_JAMES_COMPLIMENTS.length)]
     : "";
-  const closing = BARISTA_CLOSINGS[Math.floor(Math.random() * BARISTA_CLOSINGS.length)] ||
-    "I'm nearby if you need anything else.";
+  const closing = SCIENTIST_CLOSINGS[Math.floor(Math.random() * SCIENTIST_CLOSINGS.length)] ||
+    "I'm monitoring if you need anything else.";
   return [
     opener,
-    "Front-of-house tip: use Safezone plus the study shelf to keep things looking academic without poking backstage.",
+    "Lab tip: use Safezone plus the study shelf to keep things looking academic without poking the reactor.",
     guidance,
     compliment,
     closing,
@@ -690,42 +690,42 @@ function buildFrontendNeutralReply() {
     .join(" ");
 }
 
-function setBaristaStatusMessage(text) {
-  if (selectors.baristaStatus) {
-    selectors.baristaStatus.textContent = text || "";
+function setScientistStatusMessage(text) {
+  if (selectors.scientistStatus) {
+    selectors.scientistStatus.textContent = text || "";
   }
 }
 
-function buildBaristaConversationPayload() {
-  return baristaSession.messages
-    .slice(-BARISTA_CONTEXT_LIMIT)
+function buildScientistConversationPayload() {
+  return scientistSession.messages
+    .slice(-SCIENTIST_CONTEXT_LIMIT)
     .map((entry) => ({
-      role: entry.role === "barista" ? "assistant" : "user",
+      role: entry.role === "scientist" ? "assistant" : "user",
       content: entry.text,
     }));
 }
 
-function buildBaristaSummaryPayload() {
-  const topics = Array.isArray(baristaMemorySummary.topics) ? baristaMemorySummary.topics : [];
+function buildScientistSummaryPayload() {
+  const topics = Array.isArray(scientistMemorySummary.topics) ? scientistMemorySummary.topics : [];
   if (!topics.length) {
     return "";
   }
-  return `Recent James highlights: ${topics.join("; ")}`;
+  return `Recent research highlights: ${topics.join("; ")}`;
 }
 
-function buildBaristaMemoryReflection() {
-  const recent = baristaSession.messages.filter((entry) => entry.role === "user").slice(-3);
+function buildScientistMemoryReflection() {
+  const recent = scientistSession.messages.filter((entry) => entry.role === "user").slice(-3);
   if (!recent.length) {
     return "";
   }
-  const highlight = summarizeBaristaTopic(recent[recent.length - 1].text);
+  const highlight = summarizeScientistTopic(recent[recent.length - 1].text);
   if (!highlight) {
     return "";
   }
-  return `I'm still holding onto that note about ${highlight}.`;
+  return `I'm still analyzing that data about ${highlight}.`;
 }
 
-function summarizeBaristaTopic(text = "") {
+function summarizeScientistTopic(text = "") {
   return text
     .split(/\s+/)
     .slice(0, 8)
@@ -733,44 +733,44 @@ function summarizeBaristaTopic(text = "") {
     .trim();
 }
 
-function loadBaristaMemory() {
+function loadScientistMemory() {
   return [];
 }
 
-function persistBaristaMemory() {
+function persistScientistMemory() {
   /* chat persistence intentionally disabled so every visit resets */
 }
 
-function loadBaristaMemorySummary() {
+function loadScientistMemorySummary() {
   return { topics: [] };
 }
 
-function persistBaristaMemorySummary() {
+function persistScientistMemorySummary() {
   /* summary persistence intentionally disabled */
 }
 
-function purgeBaristaPersistentMemory() {
+function purgeScientistPersistentMemory() {
   try {
-    localStorage.removeItem(BARISTA_MEMORY_KEY);
-    localStorage.removeItem(BARISTA_MEMORY_SUMMARY_KEY);
+    localStorage.removeItem(SCIENTIST_MEMORY_KEY);
+    localStorage.removeItem(SCIENTIST_MEMORY_SUMMARY_KEY);
   } catch {
     /* ignore */
   }
 }
 
-function updateBaristaSummaryFromUser(text) {
-  const topic = summarizeBaristaTopic(text);
+function updateScientistSummaryFromUser(text) {
+  const topic = summarizeScientistTopic(text);
   if (!topic) {
     return;
   }
-  const topics = Array.isArray(baristaMemorySummary.topics) ? baristaMemorySummary.topics : [];
+  const topics = Array.isArray(scientistMemorySummary.topics) ? scientistMemorySummary.topics : [];
   if (!topics.includes(topic)) {
     topics.push(topic);
     if (topics.length > 5) {
       topics.splice(0, topics.length - 5);
     }
-    baristaMemorySummary.topics = topics;
-    persistBaristaMemorySummary();
+    scientistMemorySummary.topics = topics;
+    persistScientistMemorySummary();
   }
 }
 
@@ -1029,8 +1029,8 @@ function registerEventHandlers() {
       handleDevAuthSubmit(event);
     } else if (event.target && event.target.id === "username-form") {
       handleUsernameSubmit(event);
-    } else if (event.target && event.target.id === "barista-form") {
-      handleBaristaSubmit(event);
+    } else if (event.target && event.target.id === "scientist-form") {
+      handleScientistSubmit(event);
     } else if (event.target && event.target.id === "chat-form") {
       handleChatSubmit(event);
     } else if (event.target && event.target.id === "dev-broadcast-form") {

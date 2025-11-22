@@ -5,20 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Coffee Shop is a cozy caramel proxy lounge that cloaks your browsing with comfort-first Safezone relays."
+      content="AstraCore Institute of Nuclear Sciences - Advanced Education Portal."
     />
-    <meta name="theme-color" content="#3a2010" />
-    <title>CoffeeShop Education</title>
+    <meta name="theme-color" content="#0a1f0a" />
+    <title>AstraCore Institute of Nuclear Sciences</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   </head>
   <body class="auth-locked">
-    <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <!-- Fake Education Site (Visible by default) -->
+    <div id="fake-site">
+      <header class="fake-header">
+        <div class="fake-logo">
+          <img src="assets/logo.svg" alt="AstraCore Logo" width="40" height="40" />
+          <span>AstraCore Institute</span>
+        </div>
+        <nav class="fake-nav">
+          <a href="#">Programs</a>
+          <a href="#">Research</a>
+          <a href="#">Admissions</a>
+          <a href="#">About Us</a>
+        </nav>
+        <button id="login-trigger" class="fake-login-btn">Login</button>
+      </header>
+      
+      <main class="fake-main">
+        <section class="fake-hero">
+          <h1>Advancing the Future of Nuclear Energy</h1>
+          <p>Join the next generation of scientists and engineers dedicated to safe, sustainable, and powerful energy solutions.</p>
+          <button class="fake-cta">Explore Programs</button>
+        </section>
+        
+        <section class="fake-features">
+          <div class="fake-feature">
+            <h3>Reactor Physics</h3>
+            <p>Master the fundamental principles of neutron transport and reactor kinetics.</p>
+          </div>
+          <div class="fake-feature">
+            <h3>Radiation Safety</h3>
+            <p>Learn industry-standard protocols for shielding and environmental protection.</p>
+          </div>
+          <div class="fake-feature">
+            <h3>Fusion Technology</h3>
+            <p>Pioneer the limitless potential of magnetic confinement fusion.</p>
+          </div>
+        </section>
+      </main>
+      
+      <footer class="fake-footer">
+        <p>&copy; 2025 AstraCore Institute of Nuclear Sciences. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <!-- Auth Overlays (Hidden by default, shown on login click) -->
+    <div class="auth-overlay is-hidden" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Coffee Shop Access</p>
-        <h1 id="auth-title">Access required</h1>
-        <p class="auth-card__lead">Enter the Coffee Shop access code to continue.</p>
+        <p class="auth-card__eyebrow">Institute Access</p>
+        <h1 id="auth-title">Authorized Personnel Only</h1>
+        <p class="auth-card__lead">Enter your security clearance code to proceed.</p>
         <form id="auth-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="auth-code" class="sr-only">Access code</label>
           <input
@@ -26,10 +71,10 @@
             type="password"
             inputmode="text"
             autocomplete="off"
-            placeholder="Enter access code"
+            placeholder="Enter clearance code"
             required
           />
-          <button type="submit">Enter workspace</button>
+          <button type="submit">Verify Clearance</button>
           <p id="auth-error" class="auth-error" role="alert" aria-live="assertive"></p>
         </form>
       </div>
@@ -37,13 +82,13 @@
 
     <div class="auth-overlay is-hidden" id="username-overlay" role="dialog" aria-modal="true">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Coffee Shop ID</p>
-        <h1>Choose a username</h1>
-        <p class="auth-card__lead">Pick a unique name so we can build your private workspace.</p>
+        <p class="auth-card__eyebrow">Researcher ID</p>
+        <h1>Identify Yourself</h1>
+        <p class="auth-card__lead">Enter your registered researcher handle.</p>
         <form id="username-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="username-input" class="sr-only">Username</label>
-          <input id="username-input" type="text" autocomplete="off" placeholder="Enter username" required />
-          <button type="submit">Save username</button>
+          <input id="username-input" type="text" autocomplete="off" placeholder="Enter handle" required />
+          <button type="submit">Register Session</button>
           <p id="username-error" class="auth-error" role="alert" aria-live="assertive"></p>
         </form>
       </div>
@@ -51,9 +96,9 @@
 
     <div class="auth-overlay is-hidden" id="bridge-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Coffee Shop dev</p>
-        <h1>Identity check</h1>
-        <p>Enter the stage-two developer code.</p>
+        <p class="auth-card__eyebrow">System Admin</p>
+        <h1>Identity Verification</h1>
+        <p>Enter Level 2 Administrative Code.</p>
         <form id="bridge-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="bridge-code" class="sr-only">Stage-two code</label>
           <input
@@ -61,10 +106,10 @@
             type="password"
             inputmode="text"
             autocomplete="off"
-            placeholder="Enter stage-two code"
+            placeholder="Enter admin code"
             required
           />
-          <button type="submit">Continue</button>
+          <button type="submit">Verify</button>
           <p id="bridge-error" class="auth-error" role="alert" aria-live="assertive"></p>
         </form>
       </div>
@@ -72,9 +117,9 @@
 
     <div class="auth-overlay is-hidden" id="dev-overlay">
       <div class="auth-card">
-        <p class="auth-card__eyebrow">Coffee Shop dev</p>
-        <h1>Developer console</h1>
-        <p>Enter the developer access code to continue.</p>
+        <p class="auth-card__eyebrow">Core Control</p>
+        <h1>Developer Console</h1>
+        <p>Enter root access credentials.</p>
         <form id="dev-form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="dev-code" class="sr-only">Developer access code</label>
           <input
@@ -82,38 +127,38 @@
             type="password"
             inputmode="text"
             autocomplete="off"
-            placeholder="Enter developer code"
+            placeholder="Enter root code"
             required
           />
-          <button type="submit">Enter dev workspace</button>
+          <button type="submit">Access Core</button>
           <p id="dev-error" class="auth-error" role="alert" aria-live="assertive"></p>
         </form>
       </div>
     </div>
 
-    <div id="app-shell">
-      <button id="barista-toggle" class="barista-toggle" type="button" aria-expanded="false">
-        Meet The Barista
+    <div id="app-shell" style="display: none;">
+      <button id="scientist-toggle" class="scientist-toggle" type="button" aria-expanded="false">
+        Consult The Scientist
       </button>
-      <section id="barista-panel" class="barista-panel" aria-live="polite" hidden>
-        <header class="barista-panel__header">
+      <section id="scientist-panel" class="scientist-panel" aria-live="polite" hidden>
+        <header class="scientist-panel__header">
           <div>
-            <p class="barista-panel__eyebrow">Coffee Shop AI</p>
-            <h2>The Barista</h2>
+            <p class="scientist-panel__eyebrow">Lab Assistant AI</p>
+            <h2>The Scientist</h2>
           </div>
-          <button id="barista-close" class="barista-panel__close" type="button" aria-label="Close Barista chat">
+          <button id="scientist-close" class="scientist-panel__close" type="button" aria-label="Close chat">
             &times;
           </button>
         </header>
-        <div id="barista-messages" class="barista-messages" aria-live="polite">
-          Tap out your first order to start chatting.
+        <div id="scientist-messages" class="scientist-messages" aria-live="polite">
+          Initiating research protocol. How can I assist your studies?
         </div>
-        <form id="barista-form" class="barista-form" autocomplete="off" onsubmit="event.preventDefault();">
-          <label for="barista-input" class="sr-only">Message The Barista</label>
-          <input id="barista-input" type="text" placeholder="Ask The Barista anything…" maxlength="320" />
-          <button type="submit">Send</button>
+        <form id="scientist-form" class="scientist-form" autocomplete="off" onsubmit="event.preventDefault();">
+          <label for="scientist-input" class="sr-only">Message The Scientist</label>
+          <input id="scientist-input" type="text" placeholder="Ask about nuclear physics..." maxlength="320" />
+          <button type="submit">Query</button>
         </form>
-        <p id="barista-status" class="barista-status" aria-live="polite"></p>
+        <p id="scientist-status" class="scientist-status" aria-live="polite"></p>
       </section>
       <div id="broadcast-banner" class="broadcast-banner" role="status" aria-live="assertive" aria-hidden="true">
         <div class="broadcast-banner__inner">
@@ -122,11 +167,11 @@
       </div>
       <header class="hero">
         <div class="hero__content">
-        <img src="assets/logo.svg" class="hero__logo" alt="Coffee Shop proxy logo" width="140" height="140" />
-        <p class="hero__eyebrow">Quiet proxy lounge</p>
-        <h1 class="hero__title">Coffee Shop</h1>
+        <img src="assets/logo.svg" class="hero__logo" alt="AstraCore logo" width="140" height="140" />
+        <p class="hero__eyebrow">Secure Research Terminal</p>
+        <h1 class="hero__title">AstraCore</h1>
         <p class="hero__lead">
-          A hazel-toned hideout that pours every request through our Safezone roastery. Slow-sip comfort, fast escapes.
+          Advanced nuclear research proxy. Routing traffic through secure containment fields.
         </p>
 
         <form id="portal-form" class="portal" autocomplete="off" onsubmit="event.preventDefault();">
@@ -136,46 +181,46 @@
             name="destination"
             type="text"
             inputmode="url"
-            placeholder="Order a site or search anything..."
+            placeholder="Access external database or URL..."
             required
           />
-          <button type="submit">Pour a connection</button>
+          <button type="submit">Establish Link</button>
         </form>
 
         <p id="portal-status" class="portal__status" role="status" aria-live="polite"></p>
 
         <div class="comfort">
-          <span>Comfort toggles:</span>
+          <span>Lab Controls:</span>
           <label class="toggle">
             <input type="checkbox" id="focus-mode" />
-            <span>Focus mode</span>
+            <span>Focus Mode</span>
           </label>
           <label class="toggle">
             <input type="checkbox" id="panic-shortcut" checked />
-            <span>Double-press panic</span>
+            <span>Emergency Scram (Double-tap)</span>
           </label>
           <label class="toggle">
             <input type="checkbox" id="history-off" checked />
-            <span>History off</span>
+            <span>No Logs</span>
           </label>
         </div>
 
         <div class="cloak" aria-label="Tab cloaking & panic options">
-          <span>Tab cloak:</span>
+          <span>Camouflage:</span>
           <label class="toggle">
             <input type="checkbox" id="tab-cloak" />
-            <span>Disguise as homework doc</span>
+            <span>Disguise as Research Paper</span>
           </label>
           <label class="toggle">
             <input type="checkbox" id="auto-blank" />
             <span>Auto-launch about:blank</span>
           </label>
-          <input type="text" id="cloak-title" placeholder="Custom tab title (optional)" />
-          <button type="button" id="cloak-blank">Launch about:blank session</button>
+          <input type="text" id="cloak-title" placeholder="Custom title (optional)" />
+          <button type="button" id="cloak-blank">Launch Blank Session</button>
         </div>
 
         <div class="panic-settings">
-          <label for="panic-key">Panic key:</label>
+          <label for="panic-key">Scram Key:</label>
           <select id="panic-key">
             <option value="Escape">Escape</option>
             <option value="F1">F1</option>
@@ -183,67 +228,67 @@
             <option value="Backquote">` (backtick)</option>
             <option value="Backspace">Backspace</option>
           </select>
-          <small>Press twice to trigger.</small>
+          <small>Press twice to trigger emergency shutdown.</small>
         </div>
       </div>
 
       </div>
 
         <div class="relay-panel" aria-live="polite">
-        <p class="relay-panel__label">Active engine</p>
-        <p id="active-service-name" class="relay-panel__name">Coffee Shop Balanced</p>
+        <p class="relay-panel__label">Active Core</p>
+        <p id="active-service-name" class="relay-panel__name">AstraCore Balanced</p>
         <p id="active-service-desc" class="relay-panel__desc">
-          House blend rewrite that balances warmth, compatibility, and stealth.
+          Standard containment field for general research.
         </p>
         <div class="relay-panel__choices" role="group" aria-label="Relay choice">
           <button class="relay-chip is-active" data-service="coffeeshop">Balanced</button>
-          <button class="relay-chip" data-service="coffeeshop_headless">Espresso (headless)</button>
-          <button class="relay-chip" data-service="coffeeshop_lite">Iced (lite)</button>
+          <button class="relay-chip" data-service="coffeeshop_headless">Heavy Water (Headless)</button>
+          <button class="relay-chip" data-service="coffeeshop_lite">Light Water (Lite)</button>
         </div>
 
         <div class="relay-panel__status">
-          <p class="relay-panel__status-title">Brew status</p>
+          <p class="relay-panel__status-title">Reactor Status</p>
           <dl>
             <div>
-              <dt>Roast</dt>
-              <dd>Auto-select</dd>
+              <dt>Core Temp</dt>
+              <dd>Stable</dd>
             </div>
             <div>
-              <dt>Trace logging</dt>
-              <dd>Disabled</dd>
+              <dt>Radiation Levels</dt>
+              <dd>Nominal</dd>
             </div>
             <div>
-              <dt>Comfort rating</dt>
-              <dd>Fireside plush</dd>
+              <dt>Containment</dt>
+              <dd>Active</dd>
             </div>
           </dl>
         </div>
         <div class="transport-controls" aria-label="Transport controls">
           <div class="transport-controls__summary">
             <p class="transport-controls__label">Transport</p>
-            <p id="transport-state-label" class="transport-controls__state">Coffee line: unknown</p>
+            <p id="transport-state-label" class="transport-controls__state">Link: Unknown</p>
           </div>
           <div class="relay-panel__choices transport-controls__choices" role="group" aria-label="Transport preference">
             <button class="transport-chip relay-chip is-active" data-transport="auto">Auto</button>
-            <button class="transport-chip relay-chip" data-transport="safezone">Safezone</button>
+            <button class="transport-chip relay-chip" data-transport="safezone">Secure</button>
             <button class="transport-chip relay-chip" data-transport="direct">Direct</button>
           </div>
           <small id="transport-metrics-hint" class="transport-controls__hint">
-            Balancing Safezone reliability and straight-through latency automatically.
+            Optimizing for secure data transmission.
           </small>
         </div>
 
         <div class="userscripts" aria-label="User scripts">
           <div class="userscripts__header">
-            <p class="userscripts__label">User scripts</p>
+            <p class="userscripts__label">Inject Code</p>
             <small id="userscript-status">Stored locally</small>
           </div>
           <textarea
             id="userscript-input"
-            placeholder="Paste a script to inject after every page loads..."
+            placeholder="Paste script to inject..."
           ></textarea>
           <div class="userscripts__actions">
-            <button type="button" id="userscript-save">Save script</button>
+            <button type="button" id="userscript-save">Save</button>
             <button type="button" id="userscript-clear">Clear</button>
           </div>
         </div>
@@ -254,41 +299,41 @@
         <img src="assets/logo.svg" alt="Developer console launcher" />
       </button>
 
-      <section class="workspace" aria-label="Coffee Shop Safezone workspace">
+      <section class="workspace" aria-label="Secure workspace">
         <div class="workspace__chrome">
-          <p id="workspace-status">Awaiting secure session.</p>
-          <button type="button" id="workspace-reset">Reset view</button>
-          <button type="button" id="fullscreen-toggle">Enter fullscreen</button>
+          <p id="workspace-status">Awaiting secure link.</p>
+          <button type="button" id="workspace-reset">Reset View</button>
+          <button type="button" id="fullscreen-toggle">Fullscreen</button>
         </div>
         <div class="workspace__frame">
           <div id="frame-placeholder" class="workspace__placeholder">
-            Your secure session will render here once you launch a destination.
+            Secure session will render here.
           </div>
           <iframe
             id="proxy-frame"
-            title="Coffee Shop Safezone session"
+            title="Secure session"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             loading="lazy"
           ></iframe>
         </div>
       </section>
 
-      <section class="diagnostics" aria-label="Coffee Shop diagnostics">
+      <section class="diagnostics" aria-label="Diagnostics">
         <header class="diagnostics__header">
           <div>
-            <p class="diagnostics__eyebrow">Relay telemetry</p>
-            <h2>Live diagnostics</h2>
+            <p class="diagnostics__eyebrow">System Telemetry</p>
+            <h2>Live Diagnostics</h2>
           </div>
           <div class="diagnostics__actions">
             <button type="button" id="diag-refresh">Refresh</button>
-            <button type="button" id="diag-ping">Latency test</button>
+            <button type="button" id="diag-ping">Ping Test</button>
           </div>
         </header>
         <div class="diagnostics__grid">
           <article>
-            <h3>Safezone</h3>
+            <h3>Secure Link</h3>
             <p id="diag-safezone" class="diagnostics__value">Unknown</p>
-            <small>Transport channel health</small>
+            <small>Channel Health</small>
           </article>
           <article>
             <h3>Cache</h3>
@@ -298,114 +343,113 @@
           <article>
             <h3>Requests</h3>
             <p id="diag-requests" class="diagnostics__value">–</p>
-            <small>Totals &amp; avg latency</small>
+            <small>Total &amp; Latency</small>
           </article>
           <article>
-            <h3>Headless / renderer</h3>
+            <h3>Headless</h3>
             <p id="diag-headless" class="diagnostics__value">–</p>
-            <small>Headless concurrency</small>
+            <small>Concurrency</small>
           </article>
           <article>
-            <h3>Last latency test</h3>
+            <h3>Latency</h3>
             <p id="diag-latency" class="diagnostics__value">–</p>
-            <small>Health endpoint ping</small>
+            <small>Ping</small>
           </article>
           <article>
-            <h3>Last request</h3>
+            <h3>Last Request</h3>
             <p id="diag-request-id" class="diagnostics__value">–</p>
-            <small>Renderer &amp; destination</small>
+            <small>ID</small>
           </article>
         </div>
-        <pre id="diag-log" class="diagnostics__log" aria-live="polite">Waiting for diagnostics…</pre>
+        <pre id="diag-log" class="diagnostics__log" aria-live="polite">Waiting for telemetry...</pre>
       </section>
 
       <main>
         <section id="dev-dashboard" class="dev-dashboard" hidden>
           <header>
-            <p class="dev-dashboard__eyebrow">Developer mode</p>
-            <h2>Active sessions</h2>
-            <p class="dev-dashboard__welcome">Welcome to the Barista Station, James. What would you like to do here?</p>
-            <p class="dev-dashboard__url">Current URL cache: <span id="dev-current-cache">n/a</span></p>
+            <p class="dev-dashboard__eyebrow">Admin Mode</p>
+            <h2>Active Sessions</h2>
+            <p class="dev-dashboard__welcome">Welcome to the Core, Admin. Systems are nominal.</p>
+            <p class="dev-dashboard__url">Current Cache: <span id="dev-current-cache">n/a</span></p>
           </header>
           <div class="dev-dashboard__grid">
             <article>
-              <h3>Cache entries</h3>
-              <div class="dev-dashboard__list" id="dev-cache-list">No cache entries yet.</div>
+              <h3>Cache Entries</h3>
+              <div class="dev-dashboard__list" id="dev-cache-list">No entries.</div>
             </article>
             <article>
-              <h3>Registered users</h3>
-              <div class="dev-dashboard__list dev-user-list" id="dev-user-list">No users yet.</div>
+              <h3>Registered Researchers</h3>
+              <div class="dev-dashboard__list dev-user-list" id="dev-user-list">No users.</div>
             </article>
             <article>
-              <h3>Banned users</h3>
-              <div class="dev-dashboard__list dev-banned-list" id="dev-banned-list">No users banned.</div>
+              <h3>Banned Subjects</h3>
+              <div class="dev-dashboard__list dev-banned-list" id="dev-banned-list">No bans.</div>
             </article>
             <article>
-              <h3>Recent activity</h3>
-              <div class="dev-dashboard__list" id="dev-log-list">No activity logged.</div>
+              <h3>Activity Log</h3>
+              <div class="dev-dashboard__list" id="dev-log-list">No activity.</div>
             </article>
             <article>
-              <h3>Banned devices</h3>
-              <div class="dev-dashboard__list" id="dev-device-list">No devices banned.</div>
+              <h3>Banned Devices</h3>
+              <div class="dev-dashboard__list" id="dev-device-list">No devices.</div>
             </article>
             <article>
               <h3>Broadcast</h3>
               <form id="dev-broadcast-form" class="dev-broadcast" onsubmit="event.preventDefault();">
                 <label class="sr-only" for="dev-broadcast-input">Broadcast message</label>
-                <textarea id="dev-broadcast-input" placeholder="Type system message…" rows="3"></textarea>
-                <button type="submit">Send broadcast</button>
+                <textarea id="dev-broadcast-input" placeholder="System message..." rows="3"></textarea>
+                <button type="submit">Send</button>
                 <p id="dev-broadcast-status" class="dev-broadcast__status"></p>
               </form>
             </article>
             <article>
-              <h3>Live chat feed</h3>
-              <div class="dev-dashboard__list dev-chat-log" id="dev-chat-log">No chat yet.</div>
+              <h3>Lab Chat</h3>
+              <div class="dev-dashboard__list dev-chat-log" id="dev-chat-log">No chat.</div>
             </article>
           </div>
         </section>
 
         <section class="features">
           <article>
-            <h2>No account trail</h2>
-            <p>Browser-grade privacy without the sign-in baggage. Everything is ephemeral unless you say otherwise.</p>
+            <h2>Zero Trace</h2>
+            <p>Research data is ephemeral. No logs are kept unless explicitly requested.</p>
           </article>
           <article>
-            <h2>Single-origin routing</h2>
-            <p>Every sip runs through one carefully tuned Safezone roast so you always know what stack shields you.</p>
+            <h2>Secure Routing</h2>
+            <p>All traffic is routed through our encrypted containment field.</p>
           </article>
           <article>
-            <h2>Warm ambience</h2>
-            <p>Caramel gradients, quiet toggles, and little rituals keep the experience calm even when traffic spikes.</p>
+            <h2>Calm Environment</h2>
+            <p>Designed for focus and efficiency in high-stress academic environments.</p>
           </article>
         </section>
 
         <section class="mission" id="mission">
           <p>
-            The goal of Coffee Shop is to finally end annoying internet censorships, especially at school. Solo made by
-            @1d3nt1ty. Visit the TN Discord at <a href="https://discord.gg/unblock" target="_blank" rel="noreferrer">discord.gg/unblock</a>.
+            AstraCore Institute is dedicated to the free exchange of information for educational purposes.
           </p>
         </section>
 
         <section class="how-it-works">
-          <h2>How Coffee Shop works</h2>
+          <h2>System Operations</h2>
           <ol>
-            <li>Paste a URL or type anything to search privately.</li>
-            <li>Coffee Shop launches a cloaked tab through our native Safezone rewrite backend.</li>
+            <li>Enter a target URL to begin research.</li>
+            <li>The system establishes a secure link via the containment field.</li>
           </ol>
-          <p class="subtle">Need to plug in a different deployment? Update the relay configuration inside <code>public/app.js</code>.</p>
+          <p class="subtle">Configuration can be adjusted in <code>public/app.js</code>.</p>
         </section>
 
         <section class="credits" aria-label="Project credits">
-          <p>James / @1d3nt1ty &mdash; Solo project, main coder and designer.</p>
+          <p>AstraCore Systems &mdash; Secure Educational Access.</p>
         </section>
       </main>
-      <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open chat</button>
-      <section class="chat-bar" aria-label="Coffee Shop global chat">
-        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for chat…</div>
+      <button class="chat-toggle" id="chat-toggle" type="button" aria-expanded="false">Open Lab Chat</button>
+      <section class="chat-bar" aria-label="Global chat">
+        <div class="chat-bar__messages" id="chat-messages" aria-live="polite">Waiting for comms...</div>
         <form id="chat-form" class="chat-bar__form" autocomplete="off" onsubmit="event.preventDefault();">
           <label for="chat-input" class="sr-only">Chat message</label>
-          <input id="chat-input" type="text" placeholder="Say something to the Coffee Shop…" maxlength="280" />
-          <button type="submit">Send</button>
+          <input id="chat-input" type="text" placeholder="Broadcast to lab..." maxlength="280" />
+          <button type="submit">Transmit</button>
         </form>
       </section>
     </div>
@@ -420,19 +464,19 @@
     </div>
 
     <button id="proxy-manager-toggle" class="proxy-manager-toggle" type="button">
-        Proxy Manager
+        Node Manager
       </button>
 
       <section id="proxy-manager-panel" class="proxy-manager-panel" aria-hidden="true">
         <header class="proxy-manager-panel__header">
-          <h2>Proxy Manager</h2>
-          <button id="proxy-manager-close" class="proxy-manager-panel__close" type="button" aria-label="Close Proxy Manager">
+          <h2>Node Manager</h2>
+          <button id="proxy-manager-close" class="proxy-manager-panel__close" type="button" aria-label="Close Manager">
             &times;
           </button>
         </header>
         
         <div class="proxy-manager-content">
-          <p class="subtle">Select a relay node to route your traffic. If one is blocked, try another.</p>
+          <p class="subtle">Select a relay node to route your traffic.</p>
           
           <div class="proxy-node-list" role="radiogroup" aria-label="Proxy Nodes">
             <div class="proxy-node is-active" data-node="us-east-1" role="radio" aria-checked="true" tabindex="0">
@@ -446,7 +490,7 @@
             <div class="proxy-node" data-node="eu-west-1" role="radio" aria-checked="false" tabindex="0">
               <div class="proxy-node__info">
                 <h3>EU West (Ireland)</h3>
-                <p>Alternative route, higher latency.</p>
+                <p>Alternative route.</p>
               </div>
               <span class="proxy-node__status">Online</span>
             </div>
@@ -454,7 +498,7 @@
             <div class="proxy-node" data-node="ap-northeast-1" role="radio" aria-checked="false" tabindex="0">
               <div class="proxy-node__info">
                 <h3>Asia Pacific (Tokyo)</h3>
-                <p>Bypass regional blocks.</p>
+                <p>Regional bypass.</p>
               </div>
               <span class="proxy-node__status">Online</span>
             </div>
@@ -462,14 +506,14 @@
              <div class="proxy-node" data-node="stealth-v2" role="radio" aria-checked="false" tabindex="0">
               <div class="proxy-node__info">
                 <h3>Stealth V2 (Experimental)</h3>
-                <p>Obfuscated headers, slower but safer.</p>
+                <p>Obfuscated headers.</p>
               </div>
               <span class="proxy-node__status">Beta</span>
             </div>
           </div>
 
           <div class="comfort" style="margin-top: 2rem;">
-             <h3>Anti-Blocking Measures</h3>
+             <h3>Counter-Measures</h3>
              <label class="toggle">
                 <input type="checkbox" id="stealth-headers" checked>
                 <span>Strip Tracking Headers</span>

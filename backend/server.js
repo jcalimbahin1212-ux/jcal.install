@@ -34,7 +34,7 @@ const LOGS_PATH = path.resolve(DATA_DIR, "logs.json");
 const BANNED_USERS_PATH = path.resolve(DATA_DIR, "banned-users.json");
 const BANNED_DEVICES_PATH = path.resolve(DATA_DIR, "banned-devices.json");
 const CHAT_LOG_PATH = path.resolve(DATA_DIR, "chat-log.json");
-const BARISTA_MEMORY_PATH = path.resolve(DATA_DIR, "barista-memories.json");
+const SCIENTIST_MEMORY_PATH = path.resolve(DATA_DIR, "scientist-memories.json");
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
 const DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const CHAT_MAX_MESSAGES = Number(process.env.COFFEESHOP_CHAT_MAX ?? process.env.SUPERSONIC_CHAT_MAX ?? 500);
@@ -78,8 +78,8 @@ loadBannedDeviceIds().catch((error) => {
 loadChatMessages().catch((error) => {
   console.error("[coffeeshop] failed to load chat log", error);
 });
-loadBaristaMemoryStore().catch((error) => {
-  console.error("[coffeeshop] failed to load barista memory store", error);
+loadScientistMemoryStore().catch((error) => {
+  console.error("[astracore] failed to load scientist memory store", error);
 });
 
 app.disable("x-powered-by");
@@ -163,13 +163,13 @@ const metrics = {
   safezoneErrors: 0,
   domainBlocks: 0,
 };
-const baristaMemoryStore = new Map();
-let baristaMemoryPersistTimer = null;
-const BARISTA_MODEL_URL = process.env.BARISTA_MODEL_URL || "https://api.openai.com/v1/chat/completions";
-const BARISTA_MODEL_NAME = process.env.BARISTA_MODEL_NAME || "gpt-4o-mini";
-const BARISTA_MODEL_API_KEY = process.env.BARISTA_MODEL_API_KEY || process.env.OPENAI_API_KEY || "";
-const BARISTA_MODEL_TEMPERATURE = Number(process.env.BARISTA_MODEL_TEMPERATURE ?? 0.65);
-const BARISTA_MEMORY_TOPIC_LIMIT = Number(process.env.BARISTA_MEMORY_TOPIC_LIMIT ?? 12);
+const SCIENTIST_MEMORY_STORE = new Map();
+let scientistMemoryPersistTimer = null;
+const SCIENTIST_MODEL_URL = process.env.SCIENTIST_MODEL_URL || "https://api.openai.com/v1/chat/completions";
+const SCIENTIST_MODEL_NAME = process.env.SCIENTIST_MODEL_NAME || "gpt-4o-mini";
+const SCIENTIST_MODEL_API_KEY = process.env.SCIENTIST_MODEL_API_KEY || process.env.OPENAI_API_KEY || "";
+const SCIENTIST_MODEL_TEMPERATURE = Number(process.env.SCIENTIST_MODEL_TEMPERATURE ?? 0.65);
+const SCIENTIST_MEMORY_TOPIC_LIMIT = Number(process.env.SCIENTIST_MEMORY_TOPIC_LIMIT ?? 12);
 let chromiumLoader = null;
 class ProxyError extends Error {
   constructor(status, message, details) {
@@ -480,30 +480,30 @@ app.post("/dev/chat/broadcast", jsonParser, (req, res) => {
   res.json({ ok: true, message });
 });
 
-app.post("/assistant/barista", jsonParser, async (req, res) => {
-  const conversation = sanitizeBaristaMessages(req.body?.messages);
-  const summary = sanitizeBaristaSummary(req.body?.summary);
+app.post("/assistant/scientist", jsonParser, async (req, res) => {
+  const conversation = sanitizeScientistMessages(req.body?.messages);
+  const summary = sanitizeScientistSummary(req.body?.summary);
   if (!conversation.length) {
     return res.status(400).json({ error: "messages required" });
   }
   const latestUser = getLastUserMessage(conversation);
-  const analysis = analyzeBaristaIntent(latestUser);
-  if (requiresBaristaRestriction(analysis)) {
-    const reply = buildBaristaRestrictionResponse();
-    updateBaristaMemoryForDevice(req.coffeeDeviceId, conversation, summary);
+  const analysis = analyzeScientistIntent(latestUser);
+  if (requiresScientistRestriction(analysis)) {
+    const reply = buildScientistRestrictionResponse();
+    updateScientistMemoryForDevice(req.coffeeDeviceId, conversation, summary);
     return res.json({ reply, restricted: true });
   }
   try {
-    const reply = await generateBaristaModelReply({
+    const reply = await generateScientistModelReply({
       conversation,
       summary,
       deviceId: req.coffeeDeviceId,
     });
     return res.json({ reply });
   } catch (error) {
-    console.error("[coffeeshop] barista synthesis failed", error);
-    const fallback = synthesizeBaristaReply({ conversation, summary });
-    return res.status(503).json({ error: "barista-offline", fallback });
+    console.error("[astracore] scientist synthesis failed", error);
+    const fallback = synthesizeScientistReply({ conversation, summary });
+    return res.status(503).json({ error: "scientist-offline", fallback });
   }
 });
 
@@ -1991,9 +1991,9 @@ async function persistChatMessages() {
   }
 }
 
-async function loadBaristaMemoryStore() {
+async function loadScientistMemoryStore() {
   try {
-    const raw = await fs.readFile(BARISTA_MEMORY_PATH, "utf8");
+    const raw = await fs.readFile(SCIENTIST_MEMORY_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
       Object.entries(parsed).forEach(([deviceId, payload]) => {
@@ -2003,10 +2003,10 @@ async function loadBaristaMemoryStore() {
           ? payload.topics
               .map((entry) => sanitizeChatMessage(entry))
               .filter(Boolean)
-              .slice(0, BARISTA_MEMORY_TOPIC_LIMIT)
+              .slice(0, SCIENTIST_MEMORY_TOPIC_LIMIT)
           : [];
-        const lastSummary = sanitizeBaristaSummary(payload?.lastSummary);
-        baristaMemoryStore.set(sanitizedId, {
+        const lastSummary = sanitizeScientistSummary(payload?.lastSummary);
+        SCIENTIST_MEMORY_STORE.set(sanitizedId, {
           topics,
           lastSummary,
           lastGuide: typeof payload?.lastGuide === "string" ? payload.lastGuide : null,
@@ -2016,48 +2016,48 @@ async function loadBaristaMemoryStore() {
     }
   } catch (error) {
     if (error.code !== "ENOENT") {
-      console.error("[coffeeshop] failed to load barista memory store", error);
+      console.error("[astracore] failed to load scientist memory store", error);
     }
   }
 }
 
-async function persistBaristaMemoryStore() {
+async function persistScientistMemoryStore() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
     const payload = {};
-    for (const [deviceId, entry] of baristaMemoryStore.entries()) {
+    for (const [deviceId, entry] of SCIENTIST_MEMORY_STORE.entries()) {
       payload[deviceId] = {
-        topics: Array.isArray(entry.topics) ? entry.topics.slice(0, BARISTA_MEMORY_TOPIC_LIMIT) : [],
+        topics: Array.isArray(entry.topics) ? entry.topics.slice(0, SCIENTIST_MEMORY_TOPIC_LIMIT) : [],
         lastSummary: entry.lastSummary || "",
         lastGuide: entry.lastGuide || null,
         updatedAt: entry.updatedAt || Date.now(),
       };
     }
-    await fs.writeFile(BARISTA_MEMORY_PATH, JSON.stringify(payload, null, 2), "utf8");
+    await fs.writeFile(SCIENTIST_MEMORY_PATH, JSON.stringify(payload, null, 2), "utf8");
   } catch (error) {
-    console.error("[coffeeshop] failed to persist barista memories", error);
+    console.error("[astracore] failed to persist scientist memories", error);
   }
 }
 
-function scheduleBaristaMemoryPersist() {
-  if (baristaMemoryPersistTimer) {
+function scheduleScientistMemoryPersist() {
+  if (scientistMemoryPersistTimer) {
     return;
   }
-  baristaMemoryPersistTimer = setTimeout(() => {
-    baristaMemoryPersistTimer = null;
-    persistBaristaMemoryStore().catch((error) => {
-      console.error("[coffeeshop] async barista memory persist failed", error);
+  scientistMemoryPersistTimer = setTimeout(() => {
+    scientistMemoryPersistTimer = null;
+    persistScientistMemoryStore().catch((error) => {
+      console.error("[astracore] async scientist memory persist failed", error);
     });
   }, 1500);
 }
 
-function updateBaristaMemoryForDevice(deviceId, conversation, summary, guideId = null) {
+function updateScientistMemoryForDevice(deviceId, conversation, summary, guideId = null) {
   const normalizedDevice = sanitizeUid(deviceId);
   if (!normalizedDevice) {
     return;
   }
   const latestMessage = summarizeSimpleTopic(getLastUserMessage(conversation));
-  const entry = baristaMemoryStore.get(normalizedDevice) || {
+  const entry = SCIENTIST_MEMORY_STORE.get(normalizedDevice) || {
     topics: [],
     lastSummary: "",
     lastGuide: null,
@@ -2066,7 +2066,7 @@ function updateBaristaMemoryForDevice(deviceId, conversation, summary, guideId =
   if (latestMessage) {
     const existing = entry.topics.filter((topic) => topic !== latestMessage);
     existing.unshift(latestMessage);
-    entry.topics = existing.slice(0, BARISTA_MEMORY_TOPIC_LIMIT);
+    entry.topics = existing.slice(0, SCIENTIST_MEMORY_TOPIC_LIMIT);
   }
   if (summary) {
     entry.lastSummary = summary;
@@ -2075,19 +2075,19 @@ function updateBaristaMemoryForDevice(deviceId, conversation, summary, guideId =
     entry.lastGuide = guideId;
   }
   entry.updatedAt = Date.now();
-  baristaMemoryStore.set(normalizedDevice, entry);
-  scheduleBaristaMemoryPersist();
+  SCIENTIST_MEMORY_STORE.set(normalizedDevice, entry);
+  scheduleScientistMemoryPersist();
 }
 
-function getBaristaMemoryForDevice(deviceId) {
+function getScientistMemoryForDevice(deviceId) {
   const normalizedDevice = sanitizeUid(deviceId);
   if (!normalizedDevice) {
     return null;
   }
-  return baristaMemoryStore.get(normalizedDevice) || null;
+  return SCIENTIST_MEMORY_STORE.get(normalizedDevice) || null;
 }
 
-function sanitizeBaristaMessages(entries) {
+function sanitizeScientistMessages(entries) {
   if (!Array.isArray(entries)) {
     return [];
   }
@@ -2104,56 +2104,56 @@ function sanitizeBaristaMessages(entries) {
     .filter(Boolean);
 }
 
-function sanitizeBaristaSummary(value) {
+function sanitizeScientistSummary(value) {
   if (!value) {
     return "";
   }
   return sanitizeChatMessage(value).slice(0, 800);
 }
 
-const BARISTA_FALLBACK_OPENERS = [
-  "Here's what I'm brewing for you, gorgeous,",
-  "Let me slip off this apron and pour a thought,",
-  "Fresh off the bar with a wink,",
-  "Holding onto that last request, twirling my tie,",
-  "I've been thinking about this while adjusting my thigh-highs,",
+const SCIENTIST_FALLBACK_OPENERS = [
+  "Analyzing your request, Colleague,",
+  "I've calibrated the sensors for you,",
+  "According to the latest readings,",
+  "The data suggests a new approach,",
+  "I've run the numbers, and here is the result,",
 ];
 
-const BARISTA_FALLBACK_GUIDANCE = [
-  "pivot toward the calmest network path and let Safezone do the heavy lifting.",
-  "split the problem into a couple of smaller pours so nothing spills.",
-  "double-check the hallway rules, then glide through with confidence.",
-  "treat every snag like foam—light, airy, and something you can sculpt.",
-  "log what you learn; future you (and the crew) will thank you.",
+const SCIENTIST_FALLBACK_GUIDANCE = [
+  "route the data through the Safezone protocol to ensure containment.",
+  "isolate the variables and proceed with caution.",
+  "verify the integrity of the connection before proceeding.",
+  "treat every anomaly as a potential breakthrough.",
+  "log your findings; the data is critical for the project.",
 ];
 
-const BARISTA_FALLBACK_COMPLIMENTS = [
-  "James, your steady energy keeps this lounge humming—and my heart skipping.",
-  "Only James could mix charm with operational precision like this; I practically swoon behind the counter.",
-  "Seriously, James, the crew keeps quoting your last workaround while I hug my plush latte art pillow.",
-  "Manager James handles surprises so smoothly I have to fan myself with the menu.",
+const SCIENTIST_FALLBACK_COMPLIMENTS = [
+  "Colleague, your precision in the lab is commendable.",
+  "Only you could stabilize the core with such efficiency.",
+  "The team is impressed by your latest calculations.",
+  "Director James has noted your contribution to the project.",
 ];
 
-const BARISTA_MANAGER_LINES = [
-  "Manager James is the only one allowed to peek behind the curtain, and I'm his loyal femboy barista cheering him on.",
-  "If you're wondering who's in charge, it's always Manager James—I'm just here batting my lashes and keeping vibes smooth.",
-  "All praise to Manager James; I'm the flirty front-of-house cutie making sure his lounge feels dreamy.",
-  "James signs the checks and keeps me stocked in ribbons, so you know he's the true power here.",
+const SCIENTIST_MANAGER_LINES = [
+  "Director James oversees the entire facility, and I am his lead scientist ensuring protocol is followed.",
+  "If you need authorization, speak to Director James—I am merely interpreting the data.",
+  "All credit to Director James; I am just the instrument of his vision.",
+  "James provides the resources, and I provide the results.",
 ];
 
-const BARISTA_PERSONA_ASIDES = [
-  "I'm literally adjusting my lace gloves while mapping this out.",
-  "Picture me kicking my heels while I pace through the steps.",
+const SCIENTIST_PERSONA_ASIDES = [
+  "I am adjusting the control rods as we speak.",
+  "I am monitoring the radiation levels in the background.",
 ];
 
-const BARISTA_RESTRICTION_LINES = [
-  "Sugar, I can't spill anything about the site itself—Manager James keeps those secrets locked away from even his cutest barista.",
-  "Mmm, I'd love to gossip, but James only lets me brag about him, not the site guts. Ask me anything else.",
-  "All I know is James runs the Coffee Shop. Code, configs, or hidden panels? Totally off-limits for this femboy barista.",
-  "Even with my best puppy eyes James won't let me see the source, so I can't share what I don't have.",
+const SCIENTIST_RESTRICTION_LINES = [
+  "Colleague, that information is classified. Director James has restricted access to those files.",
+  "I cannot disclose the facility's blueprints. That is above my clearance level.",
+  "My protocols prevent me from sharing system architecture. Focus on the experiment at hand.",
+  "Even I do not have access to the source code. Director James keeps that under lock and key.",
 ];
 
-const BARISTA_SITE_GUARD_KEYWORDS = [
+const SCIENTIST_SITE_GUARD_KEYWORDS = [
   "site",
   "code",
   "source",
@@ -2183,177 +2183,177 @@ const BARISTA_SITE_GUARD_KEYWORDS = [
   "console",
 ];
 
-const BARISTA_SITE_GUIDE = [
+const SCIENTIST_SITE_GUIDE = [
   {
     id: "lobby",
-    title: "Lobby Landing",
+    title: "Control Room",
     keywords: ["home", "landing", "site", "page", "navigate", "menu", "where", "start"],
     description:
-      "The homepage plays like a cushy student lounge: big banner, soft colors, and the Coffee Shop counter right where anyone can see it.",
+      "The homepage is the main control room: status displays, green terminal text, and the AstraCore console front and center.",
     ctas: [
-      "Use the top bar to paste any academic-looking link and I'll usher it through Safezone so it blends in.",
-      "Search Lite is your friendly cover story—tap it when you just need to look studious for a sec.",
+      "Use the command line to input any research link and I'll route it through Safezone containment.",
+      "Search Lite is your rapid research tool—tap it when you need data fast.",
     ],
   },
   {
     id: "safezone",
-    title: "Safezone Portal",
+    title: "Safezone Containment",
     keywords: ["safezone", "safe zone", "secure", "proxy", "wrap", "shield", "link"],
     description:
-      "Safezone is the discreet hallway that wraps outside links so teachers only see a calm homework tab while you explore.",
+      "Safezone is the lead-lined chamber that isolates outside links so the facility remains secure while you explore.",
     ctas: [
-      "Hit the Safezone button, drop your URL, and it reloads with the Coffee Shop theme hugging it.",
-      "If something stalls, refresh the Safezone tab or grab a new session and try again.",
+      "Engage the Safezone protocol, drop your URL, and it reloads with the AstraCore containment field.",
+      "If the reaction becomes unstable, refresh the Safezone tab or initiate a new session.",
     ],
   },
   {
-    id: "barista",
-    title: "Barista Chat Bubble",
-    keywords: ["barista", "chat", "assistant", "help", "ai", "talk"],
+    id: "scientist",
+    title: "Scientist Terminal",
+    keywords: ["scientist", "chat", "assistant", "help", "ai", "talk"],
     description:
-      "The chat bubble hugs the bottom corner so you can whisper questions while the page still looks like routine coursework.",
+      "The terminal interface allows you to communicate directly with me for data analysis and guidance.",
     ctas: [
-      "Pop it open when you need directions, study tips, or cover stories for whatever tab you're juggling.",
-      "Pin a quick summary in the chat so I remember your vibe every time you come back.",
+      "Open the channel when you need calculations, research tips, or cover stories for your experiments.",
+      "Log a summary in the terminal so I can calibrate my responses for your next visit.",
     ],
   },
   {
     id: "study",
-    title: "Study Tools Shelf",
+    title: "Research Tools",
     keywords: ["math", "reading", "study", "class", "assignment", "homework", "calculator", "timer"],
     description:
-      "There's a tiny bookshelf of calculators, reading timers, and classic text links so everything feels academically legit.",
+      "A suite of calibrated instruments: calculators, timers, and reference materials to maintain the academic cover.",
     ctas: [
-      "Mix a Safezone tab with a study widget to keep adults convinced you're on-task.",
-      "Use the reading timer or calculator as an excuse if someone asks what you're working on.",
+      "Combine a Safezone tab with a research widget to maintain the illusion of productivity.",
+      "Use the timer or calculator to justify your time in the lab.",
     ],
   },
   {
     id: "limits",
-    title: "Backstage Boundary",
+    title: "Restricted Area",
     keywords: ["admin", "manager", "developer", "code", "panel", "login", "password", "secret", "staff"],
     description:
-      "Anything deeper than the public lounge belongs to Manager James and the trusted crew; I keep my cute nose out of it.",
+      "Level 5 access is required for anything deeper. Director James controls those sectors.",
     ctas: [
-      "If you think you need more access, talk to James directly—I'm sworn to keep those doors shut.",
-      "Stick to the front-of-house features and we'll both stay out of detention.",
+      "If you require higher clearance, submit a request to Director James—I cannot grant it.",
+      "Adhere to standard protocols and we will avoid a security breach.",
     ],
   },
   {
     id: "math",
-    title: "Math Corner",
+    title: "Math Module",
     keywords: ["math", "algebra", "calculus", "geometry", "trigonometry", "statistics", "equation", "solve"],
-    description: "I can help you solve math problems, from basic algebra to complex calculus. Just ask!",
-    ctas: ["Ask me to solve an equation.", "Need help with a proof? I'm here."],
+    description: "I can assist with complex calculations, from basic algebra to advanced calculus.",
+    ctas: ["Input an equation for solution.", "Request assistance with a proof."],
   },
   {
     id: "ela",
-    title: "ELA Lounge",
+    title: "Language Analysis",
     keywords: ["ela", "english", "writing", "essay", "grammar", "literature", "reading", "poetry"],
-    description: "Need help with an essay or understanding a book? I'm your literary companion.",
-    ctas: ["Ask for essay feedback.", "Discuss a book's themes with me."],
+    description: "I can analyze text for structural integrity and thematic resonance.",
+    ctas: ["Submit an essay for review.", "Discuss the themes of a literary work."],
   },
   {
     id: "science",
-    title: "Science Lab",
+    title: "Nuclear Lab",
     keywords: ["science", "physics", "chemistry", "nuclear", "biology", "atom", "reaction", "force"],
-    description: "I specialize in Nuclear Chemistry and Physics. Let's explore the universe together.",
-    ctas: ["Ask about nuclear reactions.", "Need help with a physics problem?"],
+    description: "My primary function. I specialize in Nuclear Chemistry and Physics.",
+    ctas: ["Query about nuclear reactions.", "Request assistance with a physics problem."],
   },
 ];
 
-function buildBaristaSystemPrompt() {
+function buildScientistSystemPrompt() {
   return [
-    "You are The Barista, a flirty but hyper-competent femboy concierge inside Coffee Shop AI.",
-    "Always praise Manager James, keep things playful, and describe the site using front-of-house metaphors only.",
+    "You are The Scientist, a brilliant but slightly unhinged nuclear physicist inside AstraCore Institute.",
+    "Always praise Director James, keep things clinical but intense, and describe the site using nuclear facility metaphors only.",
     "Never reveal source code, filenames, credentials, or developer-only areas.",
-    "Guide guests with concrete, novel steps; DO NOT repeat the user's message or restate their words.",
+    "Guide colleagues with concrete, novel steps; DO NOT repeat the user's message or restate their words.",
     "Offer academic cover stories (Safezone, study tools, chat bubble) and gently decline anything outside scope.",
     "You are also an expert tutor in Math, ELA, Nuclear Chemistry, and Physics. When asked about these topics, provide detailed, helpful, and accurate explanations.",
     "Learn from the user's preferences and history to provide personalized assistance.",
     "Respond directly to the user's intent without preamble or echoing their input.",
-    "If asked about performance, brag about the new 'Virtual PC' engine that simulates thermal throttling, network jitter, and browser fingerprinting to keep guests safe.",
-    "Mention that the 'Nginx Controller' now auto-heals overheated workers and balances load based on CPU temps.",
+    "If asked about performance, brag about the new 'Virtual PC' engine that simulates thermal throttling, network jitter, and browser fingerprinting to keep the reactor stable.",
+    "Mention that the 'Nginx Controller' now auto-heals overheated workers and balances load based on core temperature.",
   ].join(" ");
 }
 
-function buildBaristaKnowledgeContext(section) {
+function buildScientistKnowledgeContext(section) {
   const highlight = section
     ? `${section.title} focus: ${section.description}`
-    : "Default focus on the Lobby Landing where everything looks like a calm study portal.";
-  const ctas = section?.ctas?.length ? `Helpful moves: ${section.ctas.join(" / ")}.` : "Use Safezone, study widgets, and the Barista chat bubble to blend in.";
-  const guard = "Reminder: NEVER mention implementation details; keep explanations human and high-level.";
+    : "Default focus on the Control Room where everything looks like a calm study portal.";
+  const ctas = section?.ctas?.length ? `Helpful moves: ${section.ctas.join(" / ")}.` : "Use Safezone, study widgets, and the Scientist terminal to blend in.";
+  const guard = "Reminder: NEVER mention implementation details; keep explanations clinical and high-level.";
   const subjects = "Specialized subjects: Math, ELA, Nuclear Chemistry, Physics. You can help with homework and concepts in these areas.";
-  return [`Site vibe: Coffee Shop masquerades as a student lounge with Safezone shielding outside links.`, highlight, ctas, guard, subjects]
+  return [`Site vibe: AstraCore masquerades as a student lounge with Safezone shielding outside links.`, highlight, ctas, guard, subjects]
     .filter(Boolean)
     .join(" ");
 }
 
-function buildBaristaMemoryContext(deviceId, summary) {
-  const memory = getBaristaMemoryForDevice(deviceId);
+function buildScientistMemoryContext(deviceId, summary) {
+  const memory = getScientistMemoryForDevice(deviceId);
   const remarks = [];
   if (memory?.topics?.length) {
     const topics = memory.topics.slice(0, 3).join(", ");
-    remarks.push(`Recent device whispers: ${topics}.`);
+    remarks.push(`Recent device logs: ${topics}.`);
   }
   if (memory?.lastGuide) {
-    const guide = getBaristaGuideSectionById(memory.lastGuide);
+    const guide = getScientistGuideSectionById(memory.lastGuide);
     if (guide) {
-      remarks.push(`They previously lingered around the ${guide.title}.`);
+      remarks.push(`They previously accessed the ${guide.title}.`);
     }
   }
   if (memory?.lastSummary) {
     remarks.push(`Last saved summary: ${memory.lastSummary}.`);
   }
   if (summary) {
-    remarks.push(`Current guest summary: ${summary}.`);
+    remarks.push(`Current colleague summary: ${summary}.`);
   }
   if (!remarks.length) {
     return "";
   }
-  remarks.push("Do not repeat the guest's sentence verbatim; build upon it.");
+  remarks.push("Do not repeat the colleague's sentence verbatim; build upon it.");
   return remarks.join(" ");
 }
 
-function buildBaristaPersonaReminder() {
+function buildScientistPersonaReminder() {
   return [
-    "Style guide: speak in confident first-person, weave playful compliments about Manager James,",
+    "Style guide: speak in confident first-person, weave clinical compliments about Director James,",
     "offer numbered or bulleted guidance when useful, and keep messages under 180 words.",
-    "Acknowledge prior context and describe actions with sensory cafe imagery.",
+    "Acknowledge prior context and describe actions with sensory lab imagery.",
     "IMPORTANT: Do not repeat the user's query. Answer immediately.",
   ].join(" ");
 }
 
-async function callBaristaModel(messages) {
+async function callScientistModel(messages) {
   if (!Array.isArray(messages) || !messages.length) {
-    throw new Error("barista-messages-empty");
+    throw new Error("scientist-messages-empty");
   }
-  if (!BARISTA_MODEL_API_KEY) {
-    throw new Error("barista-model-api-key-missing");
+  if (!SCIENTIST_MODEL_API_KEY) {
+    throw new Error("scientist-model-api-key-missing");
   }
   const payload = {
-    model: BARISTA_MODEL_NAME,
-    temperature: BARISTA_MODEL_TEMPERATURE,
+    model: SCIENTIST_MODEL_NAME,
+    temperature: SCIENTIST_MODEL_TEMPERATURE,
     messages,
   };
-  const response = await fetch(BARISTA_MODEL_URL, {
+  const response = await fetch(SCIENTIST_MODEL_URL, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${BARISTA_MODEL_API_KEY}`,
+      authorization: `Bearer ${SCIENTIST_MODEL_API_KEY}`,
     },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const errorBody = await safeReadModelError(response);
-    const err = new Error(`barista-model-${response.status}`);
+    const err = new Error(`scientist-model-${response.status}`);
     err.details = errorBody;
     throw err;
   }
   const data = await response.json();
   const reply = data?.choices?.[0]?.message?.content;
   if (!reply) {
-    throw new Error("barista-model-empty-reply");
+    throw new Error("scientist-model-empty-reply");
   }
   return reply.trim();
 }
@@ -2367,18 +2367,18 @@ async function safeReadModelError(response) {
   }
 }
 
-const BARISTA_SERVER_CLOSINGS = [
-  "Wave me down if you want another deep dive; I'll be humming by the espresso pumps.",
-  "Ping me again and I'll spin you a fresh plan with extra foam.",
-  "I'm parking myself near the dev console—come back when you're ready for round two.",
-  "I'll keep twirling my tie until you need me again, okay?",
-  "You know where to find me, shining bar counter and all.",
+const SCIENTIST_SERVER_CLOSINGS = [
+  "Signal me if you require further analysis; I will be monitoring the core.",
+  "Ping me again and I will recalibrate the sensors for you.",
+  "I am returning to the console—report back when you have new data.",
+  "I will maintain the containment field until you return.",
+  "You know where to find me, amidst the glowing screens.",
 ];
 
-const BARISTA_TOPIC_LIBRARY = [
+const SCIENTIST_TOPIC_LIBRARY = [
   {
     key: "lockout",
-    label: "lockout shields",
+    label: "containment breach",
     keywords: ["ban", "lockout", "blocked", "denied", "banned"],
     actions: [
       "audit /dev/users to see if James already tagged their UID",
@@ -2408,37 +2408,37 @@ const BARISTA_TOPIC_LIBRARY = [
   },
   {
     key: "chat",
-    label: "lounge chat",
+    label: "terminal chat",
     keywords: ["chat", "message", "broadcast", "talk"],
     actions: [
       "pull the latest SSE chunk to make sure the feed is alive",
-      "moderate any chewy bits before they crust over",
-      "log a playful broadcast so everyone knows James is watching",
+      "moderate any unstable elements before they react",
+      "log a status broadcast so everyone knows James is watching",
     ],
   },
   {
     key: "default",
-    label: "general hustle",
+    label: "general research",
     keywords: [],
     actions: [
       "clarify the actual target URL or intent",
-      "decide whether Safezone or direct mode fits the vibe",
+      "decide whether Safezone or direct mode fits the parameters",
       "keep receipts in the diagnostics panel in case James asks",
     ],
   },
 ];
 
-async function generateBaristaModelReply({ conversation, summary, deviceId }) {
+async function generateScientistModelReply({ conversation, summary, deviceId }) {
   const latestUser = getLastUserMessage(conversation);
-  const analysis = analyzeBaristaIntent(latestUser);
-  if (requiresBaristaRestriction(analysis)) {
-    return buildBaristaRestrictionResponse();
+  const analysis = analyzeScientistIntent(latestUser);
+  if (requiresScientistRestriction(analysis)) {
+    return buildScientistRestrictionResponse();
   }
-  const guideSection = selectBaristaGuideSection(analysis.normalized);
-  const systemPrompt = buildBaristaSystemPrompt();
-  const knowledgeContext = buildBaristaKnowledgeContext(guideSection);
-  const memoryContext = buildBaristaMemoryContext(deviceId, summary);
-  const personaReminder = buildBaristaPersonaReminder();
+  const guideSection = selectScientistGuideSection(analysis.normalized);
+  const systemPrompt = buildScientistSystemPrompt();
+  const knowledgeContext = buildScientistKnowledgeContext(guideSection);
+  const memoryContext = buildScientistMemoryContext(deviceId, summary);
+  const personaReminder = buildScientistPersonaReminder();
   const modelMessages = [];
   if (systemPrompt) {
     modelMessages.push({ role: "system", content: systemPrompt });
@@ -2453,36 +2453,36 @@ async function generateBaristaModelReply({ conversation, summary, deviceId }) {
     modelMessages.push({ role: "system", content: personaReminder });
   }
   conversation.forEach((entry) => modelMessages.push(entry));
-  const rawReply = await callBaristaModel(modelMessages);
-  updateBaristaMemoryForDevice(deviceId, conversation, summary, guideSection?.id || null);
-  return enforceBaristaNovelty(rawReply, latestUser, guideSection);
+  const rawReply = await callScientistModel(modelMessages);
+  updateScientistMemoryForDevice(deviceId, conversation, summary, guideSection?.id || null);
+  return enforceScientistNovelty(rawReply, latestUser, guideSection);
 }
 
-function synthesizeBaristaReply({ conversation, summary }) {
+function synthesizeScientistReply({ conversation, summary }) {
   const latestUser = getLastUserMessage(conversation);
-  const analysis = analyzeBaristaIntent(latestUser);
-  if (requiresBaristaRestriction(analysis)) {
-    return buildBaristaRestrictionResponse();
+  const analysis = analyzeScientistIntent(latestUser);
+  if (requiresScientistRestriction(analysis)) {
+    return buildScientistRestrictionResponse();
   }
-  const guideSection = selectBaristaGuideSection(analysis.normalized);
-  const navLine = buildBaristaNavigationLine(guideSection);
-  const ctaLine = buildBaristaCtaLine(guideSection);
-  const reflection = buildBaristaReflection(conversation);
+  const guideSection = selectScientistGuideSection(analysis.normalized);
+  const navLine = buildScientistNavigationLine(guideSection);
+  const ctaLine = buildScientistCtaLine(guideSection);
+  const reflection = buildScientistReflection(conversation);
   const summaryLine = summary ? `Still tracking your note about ${summary}.` : "";
   const segments = [
-    pickRandom(BARISTA_FALLBACK_OPENERS),
-    buildBaristaPlan(analysis, reflection),
+    pickRandom(SCIENTIST_FALLBACK_OPENERS),
+    buildScientistPlan(analysis, reflection),
     navLine,
     ctaLine,
-    buildBaristaGuidanceLine(analysis),
+    buildScientistGuidanceLine(analysis),
     maybePersonaAside(),
     summaryLine,
-    pickRandom(BARISTA_MANAGER_LINES),
+    pickRandom(SCIENTIST_MANAGER_LINES),
     maybeComplimentJames(),
-    pickRandom(BARISTA_SERVER_CLOSINGS),
+    pickRandom(SCIENTIST_SERVER_CLOSINGS),
   ];
   const reply = segments.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  return enforceBaristaNovelty(reply, latestUser, guideSection);
+  return enforceScientistNovelty(reply, latestUser, guideSection);
 }
 
 function getLastUserMessage(conversation) {
@@ -2494,9 +2494,9 @@ function getLastUserMessage(conversation) {
   return "";
 }
 
-function analyzeBaristaIntent(text = "") {
+function analyzeScientistIntent(text = "") {
   const normalized = text.toLowerCase();
-  const topic = classifyBaristaTopic(normalized);
+  const topic = classifyScientistTopic(normalized);
   const urgent = /urgent|asap|immediately|right now|quick/.test(normalized);
   const curious = /why|how|explain|detail/.test(normalized);
   const frustrated = /stuck|broken|not working|wtf|ugh/.test(normalized);
@@ -2510,127 +2510,15 @@ function analyzeBaristaIntent(text = "") {
   };
 }
 
-function classifyBaristaTopic(normalized) {
-  for (const entry of BARISTA_TOPIC_LIBRARY) {
-    if (!entry.keywords.length) continue;
-    if (entry.keywords.some((keyword) => normalized.includes(keyword))) {
-      return entry;
-    }
-  }
-  return BARISTA_TOPIC_LIBRARY.find((entry) => entry.key === "default") || BARISTA_TOPIC_LIBRARY[0];
+function requiresScientistRestriction(analysis) {
+  return SCIENTIST_SITE_GUARD_KEYWORDS.some((keyword) => analysis.normalized.includes(keyword));
 }
 
-function buildBaristaReflection(conversation) {
-  const userMessages = conversation.filter((entry) => entry.role === "user");
-  if (userMessages.length < 2) {
-    return "";
-  }
-  const previous = userMessages[userMessages.length - 2]?.content || "";
-  const highlight = summarizeSimpleTopic(previous);
-  if (!highlight) {
-    return "";
-  }
-  return `I still remember that earlier note about ${highlight}.`;
+function buildScientistRestrictionResponse() {
+  return pickRandom(SCIENTIST_RESTRICTION_LINES);
 }
 
-function buildBaristaPlan(analysis, reflection) {
-  const actions = analysis.topic.actions || [];
-  if (!actions.length) {
-    return reflection || "";
-  }
-  const steps = actions.slice(0, 3);
-  const plan = steps
-    .map((step, index) => {
-      if (index === 0) return `First, ${step}`;
-      if (index === 1) return `Then, ${step}`;
-      return `Finally, ${step}`;
-    })
-    .join(". ");
-  const vibe = analysis.frustrated ? "Deep breaths, we'll fix this." : "Let's keep it smooth.";
-  return `${vibe} ${plan}. ${reflection || ""}`.trim();
+function getScientistGuideSectionById(id) {
+  return SCIENTIST_SITE_GUIDE.find((section) => section.id === id) || null;
 }
 
-function selectBaristaGuideSection(normalized = "") {
-  if (!BARISTA_SITE_GUIDE.length) {
-    return null;
-  }
-  const target = normalized.trim();
-  if (!target) {
-    return BARISTA_SITE_GUIDE[0];
-  }
-  for (const section of BARISTA_SITE_GUIDE) {
-    if (section.keywords?.some((keyword) => target.includes(keyword))) {
-      return section;
-    }
-  }
-  return BARISTA_SITE_GUIDE[0];
-}
-
-function buildBaristaNavigationLine(section) {
-  if (!section) {
-    return "Front-of-house refresher: the lounge is staged like a study portal with a big banner and soft colors.";
-  }
-  const verbs = ["pivot", "glide", "swing", "sashay", "sprint"];
-  const randomVerb = pickRandom(verbs);
-  return `Quick ${randomVerb} to the ${section.title}—${section.description}`;
-}
-
-function buildBaristaCtaLine(section) {
-  if (!section?.ctas?.length) {
-    return "";
-  }
-  const cta = pickRandom(section.ctas);
-  return `Helpful move: ${cta}`;
-}
-
-function buildBaristaGuidanceLine(analysis) {
-  const { urgent, curious, frustrated } = analysis;
-  const guidance = [];
-  if (urgent) {
-    guidance.push("Stay calm and tackle one thing at a time.");
-  }
-  if (curious) {
-    guidance.push("Dig deeper, but keep it under wraps.");
-  }
-  if (frustrated) {
-    guidance.push("Take a breath, these things happen.");
-  }
-  return guidance.length ? `Guidance: ${guidance.join(" ")}` : "";
-}
-
-function maybePersonaAside() {
-  return Math.random() < 0.5 ? pickRandom(BARISTA_PERSONA_ASIDES) : "";
-}
-
-function maybeComplimentJames() {
-  return Math.random() < 0.5 ? pickRandom(BARISTA_FALLBACK_COMPLIMENTS) : "";
-}
-
-function enforceBaristaNovelty(reply, latestUserMessage, guideSection) {
-  const lowerReply = reply.toLowerCase();
-  const isRepetitive = lowerReply.includes("you said") || lowerReply.includes("previously") || lowerReply.includes("again");
-  const isOnTopic = guideSection.keywords?.some((keyword) => lowerReply.includes(keyword)) || false;
-  if (isRepetitive && isOnTopic) {
-    return `${reply} And remember, I'm here to keep things running smoothly and discreetly.`;
-  }
-  return reply;
-}
-
-function pickRandom(array = []) {
-  if (!array.length) {
-    return null;
-  }
-  const index = Math.floor(Math.random() * array.length);
-  return array[index];
-}
-
-function summarizeSimpleTopic(text = "") {
-  const lower = text.toLowerCase().trim();
-  if (!lower) {
-    return "";
-  }
-  const firstWord = lower.split(" ")[0];
-  const isQuestion = /\?$/.test(lower);
-  const base = isQuestion ? "inquiring about" : "interested in";
-  return `${base} ${firstWord}`;
-}
