@@ -1052,7 +1052,21 @@ function registerEventHandlers() {
     window.setTimeout(() => selectors.bridgeInput?.focus(), 100);
   });
 
-  selectors.authForm?.addEventListener("submit", handleAuthSubmit);
+  // Re-query critical forms to ensure they are found even if selectors init failed
+  const criticalAuthForm = document.getElementById("auth-form");
+  if (criticalAuthForm) {
+    criticalAuthForm.addEventListener("submit", handleAuthSubmit);
+  }
+  
+  const criticalBridgeForm = document.getElementById("bridge-form");
+  if (criticalBridgeForm) {
+    criticalBridgeForm.addEventListener("submit", handleBridgeSubmit);
+  }
+
+  const criticalDevForm = document.getElementById("dev-form");
+  if (criticalDevForm) {
+    criticalDevForm.addEventListener("submit", handleDevAuthSubmit);
+  }
 
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
@@ -1120,7 +1134,9 @@ function startAuthFlow() {
 
 function handleAuthSubmit(event) {
   event.preventDefault();
-  const provided = normalizeAuthInput(selectors.authInput?.value || "");
+  const inputEl = selectors.authInput || document.getElementById("auth-code");
+  const errorEl = selectors.authError || document.getElementById("auth-error");
+  const provided = normalizeAuthInput(inputEl?.value || "");
   if (provided === DEV_ENTRY_CODE_NORMALIZED) {
     triggerBridgeHandshake();
     return;
@@ -1130,12 +1146,12 @@ function handleAuthSubmit(event) {
     promptUsernameCapture();
     return;
   }
-  if (selectors.authError) {
-    selectors.authError.textContent = "Incorrect access code.";
-    selectors.authError.classList.add("is-visible");
-    if (selectors.authInput) {
-      selectors.authInput.value = "";
-      selectors.authInput.focus();
+  if (errorEl) {
+    errorEl.textContent = "Incorrect access code.";
+    errorEl.classList.add("is-visible");
+    if (inputEl) {
+      inputEl.value = "";
+      inputEl.focus();
     }
   }
   showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access", { revokeAuth: true });
@@ -1193,7 +1209,8 @@ function triggerBridgeHandshake() {
 
 function handleBridgeSubmit(event) {
   event.preventDefault();
-  const provided = normalizeAuthInput(selectors.bridgeInput?.value || "");
+  const inputEl = selectors.bridgeInput || document.getElementById("bridge-code");
+  const provided = normalizeAuthInput(inputEl?.value || "");
   if (provided === DEV_STAGE_TWO_NORMALIZED) {
     selectors.bridgeOverlay?.classList.add("is-hidden");
     triggerDevHandshake();
@@ -1216,7 +1233,8 @@ function triggerDevHandshake() {
 
 function handleDevAuthSubmit(event) {
   event.preventDefault();
-  const provided = normalizeAuthInput(selectors.devInput?.value || "");
+  const inputEl = selectors.devInput || document.getElementById("dev-code");
+  const provided = normalizeAuthInput(inputEl?.value || "");
   if (provided === DEV_PASSCODE_NORMALIZED) {
     cancelDevEntryTimer();
     devUnlocked = true;
