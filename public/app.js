@@ -1029,8 +1029,7 @@ function registerEventHandlers() {
   selectors.fullscreenToggle?.addEventListener("click", () => {
     toggleFullscreen();
   });
-  selectors.bridgeForm?.addEventListener("submit", handleBridgeSubmit);
-  selectors.devForm?.addEventListener("submit", handleDevAuthSubmit);
+  // Removed direct listeners in favor of delegation
   selectors.devCacheList?.addEventListener("click", handleDevCacheActionClick);
   selectors.devUserList?.addEventListener("click", handleDevUserActionClick);
   selectors.devDeviceList?.addEventListener("click", handleDevDeviceActionClick);
@@ -1052,21 +1051,16 @@ function registerEventHandlers() {
     window.setTimeout(() => selectors.bridgeInput?.focus(), 100);
   });
 
-  // Re-query critical forms to ensure they are found even if selectors init failed
-  const criticalAuthForm = document.getElementById("auth-form");
-  if (criticalAuthForm) {
-    criticalAuthForm.addEventListener("submit", handleAuthSubmit);
-  }
-  
-  const criticalBridgeForm = document.getElementById("bridge-form");
-  if (criticalBridgeForm) {
-    criticalBridgeForm.addEventListener("submit", handleBridgeSubmit);
-  }
-
-  const criticalDevForm = document.getElementById("dev-form");
-  if (criticalDevForm) {
-    criticalDevForm.addEventListener("submit", handleDevAuthSubmit);
-  }
+  // Use event delegation for critical forms to ensure they are caught even if DOM is late
+  document.addEventListener("submit", (event) => {
+    if (event.target && event.target.id === "auth-form") {
+      handleAuthSubmit(event);
+    } else if (event.target && event.target.id === "bridge-form") {
+      handleBridgeSubmit(event);
+    } else if (event.target && event.target.id === "dev-form") {
+      handleDevAuthSubmit(event);
+    }
+  });
 
   updateFullscreenButton();
   selectors.diagRefresh?.addEventListener("click", () => refreshDiagnostics({ userInitiated: true }));
