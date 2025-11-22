@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import { promises as fs } from "node:fs";
 import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
+import { NginxLikeController } from "./simulation/NginxLikeController.js";
 
 const SAFEZONE_OP = {
   OPEN: "OPEN",
@@ -49,6 +50,8 @@ const DOMAIN_FAILURE_COOLDOWN = Number(process.env.POWERTHROUGH_DOMAIN_FAIL_COOL
 const ADMIN_TOKEN = process.env.POWERTHROUGH_ADMIN_TOKEN || "";
 const ADMIN_HEADER = "x-coffeeshop-admin";
 const REQUEST_ID_HEADER = "x-coffeeshop-request-id";
+
+const nginxController = new NginxLikeController();
 
 const app = express();
 const server = createServer(app);
@@ -356,6 +359,23 @@ app.get("/dev/bans/users", (req, res) => {
     data = data.slice(0, limit);
   }
   res.json(data);
+});
+
+app.get("/nginx/status", (req, res) => {
+  res.json(nginxController.getStatus());
+});
+
+app.all("/nginx/proxy", (req, res, next) => {
+  nginxController.handleRequest(req, res, next);
+});
+
+app.get("/nginx/logs/:workerId", (req, res) => {
+  const logs = nginxController.getWorkerLogs(req.params.workerId);
+  if (logs === null) {
+    return res.status(404).json({ error: "Worker not found or no logs." });
+  }
+  res.setHeader("Content-Type", "text/plain");
+  res.send(logs);
 });
 
 app.get("/dev/panel", (req, res) => {
@@ -2072,9 +2092,6 @@ const BARISTA_MANAGER_LINES = [
 
 const BARISTA_PERSONA_ASIDES = [
   "I'm literally adjusting my lace gloves while mapping this out.",
-  "Let me tuck a stray curl behind my ear before we continue.",
-  "Give me a sec to tighten this satin bow—okay, focus time.",
-  "I'll lean over the counter, elbows on marble, and brainstorm with you.",
   "Picture me kicking my heels while I pace through the steps.",
 ];
 
