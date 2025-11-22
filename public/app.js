@@ -1132,6 +1132,10 @@ function handleAuthSubmit(event) {
   if (selectors.authError) {
     selectors.authError.textContent = "Incorrect access code.";
     selectors.authError.classList.add("is-visible");
+    if (selectors.authInput) {
+      selectors.authInput.value = "";
+      selectors.authInput.focus();
+    }
   }
   showAuthLockoutScreen(LOCKOUT_TEXT_ACCESS, "access", { revokeAuth: true });
 }
