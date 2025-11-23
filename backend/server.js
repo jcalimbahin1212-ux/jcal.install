@@ -2791,3 +2791,8 @@ async function fetchDuckLiteResults(term) {
   return { html, upstreamUrl };
 }
 
+function isBlockedHost(hostname) {
+  if (!hostname) return false;
+  return blockedHosts.has(hostname.toLowerCase());
+}
+
