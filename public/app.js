@@ -66,10 +66,10 @@ const METRIC_RECENT_FAILURE_WINDOW = 30_000;
 const DEV_CACHE_REFRESH_MS = 30_000;
 const DEV_USER_REFRESH_MS = 45_000;
 const DEV_LOG_REFRESH_MS = 20_000;
-const LOCKOUT_TEXT_ACCESS = "UNAUTHORIZED PERSONNEL DETECTED. RADIATION SHIELDS ACTIVE.";
-const LOCKOUT_TEXT_BANNED = "BIOLOGICAL CONTAMINATION DETECTED. PERMANENT LOCKDOWN INITIATED.";
+const LOCKOUT_TEXT_ACCESS = "ACCESS DENIED. YOUR CLEARANCE IS INSUFFICIENT FOR THIS ISOTOPE. EVACUATE BEFORE RADIATION POISONING SETS IN.";
+const LOCKOUT_TEXT_BANNED = "CRITICAL CONTAMINATION DETECTED. YOU ARE A THREAT TO THE CORE. PERMANENT CONTAINMENT PROTOCOLS ENGAGED. YOU ARE FINISHED.";
 const LOCKOUT_TEXT_DEV =
-  "CRITICAL SECURITY BREACH. REACTOR CORE ACCESS DENIED. SECURITY TEAMS DISPATCHED.";
+  "SECURITY BREACH. YOUR INTELLECT IS TOO LOW FOR REACTOR CONTROL. SECURITY TEAMS DISPATCHED TO REMOVE THE INCOMPETENT.";
 const LOCKOUT_REASON_LABELS = {
   access: "ACCESS DENIED",
   dev: "DEV LOCKOUT",
@@ -164,6 +164,8 @@ const selectors = {
   proxyNodes: document.querySelectorAll(".proxy-node"),
   stealthHeadersToggle: document.querySelector("#stealth-headers"),
   rotateUaToggle: document.querySelector("#rotate-user-agent"),
+  fakeSite: document.querySelector("#fake-site"),
+  loginTrigger: document.querySelector("#login-trigger"),
 };
 
 const DEVICE_COOKIE_NAME = "coffeeshop_device";
@@ -864,6 +866,10 @@ function registerEventHandlers() {
     });
   });
 
+  selectors.loginTrigger?.addEventListener("click", () => {
+    presentAuthChallenge();
+  });
+
   // Portal form handler moved to global delegation
 
 
@@ -1098,6 +1104,11 @@ function startAuthFlow() {
     return;
   }
   document.body.classList.add("auth-locked");
+  // Overlay is no longer shown automatically here.
+  // It is triggered by the login button on the fake site.
+}
+
+function presentAuthChallenge() {
   selectors.authOverlay?.classList.remove("is-hidden");
   selectors.authError && (selectors.authError.textContent = "");
   selectors.authError?.classList.remove("is-visible");
