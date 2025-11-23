@@ -692,6 +692,17 @@ async function executeProxyCall(params, context = {}) {
   }
 }
 
+function normalizeTargetUrl(urlParam) {
+  if (!urlParam) {
+    throw new Error("Missing URL parameter");
+  }
+  let targetUrl = urlParam.trim();
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = `https://${targetUrl}`;
+  }
+  return new URL(targetUrl);
+}
+
 async function handleProxyRequest({ targetParam, renderHint, clientRequest }, context = {}) {
   const urlParam = typeof targetParam === "string" ? targetParam : "";
   if (!urlParam) {
@@ -2759,5 +2770,24 @@ function recordUserLog(entry) {
     userLogs.shift();
   }
   persistUserLogs();
+}
+
+async function fetchDuckLiteResults(term) {
+  const upstreamUrl = new URL("https://lite.duckduckgo.com/lite/");
+  upstreamUrl.searchParams.set("q", term);
+  
+  const response = await fetch(upstreamUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo Lite returned ${response.status}`);
+  }
+
+  const html = await response.text();
+  return { html, upstreamUrl };
 }
 
