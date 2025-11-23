@@ -1263,6 +1263,19 @@ function buildBodyStreamFromMessage(method, bodyPayload, bodyEncoding) {
   return { stream: Readable.from(buffer), length: buffer.byteLength };
 }
 
+async function renderWithHeadless(targetUrl) {
+  // Placeholder for headless rendering logic
+  // In a real implementation, this would use Puppeteer or similar
+  // For now, we'll just fetch the content directly as a fallback
+  const response = await fetch(targetUrl.href);
+  const body = await response.text();
+  return {
+    status: response.status,
+    headers: response.headers,
+    body: body,
+  };
+}
+
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
 });
@@ -2574,5 +2587,177 @@ function buildScientistRestrictionResponse() {
 
 function getScientistGuideSectionById(id) {
   return SCIENTIST_SITE_GUIDE.find((section) => section.id === id) || null;
+}
+
+function parseCookies(cookieHeader) {
+  const list = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(";").forEach((cookie) => {
+    let [name, ...rest] = cookie.split("=");
+    name = name?.trim();
+    if (!name) return;
+    const value = rest.join("=").trim();
+    if (!value) return;
+    list[name] = decodeURIComponent(value);
+  });
+  return list;
+}
+
+function sanitizeUid(uid) {
+  if (!uid || typeof uid !== "string") return null;
+  return uid.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64);
+}
+
+function generateDeviceId() {
+  return `dev-${randomUUID()}`;
+}
+
+function buildDeviceCookie(deviceId) {
+  return `${DEVICE_COOKIE_NAME}=${deviceId}; Path=/; Max-Age=${DEVICE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`;
+}
+
+function appendSetCookie(res, cookieString) {
+  const existing = res.getHeader("Set-Cookie");
+  if (!existing) {
+    res.setHeader("Set-Cookie", cookieString);
+  } else if (Array.isArray(existing)) {
+    res.setHeader("Set-Cookie", [...existing, cookieString]);
+  } else {
+    res.setHeader("Set-Cookie", [existing, cookieString]);
+  }
+}
+
+function sanitizeUsernameInput(input) {
+  if (!input || typeof input !== "string") return "";
+  return input.trim().slice(0, 32);
+}
+
+function getRegistryUsername(uid) {
+  const entry = userRegistry.get(uid);
+  return entry ? entry.username : null;
+}
+
+function getRegistryDeviceId(uid) {
+  const entry = userRegistry.get(uid);
+  return entry ? entry.deviceId : null;
+}
+
+function isDeviceBanned(deviceId) {
+  return bannedDeviceIds.has(deviceId);
+}
+
+function isUidBanned(uid) {
+  return bannedUsers.has(uid);
+}
+
+function isUsernameBanned(username) {
+  if (!username) return false;
+  return bannedAliases.has(username.toLowerCase());
+}
+
+function sanitizeChatMessage(text) {
+  if (!text || typeof text !== "string") return "";
+  return text.trim().slice(0, 1000);
+}
+
+function appendChatMessage(msg) {
+  const entry = {
+    id: `msg-${chatMessageCounter++}`,
+    timestamp: Date.now(),
+    ...msg,
+  };
+  chatMessages.push(entry);
+  if (chatMessages.length > CHAT_MAX_MESSAGES) {
+    chatMessages.shift();
+  }
+  broadcastChatMessage(entry);
+  persistChatMessages();
+  return entry;
+}
+
+function broadcastChatMessage(msg) {
+  const payload = `data: ${JSON.stringify(msg)}\n\n`;
+  for (const client of chatStreamClients) {
+    safeWriteSse(client.res, payload);
+  }
+}
+
+function safeWriteSse(res, data) {
+  try {
+    res.write(data);
+  } catch (error) {
+    // ignore
+  }
+}
+
+function sanitizeLimit(val, def, min, max) {
+  const parsed = Number(val);
+  if (!Number.isFinite(parsed)) return def;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function getFirstQueryValue(val) {
+  return Array.isArray(val) ? val[0] : val;
+}
+
+function normalizeBoolean(val) {
+  return val === "true" || val === "1" || val === true;
+}
+
+function banDeviceId(deviceId) {
+  if (!deviceId) return;
+  bannedDeviceIds.add(deviceId);
+  persistBannedDeviceIds();
+}
+
+function unbanDeviceId(deviceId) {
+  if (!deviceId) return;
+  bannedDeviceIds.delete(deviceId);
+  persistBannedDeviceIds();
+}
+
+function forgetDeviceOnlyBan(deviceId) {
+  // Implementation for removing device-specific bans if stored separately
+  // For now, just unbanning the ID is sufficient based on current logic
+}
+
+function rememberBanEntry(uid, username, deviceId) {
+  const entry = {
+    uid,
+    username,
+    deviceId,
+    timestamp: Date.now(),
+  };
+  bannedUsers.set(uid, entry);
+  if (username) bannedAliases.add(username.toLowerCase());
+  persistBannedUsers();
+}
+
+function forgetBanEntry(uid) {
+  const entry = bannedUsers.get(uid);
+  if (entry && entry.username) {
+    bannedAliases.delete(entry.username.toLowerCase());
+  }
+  bannedUsers.delete(uid);
+  persistBannedUsers();
+}
+
+function ingestBanEntry(uid, username, timestamp, deviceId) {
+  bannedUsers.set(uid, { uid, username, timestamp, deviceId });
+  if (username) {
+    bannedAliases.add(username.toLowerCase());
+  }
+}
+
+function recordUserLog(entry) {
+  const log = {
+    timestamp: Date.now(),
+    ...entry,
+  };
+  userLogs.push(log);
+  if (userLogs.length > MAX_LOG_ENTRIES) {
+    userLogs.shift();
+  }
+  persistUserLogs();
 }
 
