@@ -3039,7 +3039,7 @@ function describeTargetForLog(targetUrl) {
 }
 const SEARCH_PROVIDERS = [
   {
-    label: "Coffee Shop Lite",
+    label: "AstraCore Light Water",
     type: "local",
     buildUrl: (term) => `/search/lite?q=${encodeURIComponent(term)}`,
   },

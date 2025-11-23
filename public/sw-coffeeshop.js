@@ -112,7 +112,7 @@ self.addEventListener("message", (event) => {
       ensureSafezoneConnection().catch((error) => {
         notifyClient(clientId, {
           type: "safezone-error",
-          message: error.message || "Failed to open Coffee Shop safezone.",
+          message: error.message || "Failed to open AstraCore safezone.",
         });
       });
       break;
@@ -662,7 +662,7 @@ async function ensureSafezoneConnection() {
       socket.removeEventListener("error", handleError);
       clearTimeout(timeoutId);
       safezoneConnectPromise = null;
-      reject(event?.error || new Error("Failed to establish Coffee Shop safezone."));
+      reject(event?.error || new Error("Failed to establish AstraCore safezone."));
     };
 
     socket.addEventListener("open", handleOpen, { once: true });
