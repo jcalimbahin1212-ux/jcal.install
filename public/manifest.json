@@ -1,10 +1,10 @@
 {
-  "name": "Coffee Shop Safezone",
-  "short_name": "Coffee Shop",
+  "name": "AstraCore Safezone",
+  "short_name": "AstraCore",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1b0d05",
-  "theme_color": "#3a2010",
+  "background_color": "#050a05",
+  "theme_color": "#00ff41",
   "icons": [
     {
       "src": "assets/logo.svg",
