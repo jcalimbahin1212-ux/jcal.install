@@ -896,7 +896,7 @@ function registerEventHandlers() {
     }
     finalizeServiceAttempt(true);
     setWorkspaceStatus("Secure session ready.");
-    setStatus("Coffee Shop workspace poured.");
+    setStatus("AstraCore containment field active.");
     injectUserScriptIntoFrame();
     lastNavigation = null;
     userSelectedService = activeService;
@@ -1164,7 +1164,7 @@ function releaseAuthGate() {
     attemptAutoBlank(true);
   }
   primeAuthenticationCache(true);
-  setStatus("Access confirmed. Welcome back to the Coffee Shop.");
+  setStatus("Access confirmed. Welcome to the AstraCore Institute.");
 }
 
 function triggerBridgeHandshake() {
@@ -1845,7 +1845,7 @@ async function sendDevCacheAction(key, action) {
     });
     refreshDevCacheList();
   } catch (error) {
-    console.error("[CoffeeShop] dev cache action failed", error);
+    console.error("[AstraCore] dev cache action failed", error);
   }
 }
 

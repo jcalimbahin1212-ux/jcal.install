@@ -1341,7 +1341,7 @@ app.use((err, req, res, next) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Coffee Shop backend online at http://localhost:${PORT}`);
+  console.log(`AstraCore backend online at http://localhost:${PORT}`);
 });
 
 function requireAdminToken(req, res, next) {
