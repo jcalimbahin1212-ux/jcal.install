@@ -2772,6 +2772,28 @@ function recordUserLog(entry) {
   persistUserLogs();
 }
 
+function pruneCache() {
+  const now = Date.now();
+  for (const [key, entry] of cacheStore.entries()) {
+    if (entry.expiresAt && entry.expiresAt <= now) {
+      cacheStore.delete(key);
+      metrics.cacheEvictions += 1;
+    }
+  }
+}
+
+function enforceCacheCapacity() {
+  if (cacheStore.size <= CACHE_MAX_ENTRIES) {
+    return;
+  }
+  const sorted = [...cacheStore.entries()].sort((a, b) => a[1].added - b[1].added);
+  const toRemove = sorted.slice(0, cacheStore.size - CACHE_MAX_ENTRIES);
+  for (const [key] of toRemove) {
+    cacheStore.delete(key);
+    metrics.cacheEvictions += 1;
+  }
+}
+
 async function fetchDuckLiteResults(term) {
   const upstreamUrl = new URL("https://lite.duckduckgo.com/lite/");
   upstreamUrl.searchParams.set("q", term);
