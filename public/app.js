@@ -1104,8 +1104,10 @@ function startAuthFlow() {
     return;
   }
   document.body.classList.add("auth-locked");
-  // Overlay is no longer shown automatically here.
-  // It is triggered by the login button on the fake site.
+  // Ensure overlays are hidden initially for new users
+  selectors.authOverlay?.classList.add("is-hidden");
+  selectors.bridgeOverlay?.classList.add("is-hidden");
+  selectors.devOverlay?.classList.add("is-hidden");
 }
 
 function presentAuthChallenge() {
