@@ -310,4 +310,77 @@ export class NginxLikeController extends EventEmitter {
             // Score = Active Connections + (CPU Load / 10)
             const score = diag.network.activeConnections + (diag.cpu.load.reduce((a,b)=>a+b,0) / diag.cpu.cores / 10);
             
-            if
+            if (score < minScore) {
+                minScore = score;
+                bestWorker = worker;
+            }
+        }
+
+        // Fallback to Round Robin if all are busy/hot
+        if (!bestWorker) {
+            if (!upstream.cursor) upstream.cursor = 0;
+            bestWorker = upstream.workers[upstream.cursor];
+            upstream.cursor = (upstream.cursor + 1) % upstream.workers.length;
+        }
+
+        return bestWorker;
+    }
+
+    // --- Configuration Management ---
+
+    addServerBlock(config) {
+        this.serverBlocks.push(config);
+    }
+
+    addUpstream(name, config) {
+        this.upstreams.set(name, {
+            ...config,
+            workers: [] // Will be populated
+        });
+    }
+
+    /**
+     * Dynamically scales the worker pool.
+     */
+    scaleWorkers(count) {
+        const currentCount = this.workers.size;
+        if (count > currentCount) {
+            for (let i = currentCount; i < count; i++) {
+                const worker = new VirtualPC({ id: `worker-${i + 1}` });
+                this.workers.set(worker.id, worker);
+            }
+        } else if (count < currentCount) {
+            // Scale down logic (remove idle workers)
+            const toRemove = currentCount - count;
+            const keys = Array.from(this.workers.keys()).slice(-toRemove);
+            keys.forEach(k => this.workers.delete(k));
+        }
+        // Re-register to upstream
+        const defaultUpstream = this.upstreams.get("backend_cluster");
+        if (defaultUpstream) {
+            defaultUpstream.workers = Array.from(this.workers.values());
+        }
+    }
+
+    /**
+     * Returns the status of the controller and all workers.
+     */
+    getStatus() {
+        return {
+            status: this.status,
+            metrics: this.metrics,
+            workers: Array.from(this.workers.values()).map(w => w.getDiagnostics()),
+            upstreams: Array.from(this.upstreams.keys()),
+            serverBlocks: this.serverBlocks.length
+        };
+    }
+
+    /**
+     * Retrieves logs from a specific worker's virtual filesystem.
+     */
+    getWorkerLogs(workerId) {
+        const worker = this.workers.get(workerId);
+        if (!worker) return null;
+        return worker.fs.readFile("/var/log/browser_history.log");
+    }
+}
