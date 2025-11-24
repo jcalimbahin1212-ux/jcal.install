@@ -30,10 +30,11 @@ class VirtualCPU {
         this.temperature = 40 + (this.getAverageLoad() * 0.5);
         
         // Thermal throttling simulation
-        if (this.temperature > 90) {
+        // Relaxed for stability: only throttle at extreme temps
+        if (this.temperature > 98) {
             this.thermalThrottle = true;
             this.speedGhz = Math.max(0.8, this.speedGhz * 0.9);
-        } else if (this.temperature < 60 && this.thermalThrottle) {
+        } else if (this.temperature < 80 && this.thermalThrottle) {
             this.thermalThrottle = false;
             this.speedGhz = 3.2; // Reset to base clock
         }

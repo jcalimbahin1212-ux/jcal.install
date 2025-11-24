@@ -63,7 +63,8 @@ export class NginxLikeController extends EventEmitter {
                 }
 
                 // Check for "crash" (high load + high temp + errors)
-                if (diag.cpu.temp > 95) {
+                // Relaxed threshold to prevent accidental reboots
+                if (diag.cpu.temp > 105) {
                     console.error(`[NginxController] Worker ${id} OVERHEATED. Initiating emergency reboot.`);
                     this._rebootWorker(id);
                 }
