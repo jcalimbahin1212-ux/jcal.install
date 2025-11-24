@@ -631,9 +631,14 @@ app.all("/powerthrough", async (req, res) => {
       user: uidParam ? { uid: uidParam, username: usernameParam, deviceId } : null,
       intent: intentParam,
       deviceId,
+      download: req.query.download === "true"
     });
     if (!res.headersSent && result?.requestId && result.requestId !== requestId) {
       res.setHeader(REQUEST_ID_HEADER, result.requestId);
+    }
+    // Pass download flag to result if present in context
+    if (req.query.download === "true") {
+        result.download = true;
     }
     return applyProxyResult(res, result);
   } catch (error) {
@@ -962,6 +967,11 @@ function applyProxyResult(res, result) {
   }
   if (result.fromCache) {
     res.set("x-cache", "HIT");
+  }
+  
+  if (result.download) {
+    res.set("Content-Disposition", 'attachment; filename="snapshot.html"');
+    res.set("Content-Type", "text/html; charset=utf-8");
   }
 
   if (result.body) {

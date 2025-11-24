@@ -155,11 +155,21 @@ export class NginxLikeController extends EventEmitter {
         try {
             const response = await worker.fetch(url, options);
             
-            // Add simulation metadata to the response object for debugging/logging
-            response.headers.set("X-Proxy-Worker", worker.id);
-            response.headers.set("X-Simulation-Latency", `${worker.network.latencyBaseMs}ms`);
+            // Create a new response with mutable headers to avoid "immutable" errors
+            const newHeaders = new Headers(response.headers);
+            newHeaders.set("X-Proxy-Worker", worker.id);
+            newHeaders.set("X-Simulation-Latency", `${worker.network.latencyBaseMs}ms`);
             
-            return response;
+            // Return a new Response object (if using global fetch Response)
+            // Or just return the response if we can't wrap it easily, but we must avoid modifying the original headers if they are immutable.
+            // Since we are in Node.js, we might be using undici's Response.
+            
+            return new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: newHeaders
+            });
+
         } catch (error) {
             console.error(`[NginxController] Worker ${worker.id} failed to fetch ${url}:`, error);
             throw error;
@@ -275,9 +285,13 @@ export class NginxLikeController extends EventEmitter {
             // Stream response back
             res.status(response.status);
             
-            // Copy headers
+            // Copy headers safely
             for (const [key, value] of response.headers) {
-                res.setHeader(key, value);
+                try {
+                    res.setHeader(key, value);
+                } catch (e) {
+                    // Ignore immutable/invalid headers
+                }
             }
             
             // Add simulation headers
