@@ -818,7 +818,8 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
   const proxyHost = extractProxyHost(clientRequest.headers);
 
   try {
-    const upstream = await fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
+    // Use Nginx Simulation Controller for the fetch to evade detection
+    const upstream = await nginxController.fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
     const headers = buildForwardHeaders(upstream.headers, proxyHost);
     const contentType = upstream.headers.get("content-type") || "";
     const rewriteProfile = selectRewriteProfile(targetUrl.hostname);
@@ -1278,7 +1279,7 @@ async function renderWithHeadless(targetUrl) {
   // Placeholder for headless rendering logic
   // In a real implementation, this would use Puppeteer or similar
   // For now, we'll just fetch the content directly as a fallback
-  const response = await fetch(targetUrl.href);
+  const response = await nginxController.fetch(targetUrl.href);
   const body = await response.text();
   return {
     status: response.status,
@@ -2798,7 +2799,7 @@ async function fetchDuckLiteResults(term) {
   const upstreamUrl = new URL("https://lite.duckduckgo.com/lite/");
   upstreamUrl.searchParams.set("q", term);
   
-  const response = await fetch(upstreamUrl, {
+  const response = await nginxController.fetch(upstreamUrl.toString(), {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
