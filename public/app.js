@@ -94,6 +94,7 @@ const selectors = {
   framePlaceholder: document.querySelector("#frame-placeholder"),
   workspaceStatus: document.querySelector("#workspace-status"),
   frameReset: document.querySelector("#workspace-reset"),
+  downloadSnapshot: document.querySelector("#download-snapshot"),
   tabCloakToggle: document.querySelector("#tab-cloak"),
   cloakTitle: document.querySelector("#cloak-title"),
   cloakBlank: document.querySelector("#cloak-blank"),
@@ -930,6 +931,58 @@ function registerEventHandlers() {
       }
       lastNavigation = null;
       clearInjectedUserScript();
+    }
+  });
+
+  selectors.downloadSnapshot?.addEventListener("click", () => {
+    if (!selectors.frame || selectors.frame.src === "about:blank" || !selectors.frame.src.includes("/proxy/")) {
+      setStatus("No active session to save.");
+      return;
+    }
+    
+    // Extract the current proxy URL and append download flag
+    try {
+      const currentSrc = new URL(selectors.frame.src);
+      // If it's a proxy URL, we can just append &download=true
+      // But the proxy URL structure is /proxy/:session/:encoded or /proxy/:encoded
+      // Which redirects to /powerthrough?url=...
+      // If the frame is already on /powerthrough, we can just append &download=true
+      
+      let downloadUrl;
+      if (currentSrc.pathname.includes("/powerthrough")) {
+        currentSrc.searchParams.set("download", "true");
+        downloadUrl = currentSrc.toString();
+      } else if (currentSrc.pathname.includes("/proxy/")) {
+        // It's a redirector URL, we need to construct the powerthrough URL manually or just fetch the redirector with a param?
+        // The redirector doesn't forward unknown params easily.
+        // Let's try to decode the param from the URL if possible, or just use the lastNavigation info if available.
+        
+        // Better approach: Use the lastNavigation target if available
+        if (lastNavigation && lastNavigation.targetUrl) {
+             const params = new URLSearchParams();
+             params.set("url", lastNavigation.targetUrl);
+             params.set("download", "true");
+             // Add other params like render hint if needed
+             downloadUrl = `/powerthrough?${params.toString()}`;
+        } else {
+             setStatus("Cannot determine download target.");
+             return;
+        }
+      }
+      
+      if (downloadUrl) {
+        setStatus("Initiating stealth download...");
+        // Create a hidden link to trigger download
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (e) {
+      console.error("Download failed", e);
+      setStatus("Download failed.");
     }
   });
 
@@ -2035,7 +2088,7 @@ async function refreshDevUserList() {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const payload = await response.json();
+       const payload = await response.json();
     renderDevUserEntries(payload);
   } catch (error) {
     selectors.devUserList.textContent = `Failed to load users: ${error.message}`;

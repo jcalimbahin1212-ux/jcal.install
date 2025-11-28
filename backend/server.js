@@ -11,6 +11,8 @@ import { load } from "cheerio";
 import { WebSocketServer, WebSocket } from "ws";
 import { NginxLikeController } from "./simulation/NginxLikeController.js";
 import SmartCache from "./simulation/SmartCache.js";
+import { StealthProxy, EvasionTechniques } from "./simulation/StealthProxy.js";
+import { FilterBypass, AdvancedContentRewriter } from "./simulation/FilterBypass.js";
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
@@ -61,6 +63,21 @@ const REQUEST_ID_HEADER = "x-coffeeshop-request-id";
 
 const nginxController = new NginxLikeController();
 const smartCache = new SmartCache(path.join(DATA_DIR, "smart-cache"));
+const stealthProxy = new StealthProxy({
+    enableTimingObfuscation: true,
+    enableContentTransform: true,
+    enableHeaderSanitization: true,
+    maxRetries: 3,
+    timeout: 30000
+});
+const filterBypass = new FilterBypass({
+    aggressiveMode: false,
+    enableHomoglyphs: true,
+    enableAntiDetection: true,
+    removeFilterScripts: true,
+    humanizeBehavior: true
+});
+const contentRewriter = new AdvancedContentRewriter();
 
 const app = express();
 const server = createServer(app);
@@ -823,8 +840,22 @@ async function handleProxyRequest({ targetParam, renderHint, clientRequest }, co
   const proxyHost = extractProxyHost(clientRequest.headers);
 
   try {
-    // Use Nginx Simulation Controller for the fetch to evade detection
-    const upstream = await nginxController.fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
+    // Use Stealth Proxy for the fetch to evade detection
+    // First, process the request through filter bypass
+    const bypassResult = await filterBypass.processRequest(targetUrl.href, clientRequest.headers || {});
+    
+    // Try stealth proxy first, fall back to nginx controller
+    let upstream;
+    try {
+      upstream = await stealthProxy.fetch(targetUrl.href, {
+        ...buildFetchOptions(clientRequest, targetUrl),
+        headers: bypassResult.headers
+      });
+    } catch (stealthError) {
+      console.warn('[StealthProxy] Falling back to nginx controller:', stealthError.message);
+      upstream = await nginxController.fetch(targetUrl.href, buildFetchOptions(clientRequest, targetUrl));
+    }
+    
     const headers = buildForwardHeaders(upstream.headers, proxyHost);
     const contentType = upstream.headers.get("content-type") || "";
     const rewriteProfile = selectRewriteProfile(targetUrl.hostname);
@@ -1678,7 +1709,10 @@ function stripHeader(headers, target) {
 }
 
 function rewriteHtmlDocument(html, baseUrl, context = {}) {
-  const $ = load(html, { decodeEntities: false });
+  // First, apply filter bypass transformations
+  let processedHtml = filterBypass.processResponse(html, 'text/html');
+  
+  const $ = load(processedHtml, { decodeEntities: false });
   if ($("head").length === 0) {
     $("html").prepend("<head></head>");
   }
