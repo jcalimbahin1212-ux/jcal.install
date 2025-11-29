@@ -1,9 +1,10 @@
 /**
  * ASTRO SERVICE WORKER (Client-side)
  * Minimal service worker that intercepts requests and proxies them
+ * Now using NPM-style stealth proxy
  */
 
-const ASTRO_VERSION = '1.0.0';
+const ASTRO_VERSION = '1.0.1';  // Updated for NPM proxy
 const CACHE_NAME = `astro-v${ASTRO_VERSION}`;
 
 // Config will be injected
@@ -51,10 +52,14 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
-    // Check if this is a proxied request
+    // Check if this is a proxied request (NPM-style /astro/~/~/)
     if (!url.pathname.startsWith(config.prefix)) {
         return;
     }
+    
+    // For NPM-style proxy, we can pass through to the server directly
+    // The server-side NginxReverseProxy handles all the proxying
+    // This SW just provides caching and offline support
     
     event.respondWith(handleProxiedRequest(event.request));
 });
@@ -63,34 +68,32 @@ async function handleProxiedRequest(request) {
     const url = new URL(request.url);
     
     try {
-        // Extract original URL
-        const encodedUrl = url.pathname.slice(config.prefix.length);
-        const originalUrl = decode(encodedUrl);
+        // For the NPM-style proxy, the server handles the actual proxying
+        // We just fetch from our server endpoint which does the work
         
-        if (!originalUrl) {
-            throw new Error('Failed to decode URL');
-        }
-        
-        // Check cache first
+        // Check cache first for GET requests
         if (request.method === 'GET') {
             const cached = await caches.match(request);
             if (cached) {
+                console.log('[ASTRO-SW] Cache hit');
                 return cached;
             }
         }
         
-        // Make request through bare server
-        const response = await fetchThroughBare(originalUrl, request);
+        // Fetch from our NPM-style proxy server
+        // The request URL already contains the encoded destination
+        const response = await fetch(request.clone(), {
+            credentials: 'same-origin',
+            redirect: 'follow',
+        });
         
-        // Process and cache response
-        const processed = await processResponse(response, originalUrl);
-        
-        if (request.method === 'GET' && processed.ok) {
+        // Clone for caching
+        if (request.method === 'GET' && response.ok) {
             const cache = await caches.open(CACHE_NAME);
-            cache.put(request, processed.clone());
+            cache.put(request, response.clone());
         }
         
-        return processed;
+        return response;
         
     } catch (error) {
         console.error('[ASTRO-SW] Error:', error);

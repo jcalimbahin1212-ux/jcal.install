@@ -3,6 +3,7 @@
  * Complete server-side proxy implementation
  * 
  * Integrates:
+ * - NGINX-style reverse proxy (NPM)
  * - Bare Server protocol
  * - Wisp WebSocket multiplexing
  * - Request rewriting
@@ -14,6 +15,7 @@ import https from 'https';
 import { URL } from 'url';
 import { AstroConfig } from './AstroConfig.js';
 import { AstroRewriter } from './AstroRewriter.js';
+import { NginxReverseProxy } from './NginxReverseProxy.js';
 import net from 'net';
 import crypto from 'crypto';
 import path from 'path';
@@ -27,6 +29,16 @@ class AstroServer {
     constructor(options = {}) {
         this.config = new AstroConfig(options);
         this.rewriter = new AstroRewriter(this.config);
+        
+        // NGINX-style reverse proxy (primary proxy handler)
+        this.npmProxy = new NginxReverseProxy({
+            prefix: '/astro/~/~/',  // NPM-style prefix
+            encodeKey: 'NPMStealthProxy2024!@#$',
+            stealthMode: true,
+            allowWebsocketUpgrade: true,
+            blockExploits: true,
+            cachingEnabled: false,
+        });
         
         // Wisp connections
         this.wispConnections = new Map();
@@ -51,6 +63,11 @@ class AstroServer {
         return async (req, res, next) => {
             const url = req.url;
             
+            // NPM-style proxy (primary - stealth mode)
+            if (url.startsWith('/astro/~/~/')) {
+                return this.npmProxy.handleRequest(req, res);
+            }
+            
             // Static assets
             if (url.startsWith(this.config.cdn)) {
                 return this._serveStatic(req, res, url);
@@ -61,7 +78,7 @@ class AstroServer {
                 return this._handleBare(req, res, url);
             }
             
-            // Proxied requests
+            // Proxied requests (legacy prefix)
             if (url.startsWith(this.config.prefix)) {
                 return this._handleProxy(req, res, url);
             }
@@ -71,11 +88,19 @@ class AstroServer {
     }
     
     /**
-     * WebSocket upgrade handler for Wisp
+     * WebSocket upgrade handler for Wisp and NPM
      */
     handleUpgrade(server) {
+        // Also register NPM proxy WebSocket handler
+        this.npmProxy.handleUpgrade(server);
+        
         server.on('upgrade', (request, socket, head) => {
             const url = new URL(request.url, `http://${request.headers.host}`);
+            
+            // NPM-style proxy WebSocket (already handled by npmProxy.handleUpgrade)
+            if (url.pathname.startsWith('/astro/~/~/')) {
+                return; // Handled by npmProxy
+            }
             
             // Wisp protocol
             if (url.pathname.startsWith(this.config.wisp)) {

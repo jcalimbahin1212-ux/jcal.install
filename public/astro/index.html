@@ -395,7 +395,7 @@
             <input type="text" class="frame-url" id="frameUrl" readonly>
             <button onclick="openInNewTab()" title="Open in new tab">↗</button>
         </div>
-        <iframe id="proxyFrame" class="proxy-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+        <iframe id="proxyFrame" class="proxy-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation allow-top-navigation-by-user-activation"></iframe>
     </div>
     
     <div class="loading-overlay" id="loading">
@@ -404,9 +404,9 @@
     </div>
     
     <script>
-        // Astro Configuration
-        const ASTRO_PREFIX = '/astro/~/';
-        const ENCODE_KEY = 'AstroProxyQuantumKey2024!@#$';
+        // Astro Configuration - Using NPM-style stealth proxy
+        const ASTRO_PREFIX = '/astro/~/~/';  // NPM-style prefix for stealth mode
+        const ENCODE_KEY = 'NPMStealthProxy2024!@#$';  // Match server key
         
         // Generate stars
         const starsContainer = document.getElementById('stars');
@@ -421,7 +421,7 @@
             starsContainer.appendChild(star);
         }
         
-        // Quantum encoding
+        // NPM-style stealth encoding (matching NginxReverseProxy.js)
         function quantumEncode(str) {
             let encoded = '';
             for (let i = 0; i < str.length; i++) {
@@ -545,11 +545,11 @@
                         reg.active.postMessage({
                             type: 'ASTRO_CONFIG',
                             data: {
-                                prefix: ASTRO_PREFIX,
+                                prefix: ASTRO_PREFIX,  // NPM-style prefix
                                 bare: '/astro/bare/',
                                 wisp: '/astro/wisp/',
                                 cdn: '/astro/static/',
-                                codec: 'quantum',
+                                codec: 'npm-stealth',  // Updated codec name
                                 encodeKey: ENCODE_KEY,
                                 scripts: {
                                     client: '/astro/astro.client.js'
@@ -562,6 +562,15 @@
                     console.warn('[ASTRO] Service worker registration failed:', err);
                 });
         }
+        
+        // Anti-detection: Modify iframe sandbox for better compatibility
+        document.addEventListener('DOMContentLoaded', function() {
+            const frame = document.getElementById('proxyFrame');
+            if (frame) {
+                // Allow all sandbox features for full site functionality
+                frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation allow-top-navigation-by-user-activation';
+            }
+        });
     </script>
 </body>
 </html>
