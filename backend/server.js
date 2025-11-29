@@ -13,6 +13,7 @@ import { NginxLikeController } from "./simulation/NginxLikeController.js";
 import SmartCache from "./simulation/SmartCache.js";
 import { StealthProxy, EvasionTechniques } from "./simulation/StealthProxy.js";
 import { FilterBypass, AdvancedContentRewriter } from "./simulation/FilterBypass.js";
+import { BareServer, BareWebSocket } from "./simulation/BareServer.js";
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
@@ -79,6 +80,45 @@ const filterBypass = new FilterBypass({
 });
 const contentRewriter = new AdvancedContentRewriter();
 
+// UV-style Bare Server for bypassing content filters
+const bareServer = new BareServer({
+    prefix: '/bare/',
+    maintainer: {
+        email: 'support@coffeeshop.proxy',
+        website: 'https://coffeeshop.proxy'
+    }
+});
+
+// ASTRO PROXY - Advanced proxy combining best features
+import { AstroServer } from './astro/AstroServer.js';
+const astroServer = new AstroServer({
+    prefix: '/astro/~/'.replace(/^\//, ''),
+    bare: '/astro/bare/',
+    wisp: '/astro/wisp/',
+    cdn: '/astro/static/',
+    codec: 'quantum',
+    stealth: {
+        enabled: true,
+        fingerprint: 'chrome',
+        jitter: true,
+        timingNoise: [50, 200],
+        headerRotation: true
+    },
+    antiDetection: {
+        goGuardianBypass: true,
+        securlyBypass: true,
+        lightspeedBypass: true,
+        contentFilterEvasion: true
+    },
+    features: {
+        serviceWorker: true,
+        cookieSync: true,
+        webSocketProxy: true,
+        canvasNoise: true,
+        webGLSpoof: true
+    }
+});
+
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -144,6 +184,54 @@ loadScientistMemoryStore().catch((error) => {
 app.disable("x-powered-by");
 app.use(morgan("dev"));
 app.use(compression());
+
+// --- ASTRO PROXY ROUTES ---
+// Use Astro middleware for advanced proxy with filter bypass
+app.use(astroServer.middleware());
+// Handle WebSocket upgrades for Wisp protocol
+astroServer.handleUpgrade(server);
+
+// --- BARE SERVER ROUTES (UV-style proxy) ---
+// This MUST come before other middleware to handle /bare/* requests
+bareServer.routeExpress(app);
+
+// --- UV Service Worker Routes ---
+app.get('/uv/service/*', async (req, res) => {
+  // Handle UV-style encoded URLs
+  const encodedPath = req.path.slice('/uv/service/'.length);
+  if (!encodedPath) {
+    return res.status(400).json({ error: 'Missing encoded URL' });
+  }
+  
+  // Decode the URL (XOR with key 2)
+  let targetUrl;
+  try {
+    const decoded = decodeURIComponent(encodedPath);
+    const key = 2;
+    targetUrl = decoded.split('').map((char) => 
+      String.fromCharCode(char.charCodeAt(0) ^ key)
+    ).join('');
+    new URL(targetUrl); // Validate
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid encoded URL' });
+  }
+  
+  // Proxy the request through our existing system
+  try {
+    const context = { user: null, renderer: 'uv' };
+    const result = await handleProxyRequest({
+      targetParam: targetUrl,
+      renderHint: 'direct',
+      clientRequest: req
+    }, context);
+    
+    applyProxyResult(res, result);
+  } catch (error) {
+    console.error('[UV] Proxy error:', error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
 app.use((req, res, next) => {
   const cookies = parseCookies(req.headers.cookie);
   let deviceId = sanitizeUid(cookies[DEVICE_COOKIE_NAME]);
@@ -1717,6 +1805,14 @@ function rewriteHtmlDocument(html, baseUrl, context = {}) {
     $("html").prepend("<head></head>");
   }
   const head = $("head").first();
+  
+  // Add meta tag with original URL for UV handler
+  const originalUrl = baseUrl?.toString?.() ?? "";
+  head.prepend(`<meta name="uv-url" content="${originalUrl}">`);
+  
+  // Inject UV configuration and handler scripts BEFORE interceptor
+  head.prepend('<script src="/uv-handler.js"></script>');
+  head.prepend('<script src="/uv.config.js"></script>');
   
   // Inject Interceptor Script
   head.prepend('<script src="/interceptor.js"></script>');

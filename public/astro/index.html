@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Astro Proxy</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --accent: #7c3aed;
+            --accent-glow: rgba(124, 58, 237, 0.4);
+            --text: #ffffff;
+            --text-muted: #a0a0b0;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Animated background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite ease-in-out;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+        
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .logo {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        h1 {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: var(--text-muted);
+            font-size: 18px;
+            margin-bottom: 40px;
+        }
+        
+        .search-box {
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 18px 60px 18px 24px;
+            font-size: 18px;
+            background: var(--bg-secondary);
+            border: 2px solid transparent;
+            border-radius: 50px;
+            color: var(--text);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .search-box input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+        
+        .search-box input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .search-box button {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent) 0%, #9333ea 100%);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        
+        .search-box button:hover {
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        
+        .search-box button svg {
+            width: 20px;
+            height: 20px;
+            fill: white;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 40px;
+        }
+        
+        .feature {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 16px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .feature:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px var(--accent-glow);
+        }
+        
+        .feature-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .feature h3 {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        
+        .feature p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            background: rgba(16, 185, 129, 0.2);
+            border-radius: 50px;
+            font-size: 14px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        }
+        
+        .quick-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .quick-link {
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            border-radius: 50px;
+            text-decoration: none;
+            color: var(--text-muted);
+            font-size: 14px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .quick-link:hover {
+            color: var(--text);
+            background: var(--accent);
+        }
+        
+        .frame-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            background: var(--bg-primary);
+        }
+        
+        .frame-container.active {
+            display: block;
+        }
+        
+        .frame-controls {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            gap: 10px;
+            z-index: 1001;
+        }
+        
+        .frame-controls button {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: var(--bg-primary);
+            color: var(--text);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .frame-controls button:hover {
+            background: var(--accent);
+        }
+        
+        .frame-url {
+            flex: 1;
+            padding: 8px 16px;
+            background: var(--bg-primary);
+            border: none;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        
+        .proxy-frame {
+            width: 100%;
+            height: calc(100% - 50px);
+            margin-top: 50px;
+            border: none;
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 15, 0.9);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        
+        .loading-overlay.active {
+            display: flex;
+        }
+        
+        .loader {
+            width: 80px;
+            height: 80px;
+            border: 4px solid var(--bg-secondary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation" id="stars"></div>
+    
+    <div class="container" id="home">
+        <div class="logo">🚀</div>
+        <h1>Astro Proxy</h1>
+        <p class="tagline">Beyond the atmosphere, beyond the filters</p>
+        
+        <div class="search-box">
+            <input type="text" id="urlInput" placeholder="Enter URL or search..." autocomplete="off">
+            <button onclick="go()">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+            </button>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🛡️</div>
+                <h3>Stealth Mode</h3>
+                <p>Evades all major filters</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h3>Lightning Fast</h3>
+                <p>Wisp transport protocol</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔒</div>
+                <h3>Quantum Encoding</h3>
+                <p>Multi-layer encryption</p>
+            </div>
+        </div>
+        
+        <div class="status">
+            <div class="status-dot"></div>
+            <span>All systems operational</span>
+        </div>
+        
+        <div class="quick-links">
+            <a class="quick-link" onclick="goTo('https://google.com')">Google</a>
+            <a class="quick-link" onclick="goTo('https://youtube.com')">YouTube</a>
+            <a class="quick-link" onclick="goTo('https://discord.com')">Discord</a>
+            <a class="quick-link" onclick="goTo('https://reddit.com')">Reddit</a>
+            <a class="quick-link" onclick="goTo('https://twitch.tv')">Twitch</a>
+            <a class="quick-link" onclick="goTo('https://twitter.com')">Twitter</a>
+        </div>
+    </div>
+    
+    <div class="frame-container" id="frameContainer">
+        <div class="frame-controls">
+            <button onclick="closeFrame()" title="Close">✕</button>
+            <button onclick="goBack()" title="Back">←</button>
+            <button onclick="goForward()" title="Forward">→</button>
+            <button onclick="refreshFrame()" title="Refresh">↻</button>
+            <input type="text" class="frame-url" id="frameUrl" readonly>
+            <button onclick="openInNewTab()" title="Open in new tab">↗</button>
+        </div>
+        <iframe id="proxyFrame" class="proxy-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+    </div>
+    
+    <div class="loading-overlay" id="loading">
+        <div class="loader"></div>
+        <p class="loading-text">Establishing secure connection...</p>
+    </div>
+    
+    <script>
+        // Astro Configuration
+        const ASTRO_PREFIX = '/astro/~/';
+        const ENCODE_KEY = 'AstroProxyQuantumKey2024!@#$';
+        
+        // Generate stars
+        const starsContainer = document.getElementById('stars');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 2 + 's';
+            star.style.width = Math.random() * 2 + 1 + 'px';
+            star.style.height = star.style.width;
+            starsContainer.appendChild(star);
+        }
+        
+        // Quantum encoding
+        function quantumEncode(str) {
+            let encoded = '';
+            for (let i = 0; i < str.length; i++) {
+                encoded += String.fromCharCode(str.charCodeAt(i) ^ ENCODE_KEY.charCodeAt(i % ENCODE_KEY.length));
+            }
+            return btoa(encoded).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '~');
+        }
+        
+        function proxyUrl(url) {
+            return ASTRO_PREFIX + quantumEncode(url);
+        }
+        
+        function normalizeUrl(input) {
+            input = input.trim();
+            
+            // Check if it's a search query
+            if (!input.includes('.') || input.includes(' ')) {
+                return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+            }
+            
+            // Add protocol if missing
+            if (!input.startsWith('http://') && !input.startsWith('https://')) {
+                input = 'https://' + input;
+            }
+            
+            return input;
+        }
+        
+        function showLoading() {
+            document.getElementById('loading').classList.add('active');
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+        
+        function go() {
+            const input = document.getElementById('urlInput').value;
+            if (!input) return;
+            
+            const url = normalizeUrl(input);
+            navigateTo(url);
+        }
+        
+        function goTo(url) {
+            navigateTo(url);
+        }
+        
+        function navigateTo(url) {
+            showLoading();
+            
+            const proxied = proxyUrl(url);
+            const frame = document.getElementById('proxyFrame');
+            const container = document.getElementById('frameContainer');
+            
+            document.getElementById('frameUrl').value = url;
+            
+            frame.onload = () => {
+                hideLoading();
+            };
+            
+            frame.onerror = () => {
+                hideLoading();
+            };
+            
+            frame.src = proxied;
+            container.classList.add('active');
+            document.getElementById('home').style.display = 'none';
+            
+            // Fallback hide loading after 10s
+            setTimeout(hideLoading, 10000);
+        }
+        
+        function closeFrame() {
+            document.getElementById('frameContainer').classList.remove('active');
+            document.getElementById('home').style.display = 'flex';
+            document.getElementById('proxyFrame').src = 'about:blank';
+            document.getElementById('urlInput').value = '';
+        }
+        
+        function goBack() {
+            try {
+                document.getElementById('proxyFrame').contentWindow.history.back();
+            } catch (e) {}
+        }
+        
+        function goForward() {
+            try {
+                document.getElementById('proxyFrame').contentWindow.history.forward();
+            } catch (e) {}
+        }
+        
+        function refreshFrame() {
+            const frame = document.getElementById('proxyFrame');
+            showLoading();
+            frame.src = frame.src;
+        }
+        
+        function openInNewTab() {
+            const url = document.getElementById('frameUrl').value;
+            if (url) {
+                window.open(proxyUrl(url), '_blank');
+            }
+        }
+        
+        // Handle enter key
+        document.getElementById('urlInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                go();
+            }
+        });
+        
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/astro/astro.sw.js', { scope: '/astro/' })
+                .then((reg) => {
+                    console.log('[ASTRO] Service worker registered');
+                    
+                    // Send config to service worker
+                    if (reg.active) {
+                        reg.active.postMessage({
+                            type: 'ASTRO_CONFIG',
+                            data: {
+                                prefix: ASTRO_PREFIX,
+                                bare: '/astro/bare/',
+                                wisp: '/astro/wisp/',
+                                cdn: '/astro/static/',
+                                codec: 'quantum',
+                                encodeKey: ENCODE_KEY,
+                                scripts: {
+                                    client: '/astro/astro.client.js'
+                                }
+                            }
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.warn('[ASTRO] Service worker registration failed:', err);
+                });
+        }
+    </script>
+</body>
+</html>
